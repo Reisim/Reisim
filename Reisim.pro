@@ -76,7 +76,6 @@ SOURCES += \
     trafficsignal.cpp
 
 HEADERS += \
-    bitmapfont.h \
         mainwindow.h \
     graphiccanvas.h \
     agent.h \
