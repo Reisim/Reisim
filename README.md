@@ -15,6 +15,6 @@ Please get following libraries appropriate for your platform.
   
 The library setting written in the Reisim.pro file should be modified according to your environment.
 
-For Windows 10, please find these libraries at Win10 folders.
+For Windows 10, you can find these libraries at Win10 folders.
 
 
