@@ -1,7 +1,10 @@
 //-----------------------------------------------------------------------
 //    MDS02 Misaki Design Simulation product - Canopus Project -
 //
-//                   Misaki Design.LLC,  2019
+//                              Re:sim
+//
+//                    Copyright (c) 2020 Jun Tajima
+//                          Misaki Design.LLC
 //-----------------------------------------------------------------------
 
 #include <QApplication>
