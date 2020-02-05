@@ -1,0 +1,12 @@
+prefix=C:/Program Files (x86)/libpng
+exec_prefix=C:/Program Files (x86)/libpng
+libdir=C:/Program Files (x86)/libpng/lib
+includedir=C:/Program Files (x86)/libpng/include/libpng16
+
+Name: libpng
+Description: Loads and saves PNG files
+Version: 1.6.37
+Requires: zlib
+Libs: -L${libdir} -lpng16
+Libs.private: -lz -lm
+Cflags: -I${includedir}
