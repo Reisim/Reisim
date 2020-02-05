@@ -24,4 +24,4 @@ The shaders and true-type font should be placed in the same folder of Reisim.exe
 
 ## Licence
 
-[LGPL v3](https://github.com/Reisim/Reisim/LICENCE)
+[LGPL v3](https://github.com/Reisim/Reisim/blob/master/LICENSE)
