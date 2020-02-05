@@ -22,12 +22,12 @@ LIBS += C:\Qt5.12\Tools\mingw730_64\x86_64-w64-mingw32\lib\libmpr.a
 #
 #  Freetype2
 #
-INCLUDEPATH += "C:\Program Files (x86)\freetype\include\freetype2"
+INCLUDEPATH += "..\Reisim\libs\freetype\include\freetype2"
 
-LIBS += "C:\Program Files (x86)\freetype\lib\libfreetype.a"
-LIBS += "C:\Program Files (x86)\libpng\lib\libpng.a"
-LIBS += "C:\Program Files (x86)\zlib\lib\libzlibstatic.a"
-LIBS += "C:\Program Files (x86)\bzip2\lib\libbz2.a"
+LIBS += "..\Reisim\libs\freetype\lib\libfreetype.a"
+LIBS += "..\Reisim\libs\libpng\lib\libpng.a"
+LIBS += "..\Reisim\libs\zlib\lib\libzlibstatic.a"
+LIBS += "..\Reisim\libs\bzip2\lib\libbz2.a"
 
 
 
