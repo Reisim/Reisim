@@ -412,7 +412,7 @@ QVector<int> Road::GetPathList(int routeIndex, int currentPath, bool &needLC, in
 
     }
 
-    qDebug() << "destNode = " << destNode << " destNodeOutDir = " << destNodeOutDir << " destNodeInDir = " << destNodeInDir;
+//    qDebug() << "destNode = " << destNode << " destNodeOutDir = " << destNodeOutDir << " destNodeInDir = " << destNodeInDir;
 
 
 
@@ -440,7 +440,7 @@ QVector<int> Road::GetPathList(int routeIndex, int currentPath, bool &needLC, in
         }
     }
 
-    qDebug() << "[1]extractedList = " << extractedList;
+//    qDebug() << "[1]extractedList = " << extractedList;
 
 
     for(int n = odRoute[routeIndex]->routeToDestination.size()-2; n>0; n-- ){
@@ -455,7 +455,7 @@ QVector<int> Road::GetPathList(int routeIndex, int currentPath, bool &needLC, in
             break;
         }
 
-        qDebug() << "n=" << n << " onTheWayNode = " << onTheWayNode << " outDirOWNode = " << outDirOWNode << " inDirOWNode = " << inDirOWNode;
+//        qDebug() << "n=" << n << " onTheWayNode = " << onTheWayNode << " outDirOWNode = " << outDirOWNode << " inDirOWNode = " << inDirOWNode;
 
 
         for(int i=0;i<nodes[owIdx]->pathLists.size();++i){
@@ -463,23 +463,23 @@ QVector<int> Road::GetPathList(int routeIndex, int currentPath, bool &needLC, in
 
                 int Nlist = nodes[owIdx]->pathLists[i]->pathList.size();
 
-                qDebug() << "Nlist = " << Nlist;
+//                qDebug() << "Nlist = " << Nlist;
 
                 QList<int> candiateListIndex;
                 for(int j=0;j<Nlist;++j){
 
                     int topPath = nodes[owIdx]->pathLists[i]->pathList[j].first();
 
-                    qDebug() << "topPath = " << topPath;
+//                    qDebug() << "topPath = " << topPath;
 
                     int tpIdx = pathId2Index.indexOf( topPath );
                     if( tpIdx >= 0 ){
 
-                        qDebug() << "[1]contain = " << paths[tpIdx]->forwardPaths.contains( extractedList.last() );
+//                        qDebug() << "[1]contain = " << paths[tpIdx]->forwardPaths.contains( extractedList.last() );
 
                         if( paths[tpIdx]->forwardPaths.contains( extractedList.last() ) == true ){
 
-                            qDebug() << "[2]contain = " << nodes[owIdx]->pathLists[i]->pathList[j].contains( currentPath );
+//                            qDebug() << "[2]contain = " << nodes[owIdx]->pathLists[i]->pathList[j].contains( currentPath );
 
                             if( n == 1 && nodes[owIdx]->pathLists[i]->pathList[j].contains( currentPath ) == false ){
                                 continue;
@@ -509,20 +509,20 @@ QVector<int> Road::GetPathList(int routeIndex, int currentPath, bool &needLC, in
                     selected = candiateListIndex.at( RandomSelect( Nlist, rnd ) );
                 }
 
-                qDebug() << "selected = " << selected;
+//                qDebug() << "selected = " << selected;
 
                 for(int j=0;j<nodes[owIdx]->pathLists[i]->pathList[selected].size();++j){
                     extractedList.append( nodes[owIdx]->pathLists[i]->pathList[selected].at(j) );
                 }
 
-                qDebug() << "[2]extractedList = " << extractedList;
+//                qDebug() << "[2]extractedList = " << extractedList;
 
                 break;
             }
         }
     }
 
-    qDebug() << "[3]extractedList = " << extractedList;
+//    qDebug() << "[3]extractedList = " << extractedList;
 
 
     if( needLC == false ){

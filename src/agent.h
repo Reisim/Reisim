@@ -101,6 +101,9 @@ struct AgentPerception
     float myTimeToCP;
     float objectDistanceToCP;
     float objectTimeToCP;
+    int CPinNode;
+
+    bool shouldEvalRisk;
 
     bool inView;
     int noUpdateCount;
@@ -114,6 +117,7 @@ struct TrafficSignalPerception
     float x;
     float y;
     float yaw;
+    int relatedNode;
 
     int signalDisplay;
 
@@ -187,6 +191,7 @@ struct AgentMemory
     float axHeadwayControl;
 
     bool doStopControl;
+    QString causeOfStopControl;
     float axStopControl;
     int releaseStopCount;
 
@@ -207,13 +212,24 @@ struct AgentMemory
     float targetLateralShift;
     float targetLateralShiftByScenario;
 
+    float distToNearOncomingCP;
+    float distToFatOncomingCP;
+    bool shouldWaitOverCrossPoint;
 
-    // recognition
+    float distToNearestCP;
+    bool shouldStopAtSignalSL;
+
+    float distToYeildStopLine;
+    bool shouldYeild;
+    bool leftCrossIsClear;
+    bool rightCrossIsClear;
+    int leftCrossCheckCount;
+    int rightCrossCheckCount;
+    bool safetyConfimed;
+    int speedZeroCount;
 
 
-
-
-    // perception
+    // perception & recognition
     QList<struct AgentPerception *> perceptedObjects;
     QList<struct TrafficSignalPerception *> perceptedSignals;
 
@@ -227,16 +243,30 @@ struct AgentMemory
     float distanceFromStartWPInCurrentPath;
     int currentTargetDirectionPedestPath;
     int scenarioPathSelectID;
+    float distanceToTurnNodeWPIn;
 
     QList<int> myNodeList;
     QList<int> myInDirList;
     QList<int> myOutDirList;
+    QList<int> myTurnDirectionList;
+    int currentTargetNode;
+    int currentTargetNodeIndexInNodeList;
+    int nextTurnDirection;
+    int nextTurnNode;
+    int nextTurnNodeIndexInNodeList;
+    QList<int> oncomingWaitPathList;
+    QList<int> oncomingWaitCPList;
+    int nextTurnNodeOncomingDir;
+    int nearOncomingWaitPathInfo;
+    int nearOncomingWaitCPInfo;
+    int farOncomingWaitPathInfo;
+    int farOncomingWaitCPInfo;
+
 
 
     // navigation
     int routeType;
     int routeIndex;
-
 };
 
 struct AgentParam
@@ -254,6 +284,9 @@ struct AgentParam
     float minimumDistanceToStopLine;
     float visibleDistance;
     float startRelay;
+    float crossTimeSafetyMargin;
+    float crossWaitPositionSafeyMargin;
+    float safetyConfirmTime;
 };
 
 struct AgentState
@@ -308,8 +341,8 @@ public:
 
     void Perception( Agent**, int, Road*, QList<TrafficSignal*> trafficSignal );
     void Recognition( Agent**, int, Road* ) ;
-    void HazardIdentification();
-    void RiskEvaluation();
+    void HazardIdentification( Agent**, int,Road* );
+    void RiskEvaluation( Agent**, int, Road* );
     void Control(Road*);
     void UpdateState();
 

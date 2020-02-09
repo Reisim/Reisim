@@ -223,9 +223,9 @@ void SystemThread::run()
 
             agent[i]->Recognition( agent, maxAgent, road );
 
-            agent[i]->HazardIdentification();
+            agent[i]->HazardIdentification( agent, maxAgent, road );
 
-            agent[i]->RiskEvaluation();
+            agent[i]->RiskEvaluation( agent, maxAgent, road );
 
             agent[i]->Control( road );
 
@@ -248,7 +248,7 @@ void SystemThread::run()
                 redrawIntervalCount = 0;
             }
             else{
-                if( speedAdjustVal < 100 ){
+                if( speedAdjustVal < 200 ){
                     redrawIntervalCount++;
                     int count = speedAdjustVal - 60;
                     if( redrawIntervalCount >= count ){
@@ -2107,23 +2107,23 @@ void SystemThread::ShowAgentData(float x,float y)
     }
 
     char labelStr[][30] = {
-        "PRECEDING",
-        "FOLLOWING",
-        "LEFT_SIDE",
-        "RIGHT_SIDE",
-        "LEFT_SIDE_PRECEDING",
-        "RIGHT_SIDE_PRECEDING",
-        "LEFT_SIDE_FOLLOWING",
-        "RIGHT_SIDE_FOLLOWING",
-        "ONCOMING_STRAIGHT",
-        "ONCOMING_LEFT",
-        "ONCOMING_RIGHT",
-        "LEFT_CROSSING_STRAIGHT",
-        "LEFT_CROSSING_LEFT",
-        "LEFT_CROSSING_RIGHT",
+        "PRECEDING              ",
+        "FOLLOWING              ",
+        "LEFT_SIDE              ",
+        "RIGHT_SIDE             ",
+        "LEFT_SIDE_PRECEDING    ",
+        "RIGHT_SIDE_PRECEDING   ",
+        "LEFT_SIDE_FOLLOWING    ",
+        "RIGHT_SIDE_FOLLOWING   ",
+        "ONCOMING_STRAIGHT      ",
+        "ONCOMING_LEFT          ",
+        "ONCOMING_RIGHT         ",
+        "LEFT_CROSSING_STRAIGHT ",
+        "LEFT_CROSSING_LEFT     ",
+        "LEFT_CROSSING_RIGHT    ",
         "RIGHT_CROSSING_STRAIGHT",
-        "RIGHT_CROSSING_LEFT",
-        "RIGHT_CROSSING_RIGHT",
+        "RIGHT_CROSSING_LEFT    ",
+        "RIGHT_CROSSING_RIGHT   ",
         "UNDEFINED_RECOGNITION_LABEL"
     };
 
@@ -2164,13 +2164,62 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  Y = " << agent[nearID]->state.y;
     qDebug() << "  Yaw = " << agent[nearID]->state.yaw;
     qDebug() << "  V = " << agent[nearID]->state.V;
+    qDebug() << "  Accel = " << agent[nearID]->vehicle.input.accel;
+    qDebug() << "  Winker = " << agent[nearID]->vehicle.GetWinerState();
 
-    qDebug() << "Perception:";
+    qDebug() << "Recognizied Object Info:";
     for(int i=0;i<agent[nearID]->memory.perceptedObjects.size();++i){
         qDebug() << "  OBJ:" << agent[nearID]->memory.perceptedObjects[i]->objectID
                  << " Label=" << labelStr[ agent[nearID]->memory.perceptedObjects[i]->recognitionLabel ]
-                 << " Dist=" << agent[nearID]->memory.perceptedObjects[i]->distanceToObject;
+                 << " Dist=" << agent[nearID]->memory.perceptedObjects[i]->distanceToObject
+                 << " e = " << agent[nearID]->memory.perceptedObjects[i]->deviationFromNearestTargetPath
+                 << " W = " << agent[nearID]->memory.perceptedObjects[i]->effectiveHalfWidth;
     }
+
+    qDebug() << "Recognizied Traffic Signal Info:";
+    for(int i=0;i<agent[nearID]->memory.perceptedSignals.size();++i){
+        qDebug() << "  OBJ:" << agent[nearID]->memory.perceptedSignals[i]->objectID
+                 << " Type=" << agent[nearID]->memory.perceptedSignals[i]->objectType
+                 << " Disp = " << agent[nearID]->memory.perceptedSignals[i]->signalDisplay
+                 << " L = " << agent[nearID]->memory.perceptedSignals[i]->distToSL;
+    }
+
+    qDebug() << "Collision/Merging Point Info:";
+    for(int i=0;i<agent[nearID]->memory.perceptedObjects.size();++i){
+        qDebug() << "  OBJ:" << agent[nearID]->memory.perceptedObjects[i]->objectID
+                 << " hasCP = " << agent[nearID]->memory.perceptedObjects[i]->hasCollisionPoint;
+        if( agent[nearID]->memory.perceptedObjects[i]->hasCollisionPoint == true ){
+            qDebug() << "    xCP = " << agent[nearID]->memory.perceptedObjects[i]->xCP
+                     << " yCP = " << agent[nearID]->memory.perceptedObjects[i]->yCP;
+            qDebug() << "    myDist = " << agent[nearID]->memory.perceptedObjects[i]->myDistanceToCP
+                     << " myTime = " << agent[nearID]->memory.perceptedObjects[i]->myTimeToCP;
+            qDebug() << "    objDist = " << agent[nearID]->memory.perceptedObjects[i]->objectDistanceToCP
+                     << " objTime = " << agent[nearID]->memory.perceptedObjects[i]->objectTimeToCP;
+        }
+    }
+
+    qDebug() << "Hazard Identification & Risk Evaluation:";
+    qDebug() << "  oncomingWaitPathList = " << agent[nearID]->memory.oncomingWaitPathList;
+    qDebug() << "  oncomingWaitCPList = " << agent[nearID]->memory.oncomingWaitCPList;
+    qDebug() << "  nextTurnNodeOncomingDir = " << agent[nearID]->memory.nextTurnNodeOncomingDir;
+    qDebug() << "  nearOncomingWaitPathInfo = " << agent[nearID]->memory.nearOncomingWaitPathInfo;
+    qDebug() << "  nearOncomingWaitCPInfo = " << agent[nearID]->memory.nearOncomingWaitCPInfo;
+    qDebug() << "  farOncomingWaitPathInfo = " << agent[nearID]->memory.farOncomingWaitPathInfo;
+    qDebug() << "  farOncomingWaitCPInfo = " << agent[nearID]->memory.farOncomingWaitCPInfo;
+    qDebug() << "  distToNearOncomingCP = " << agent[nearID]->memory.distToNearOncomingCP;
+    qDebug() << "  distToFatOncomingCP = " << agent[nearID]->memory.distToFatOncomingCP;
+    qDebug() << "  shouldWaitOverCrossPoint = " << agent[nearID]->memory.shouldWaitOverCrossPoint;
+    qDebug() << "  distToNearestCP = " << agent[nearID]->memory.distToNearestCP;
+    qDebug() << "  shouldStopAtSignalSL = " << agent[nearID]->memory.shouldStopAtSignalSL;
+    qDebug() << "  shouldYeild = " << agent[nearID]->memory.shouldYeild;
+    qDebug() << "  distToYeildStopLine = " << agent[nearID]->memory.distToYeildStopLine;
+    qDebug() << "  leftCrossIsClear = " << agent[nearID]->memory.leftCrossIsClear;
+    qDebug() << "  leftCrossCheckCount = " << agent[nearID]->memory.leftCrossCheckCount;
+    qDebug() << "  rightCrossIsClear = " << agent[nearID]->memory.rightCrossIsClear;
+    qDebug() << "  rightCrossCheckCount = " << agent[nearID]->memory.rightCrossCheckCount;
+    qDebug() << "  safetyConfimed = " << agent[nearID]->memory.safetyConfimed;
+
+
     qDebug() << "Control Info:";
     qDebug() << "  controlMode = " << agent[nearID]->memory.controlMode;
     qDebug() << "  accel = " << agent[nearID]->memory.accel;
@@ -2189,6 +2238,9 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  axHeadwayControl = " << agent[nearID]->memory.axHeadwayControl;
 
     qDebug() << "  doStopControl = " << agent[nearID]->memory.doStopControl;
+    qDebug() << "  causeOfStopControl = " << agent[nearID]->memory.causeOfStopControl;
+    qDebug() << "  speedZeroCount = " << agent[nearID]->memory.speedZeroCount;
+
     qDebug() << "  releaseStopCount = " << agent[nearID]->memory.releaseStopCount;
     qDebug() << "  axStopControl = " << agent[nearID]->memory.axStopControl;
     qDebug() << "  distanceToStopPoint = " << agent[nearID]->memory.distanceToStopPoint;
@@ -2205,6 +2257,14 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  myNodeList = " << agent[nearID]->memory.myNodeList;
     qDebug() << "  myInDirList = " << agent[nearID]->memory.myInDirList;
     qDebug() << "  myOutDirList = " << agent[nearID]->memory.myOutDirList;
+    qDebug() << "  myTurnDirectionList = " << agent[nearID]->memory.myTurnDirectionList;
+
+    qDebug() << "  currentTargetNode = " << agent[nearID]->memory.currentTargetNode;
+    qDebug() << "  currentTargetNodeIndexInNodeList = " << agent[nearID]->memory.currentTargetNodeIndexInNodeList;
+    qDebug() << "  nextTurnDirection = " << agent[nearID]->memory.nextTurnDirection;
+    qDebug() << "  nextTurnNode = " << agent[nearID]->memory.nextTurnNode;
+    qDebug() << "  nextTurnNodeIndexInNodeList = " << agent[nearID]->memory.nextTurnNodeIndexInNodeList;
+    qDebug() << "  distanceToTurnNodeWPIn = " << agent[nearID]->memory.distanceToTurnNodeWPIn;
 
     qDebug() << "Parameters:";
     qDebug() << "  maxDeceleration = " << agent[nearID]->param.maxDeceleration;

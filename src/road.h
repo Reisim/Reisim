@@ -27,11 +27,15 @@
 
 #define MAX_POINT_DIV_PATH  (10)
 
+#define   LEFT_HAND_TRAFFIC   (0)
+#define   RIGHT_HAND_TRAFFIC  (1)
+
+
 
 enum DIRECTION_LABEL
 {
     ONCOMING,
-    LEFT_CORSSING,
+    LEFT_CROSSING,
     RIGHT_CROSSING,
     STRAIGHT,
     UNDEFINED_DIRECTION
@@ -49,6 +53,11 @@ struct WP
 
     float cosDirect;
     float sinDirect;
+
+    bool isNodeInWP;
+    bool isNodeOutWP;
+    int relatedNode;
+    int relatedNodeLeg;
 };
 
 
@@ -279,6 +288,7 @@ public:
     QList<struct ObjectCategoryAndSize*> vehicleKind;
     QList<struct ObjectCategoryAndSize*> pedestrianKind;
 
+    int LeftOrRight;
 };
 
 #endif // ROAD_H

@@ -69,6 +69,10 @@ Agent::Agent()
     param.minimumDistanceToStopLine = 0.0;
     param.visibleDistance = 400.0;
     param.startRelay = 1.0;
+    param.crossTimeSafetyMargin = 4.0;
+    param.crossWaitPositionSafeyMargin = 7.5;
+    param.safetyConfirmTime = 1.5;
+
 
     isScenarioObject   = false;
     isSInterfaceObject = false;
@@ -128,6 +132,8 @@ void Agent::InitializeMemory()
     memory.requiredDistToStopFromTargetSpeed = 0.0;
     memory.axStopControl = 0.0;
 
+    memory.shouldStopAtSignalSL = false;
+
     memory.overrideBrakeByScenario = false;
     memory.overrideAxControl = 0.0;
 
@@ -138,5 +144,9 @@ void Agent::InitializeMemory()
     memory.additionalLateralShift = 0.0;
 
     memory.steeringControlGainMultiplier = 1.0;
+    memory.speedZeroCount = 0;
+
+    memory.leftCrossCheckCount = 0;
+    memory.rightCrossCheckCount = 0;
 }
 

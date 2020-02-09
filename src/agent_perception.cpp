@@ -29,28 +29,8 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
         break;
     }
 
-    //float preview_dist = 1.0 * state.V;
-    float preview_time = 1.0;
-    if( memory.actualTargetSpeed < 8.0 ){
-        preview_time = 0.5;
-    }
 
-    float preview_dist = preview_time * memory.actualTargetSpeed;
-    if( memory.controlMode == AGENT_CONTROL_MODE::INTERSECTION_TURN_CONTROL ){
-        preview_dist = memory.targetSpeedInsideIntersectionTurnByScenario;
-    }
-
-    if( preview_dist < vHalfLength ){
-        preview_dist = vHalfLength;
-    }
-
-    if( memory.controlMode == AGENT_CONTROL_MODE::STOP_AT ){
-        if( preview_dist > memory.distanceToStopPoint ){
-            preview_dist = memory.distanceToStopPoint;
-        }
-    }
-
-
+    float preview_dist = 3.5;
     float preview_x = state.x + preview_dist * state.cosYaw;
     float preview_y = state.y + preview_dist * state.sinYaw;
 
@@ -103,6 +83,35 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
         memory.previewPointPath = -1;
     }
 
+
+    memory.distanceToTurnNodeWPIn = -1.0;
+    if( memory.nextTurnNode >= 0 ){
+
+        QList<int> destPaths;
+        int inDir = memory.myInDirList.at( memory.nextTurnNodeIndexInNodeList );
+        int tnIdx = pRoad->nodeId2Index.indexOf( memory.nextTurnNode );
+        for(int i=0;i<pRoad->nodes[tnIdx]->inBoundaryWPs.size();++i){
+            if( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->relatedDirection == inDir ){
+                for(int j=0;j<pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP.size();++j){
+                    destPaths.append( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP[j] );
+                }
+            }
+        }
+
+        float dist = 0.0;
+        for(int i=memory.currentTargetPathIndexInList;i>=0;i--){
+            int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
+            dist += pRoad->paths[pIdx]->pathLength;
+            if( pRoad->paths[pIdx]->connectingNode == memory.nextTurnNode ){
+                if( destPaths.indexOf(memory.targetPathList.at(i)) >= 0 ){
+                    break;
+                }
+            }
+        }
+        dist -= memory.distanceFromStartWPInCurrentPath;
+
+        memory.distanceToTurnNodeWPIn = dist;
+    }
 
 
 
@@ -445,12 +454,13 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
                     struct TrafficSignalPerception* ts = new struct TrafficSignalPerception;
 
-                    ts->objectID   = trafficSignal[j]->id;
-                    ts->objectType = 'v';
-                    ts->x          = trafficSignal[j]->xTS;
-                    ts->y          = trafficSignal[j]->yTS;
-                    ts->yaw        = trafficSignal[j]->direction;
-                    ts->SLonPathID = -1;
+                    ts->objectID    = trafficSignal[j]->id;
+                    ts->objectType  = 'v';
+                    ts->x           = trafficSignal[j]->xTS;
+                    ts->y           = trafficSignal[j]->yTS;
+                    ts->yaw         = trafficSignal[j]->direction;
+                    ts->relatedNode = cNode;
+                    ts->SLonPathID  = -1;
 
                     memory.perceptedSignals.append( ts );
 
@@ -534,6 +544,10 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
         }
     }
 
+
+    for(int j=memory.perceptedSignals.size()-1;j>=0;--j){
+
+    }
 
 
     for(int j=memory.perceptedSignals.size()-1;j>=0;--j){

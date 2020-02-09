@@ -331,7 +331,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
 
 
-            qDebug() << "Try to generate : objID = " << objID;
+//            qDebug() << "Try to generate : objID = " << objID;
 
             //
             // Set targetPathList
@@ -345,26 +345,26 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             // List up All possible path list
             for(int j=0;j<pRoad->nodes[onIdx]->outBoundaryWPs.size();++j){
 
-                qDebug() << "outBoundaryWPs = " << pRoad->nodes[onIdx]->outBoundaryWPs[j]->wpId;
+//                qDebug() << "outBoundaryWPs = " << pRoad->nodes[onIdx]->outBoundaryWPs[j]->wpId;
 
                 for(int k=0;k<pRoad->nodes[onIdx]->outBoundaryWPs[j]->PathWithSWP.size();++k){
 
-                    qDebug() << "Path = " << pRoad->nodes[onIdx]->outBoundaryWPs[j]->PathWithSWP[k];
+//                    qDebug() << "Path = " << pRoad->nodes[onIdx]->outBoundaryWPs[j]->PathWithSWP[k];
 
                     int tmpCurPath = pRoad->nodes[onIdx]->outBoundaryWPs[j]->PathWithSWP[k];
 
-                    qDebug() << "Now Call Road::GetPathList";
+//                    qDebug() << "Now Call Road::GetPathList";
 
                     bool needLC = false;
                     int nodeUntil = -1;
                     QVector<int> tmpTargetPathList = pRoad->GetPathList( i, tmpCurPath, needLC, nodeUntil, &(this->rndGen) );
 
 
-                    qDebug() << "GetPathList Result for outBoundart-WP = " << pRoad->nodes[onIdx]->outBoundaryWPs[j]->wpId
-                             << " and Path = " << tmpCurPath;
-                    qDebug() << "  tmpTargetPathList.size = " << tmpTargetPathList.size();
-                    qDebug() << "  tmpTargetPathList = " << tmpTargetPathList;
-                    qDebug() << "  needLC = " << needLC << " nodeUntil = " << nodeUntil;
+//                    qDebug() << "GetPathList Result for outBoundart-WP = " << pRoad->nodes[onIdx]->outBoundaryWPs[j]->wpId
+//                             << " and Path = " << tmpCurPath;
+//                    qDebug() << "  tmpTargetPathList.size = " << tmpTargetPathList.size();
+//                    qDebug() << "  tmpTargetPathList = " << tmpTargetPathList;
+//                    qDebug() << "  needLC = " << needLC << " nodeUntil = " << nodeUntil;
 
                     targetPathLists.append( tmpTargetPathList );
                     needLCs.append( needLC );
@@ -393,7 +393,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                 }
             }
 
-            qDebug() << "numNoNeedLCPaths = " << numNoNeedLCPaths;
+//            qDebug() << "numNoNeedLCPaths = " << numNoNeedLCPaths;
 
             if( numNoNeedLCPaths > 0 ){
 
@@ -417,8 +417,8 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                             pAgent[objID]->memory.targetPathList = targetPathLists[k];
                             pAgent[objID]->memory.currentTargetPath = targetPathLists[k].last();
 
-                            qDebug() << "targetPathList = " << pAgent[objID]->memory.targetPathList;
-                            qDebug() << "currentTargetPath = " << pAgent[objID]->memory.currentTargetPath;
+//                            qDebug() << "targetPathList = " << pAgent[objID]->memory.targetPathList;
+//                            qDebug() << "currentTargetPath = " << pAgent[objID]->memory.currentTargetPath;
 
                             break;
                         }
@@ -466,6 +466,13 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             }
 
 
+            for(int j=0;j<pAgent[objID]->memory.targetPathList.size();++j){
+                if( pAgent[objID]->memory.targetPathList[j] == pAgent[objID]->memory.currentTargetPath ){
+                    pAgent[objID]->memory.currentTargetPathIndexInList = j;
+                    break;
+                }
+            }
+
 
             // Initial Position Data
             int tpIdx = pRoad->pathId2Index.indexOf( pAgent[objID]->memory.currentTargetPath );
@@ -508,7 +515,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
 
             // set vehicle size
-            qDebug() << "Set Vehicle Type and Size";
+//            qDebug() << "Set Vehicle Type and Size";
 
             pAgent[objID]->agentKind = 0;
 
@@ -525,8 +532,8 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objID]->vHalfLength = vehicleShape[j]->length * 0.5;
                     pAgent[objID]->vHalfWidth  = vehicleShape[j]->width  * 0.5;
 
-                    qDebug() << "VHalfLen = " << pAgent[objID]->vHalfLength
-                             << " VHalfWid = " << pAgent[objID]->vHalfWidth;
+//                    qDebug() << "VHalfLen = " << pAgent[objID]->vHalfLength
+//                             << " VHalfWid = " << pAgent[objID]->vHalfWidth;
                 }
             }
 
@@ -535,10 +542,10 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
 
             // Set initial state
-            qDebug() << "Set Vehicle Initial State";
+//            qDebug() << "Set Vehicle Initial State";
 
             pAgent[objID]->vehicle.SetVehicleID( objID );
-
+            pAgent[objID]->vehicle.SetWinker(0);
 
 
             pAgent[objID]->vehicle.SetInitialState( Vi, xi, yi, zi, YAi );  // Yaw in [rad]
@@ -567,7 +574,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
             pAgent[objID]->SetTargetNodeListByTargetPaths( pRoad );
 
-            qDebug() << "Generate Agent : objID = " << objID;
+//            qDebug() << "Generate Agent : objID = " << objID;
         }
 
     }
@@ -1101,7 +1108,7 @@ void SimulationManager::DisappearAgents(Agent **pAgent, int maxAgent)
             pAgent[i]->isScenarioObject = false;
             pAgent[i]->skipSetControlInfo = false;
 
-            qDebug() << "Agent ID = " << i << " disposed.";
+//            qDebug() << "Agent ID = " << i << " disposed.";
         }
     }
 }

@@ -27,6 +27,7 @@
 #include <QLabel>
 #include <QSlider>
 #include <QCheckBox>
+#include <QSpinBox>
 
 #include "graphiccanvas.h"
 #include "configwindow.h"
@@ -98,6 +99,7 @@ private:
     QPushButton *stopBtn;
     QPushButton *pauseBtn;
     QPushButton *resumeBtn;
+    QSpinBox *animeSpeedAdjusterByValue;
     QSlider *animeSpeedAdjuster;
     QPushButton *resetSpeedAdjuster;
     QCheckBox *cbShowVID;

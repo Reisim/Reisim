@@ -51,12 +51,20 @@ MainWindow::MainWindow(QWidget *parent)
     resumeBtn->setFixedWidth(50);
     connect(resumeBtn,SIGNAL(clicked(bool)),this,SLOT(ResumeSimulation()));
 
+    animeSpeedAdjusterByValue = new QSpinBox();
+    animeSpeedAdjusterByValue->setMaximum(0);
+    animeSpeedAdjusterByValue->setMaximum(200);
+    animeSpeedAdjusterByValue->setValue(50);
+    animeSpeedAdjusterByValue->setFixedWidth(60);
+
     animeSpeedAdjuster = new QSlider( Qt::Horizontal );
     animeSpeedAdjuster->setMinimum(0);
-    animeSpeedAdjuster->setMaximum(100);
+    animeSpeedAdjuster->setMaximum(200);
     animeSpeedAdjuster->setValue(50);
     animeSpeedAdjuster->setFixedWidth(100);
     connect(animeSpeedAdjuster,SIGNAL(valueChanged(int)),this,SLOT(SpeedAdjustMoved(int)));
+    connect(animeSpeedAdjusterByValue,SIGNAL(valueChanged(int)),animeSpeedAdjuster,SLOT(setValue(int)));
+
 
     resetSpeedAdjuster = new QPushButton();
     resetSpeedAdjuster->setIcon(QIcon(":/images/reset.png"));
@@ -84,6 +92,7 @@ MainWindow::MainWindow(QWidget *parent)
     controlLayout->addWidget( pauseBtn );
     controlLayout->addWidget( resumeBtn );
     controlLayout->addWidget( stopBtn );
+    controlLayout->addWidget( animeSpeedAdjusterByValue );
     controlLayout->addWidget( animeSpeedAdjuster );
     controlLayout->addWidget( resetSpeedAdjuster );
     controlLayout->addWidget( cbShowVID );
@@ -380,6 +389,7 @@ void MainWindow::SetRoadDataToCanvas(Road *road)
 
 void MainWindow::SpeedAdjustMoved(int val)
 {
+    animeSpeedAdjusterByValue->setValue(val);
     emit SetSpeedAdjustVal( val );
 }
 

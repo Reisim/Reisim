@@ -20,7 +20,7 @@
 
 Road::Road()
 {
-
+    LeftOrRight = 0;
 }
 
 
@@ -174,7 +174,17 @@ void Road::LoadRoadData(QString filename)
 
         //qDebug() << "tag : " << tag;
 
-        if( tag == QString("WayPoint") ){
+        if( tag == QString("Left-Hand Or Right-Hand") ){
+
+            if( QString( divLine[1]).trimmed().contains("RIGHT") == true ){
+                LeftOrRight = 1;
+            }
+            else{
+                LeftOrRight = 0;
+            }
+
+        }
+        else if( tag == QString("WayPoint") ){
 
             struct WP* wp = new struct WP;
 
@@ -189,6 +199,11 @@ void Road::LoadRoadData(QString filename)
             wp->scenarioObjectID = -1;
             wp->order            = -1;
             wp->speedInfo        = 0.0;
+
+            wp->isNodeInWP     = false;
+            wp->isNodeOutWP    = false;
+            wp->relatedNode    = -1;
+            wp->relatedNodeLeg = -1;
 
             wps.append( wp );
         }
@@ -1153,6 +1168,11 @@ void Road::CheckSideBoundaryWPs(struct Node *n)
                 n->inBoundaryWPs[i]->PathWithEWP.append( paths[j]->id );
             }
         }
+
+        int wpIdx = wpId2Index.indexOf( wpId );
+        wps[wpIdx]->isNodeInWP = true;
+        wps[wpIdx]->relatedNode = n->id;
+        wps[wpIdx]->relatedNodeLeg = n->inBoundaryWPs[i]->relatedDirection;
     }
 
     for(int i=0;i<n->outBoundaryWPs.size();++i){
@@ -1166,6 +1186,11 @@ void Road::CheckSideBoundaryWPs(struct Node *n)
                 n->outBoundaryWPs[i]->PathWithEWP.append( paths[j]->id );
             }
         }
+
+        int wpIdx = wpId2Index.indexOf( wpId );
+        wps[wpIdx]->isNodeOutWP = true;
+        wps[wpIdx]->relatedNode = n->id;
+        wps[wpIdx]->relatedNodeLeg = n->inBoundaryWPs[i]->relatedDirection;
     }
 }
 
@@ -1187,7 +1212,7 @@ int Road::GetDirectionLabel(int nodeID, int inDir, int checkDir)
                 ret = DIRECTION_LABEL::ONCOMING;
             }
             else if( nodes[ndIdx]->directionMap[i]->leftDirect.size() > 0 && nodes[ndIdx]->directionMap[i]->leftDirect.indexOf(checkDir) >= 0 ){
-                ret = DIRECTION_LABEL::LEFT_CORSSING;
+                ret = DIRECTION_LABEL::LEFT_CROSSING;
             }
             else if( nodes[ndIdx]->directionMap[i]->rightDirect.size() > 0 && nodes[ndIdx]->directionMap[i]->rightDirect.indexOf(checkDir) >= 0 ){
                 ret = DIRECTION_LABEL::RIGHT_CROSSING;

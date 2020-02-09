@@ -15,7 +15,7 @@
 #include <QDebug>
 
 
-void Agent::RiskEvaluation()
+void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
 {
 
     if( memory.controlMode == AGENT_CONTROL_MODE::CONSTANT_SPEED_HEADWAY ){
@@ -64,11 +64,20 @@ void Agent::RiskEvaluation()
 
     if(  memory.controlMode == AGENT_CONTROL_MODE::AGENT_LOGIC ){
 
+
+        if( state.V < 1.0 ){
+            memory.speedZeroCount++;
+        }
+        else{
+            memory.speedZeroCount = 0;
+        }
+
+
         //
         // Risk evaluation for Traffic Signal
         if( memory.doStopControl == true ){
             memory.releaseStopCount++;
-            if( memory.releaseStopCount * calInterval >=param.startRelay ){
+            if( memory.releaseStopCount == 0 || memory.releaseStopCount * calInterval >=param.startRelay ){
                 memory.doStopControl = false;
                 memory.releaseStopCount = 0;
             }
@@ -81,9 +90,21 @@ void Agent::RiskEvaluation()
 
             for(int i=0;i<memory.perceptedSignals.size();++i){
 
+                bool alreadyPassed = true;
+                for(int j=memory.currentTargetNodeIndexInNodeList;j>=0;j--){
+                    if( memory.myNodeList[j] == memory.perceptedSignals[i]->relatedNode ){
+                        alreadyPassed = false;
+                        break;
+                    }
+                }
+                if( alreadyPassed == true ){
+                    continue;
+                }
+
+
                 if( memory.perceptedSignals[i]->signalDisplay == TRAFFICSIGNAL_YELLOW ){
 
-                    if( memory.perceptedSignals[i]->distToSL > memory.distanceToZeroSpeed + 5.0 ){
+                    if( memory.shouldStopAtSignalSL == true || memory.perceptedSignals[i]->distToSL > memory.distanceToZeroSpeed + 5.0 ){
 
                         if( ShouldStop == false || minDist > memory.perceptedSignals[i]->distToSL ){
                             ShouldStop = true;
@@ -93,8 +114,7 @@ void Agent::RiskEvaluation()
                 }
                 else if( memory.perceptedSignals[i]->signalDisplay == TRAFFICSIGNAL_RED ){
 
-                    if( memory.perceptedSignals[i]->distToSL > -5.0 &&
-                            memory.perceptedSignals[i]->distToSL < memory.distanceToZeroSpeed + 5.0 ){
+                    if( memory.shouldStopAtSignalSL == true || memory.distToNearestCP > memory.distanceToZeroSpeed + 5.0 ){
 
                         if( ShouldStop == false || minDist > memory.perceptedSignals[i]->distToSL ){
                             ShouldStop = true;
@@ -106,8 +126,15 @@ void Agent::RiskEvaluation()
 
             if( ShouldStop == true ){
                 memory.doStopControl = true;
-                memory.distanceToStopPoint = minDist;
+                memory.distanceToStopPoint = minDist - vHalfLength;
+                memory.releaseStopCount = 0;
+                memory.causeOfStopControl = QString("Signal");
             }
+
+            memory.shouldStopAtSignalSL = ShouldStop;
+        }
+        else{
+            memory.shouldStopAtSignalSL = false;
         }
 
 
@@ -130,6 +157,47 @@ void Agent::RiskEvaluation()
                     vLenH = memory.perceptedObjects[i]->vHalfLength;
                 }
             }
+            else{
+
+                // If a front vehicle such as cross-merging and oncoming-mergine comes into my lane, regard the vehile as preceding
+                if( fabs(memory.perceptedObjects[i]->deviationFromNearestTargetPath) - memory.perceptedObjects[i]->effectiveHalfWidth < 1.5 &&
+                        memory.perceptedObjects[i]->distanceToObject > 0.0 ){
+
+                    if( memory.perceptedObjects[i]->V < 0.1 ){
+                        if( fabs(memory.perceptedObjects[i]->deviationFromNearestTargetPath) - memory.perceptedObjects[i]->effectiveHalfWidth - vHalfWidth > 0.0 ){
+                            continue;
+                        }
+                    }
+
+                    if( memory.nextTurnNode == memory.currentTargetNode ){
+                        if( memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING &&
+                                memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_LEFT ){
+                            continue;
+                        }
+                        else if( memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING &&
+                                memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_RIGHT ){
+                            continue;
+                        }
+
+                        if( (memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING || memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING ) &&
+                                memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_STRAIGHT ){
+                            continue;
+                        }
+                    }
+
+
+                    if( memory.precedingVehicleID < 0 ||  memory.distanceToPrecedingVehicle > memory.perceptedObjects[i]->distanceToObject ){
+                        memory.precedingVehicleID = memory.perceptedObjects[i]->objectID;
+                        memory.distanceToPrecedingVehicle = memory.perceptedObjects[i]->distanceToObject;
+                        memory.speedPrecedingVehicle = memory.perceptedObjects[i]->V * memory.perceptedObjects[i]->innerProductToNearestPathNormal;
+                        if( memory.speedPrecedingVehicle < 0.0 ){
+                            memory.speedPrecedingVehicle = 0.0;
+                        }
+                        memory.axPrecedingVehicle    = memory.perceptedObjects[i]->Ax;
+                        vLenH = memory.perceptedObjects[i]->vHalfLength;
+                    }
+                }
+            }
         }
 
         if( memory.precedingVehicleID >= 0 ){
@@ -139,6 +207,459 @@ void Agent::RiskEvaluation()
             memory.targetHeadwayDistance = param.headwayTime * state.V;
             if( memory.targetHeadwayDistance < param.minimumHeadwayDistanceAtStop + vLenH + vHalfLength  ){
                 memory.targetHeadwayDistance = param.minimumHeadwayDistanceAtStop + vLenH + vHalfLength;
+            }
+        }
+
+
+
+        //
+        // Risk evaluation of oncoming vehicle
+        if( memory.nextTurnNode >= 0 &&
+                ((memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING && pRoad->LeftOrRight == 0) ||
+                 (memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING && pRoad->LeftOrRight == 1)) ){
+
+            memory.distToNearOncomingCP = 0.0;
+            memory.distToFatOncomingCP  = 0.0;
+
+            if( memory.nearOncomingWaitPathInfo >= 0 ){
+
+                for(int j=memory.currentTargetPathIndexInList;j>=0;j--){
+
+                    int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList[j] );
+
+                    if( memory.targetPathList[j] == memory.nearOncomingWaitPathInfo ){
+                        memory.distToNearOncomingCP += pRoad->paths[pIdx]->crossPoints[ memory.nearOncomingWaitCPInfo ]->distFromStartWP;
+                        break;
+                    }
+                    memory.distToNearOncomingCP += pRoad->paths[pIdx]->pathLength;
+                }
+                memory.distToNearOncomingCP -= memory.distanceFromStartWPInCurrentPath;
+            }
+
+            if( memory.farOncomingWaitPathInfo >= 0 ){
+
+                for(int j=memory.currentTargetPathIndexInList;j>=0;j--){
+
+                    int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList[j] );
+
+                    if( memory.targetPathList[j] == memory.farOncomingWaitPathInfo ){
+
+                        memory.distToFatOncomingCP += pRoad->paths[pIdx]->crossPoints[ memory.farOncomingWaitCPInfo ]->distFromStartWP;
+                        break;
+                    }
+                    memory.distToFatOncomingCP += pRoad->paths[pIdx]->pathLength;
+                }
+                memory.distToFatOncomingCP -= memory.distanceFromStartWPInCurrentPath;
+            }
+
+            // not pass wait point
+            if( memory.distToNearOncomingCP > 0.0 ){
+
+                bool shoudStop = false;
+
+                float dStop = 0.0;
+                if( memory.distToNearOncomingCP < 5.0 ){
+                    dStop = memory.distanceToZeroSpeed;
+                }
+                if( memory.distToNearOncomingCP - dStop < vHalfLength ){
+
+                    shoudStop = false;
+
+                }
+                else{
+                    for(int i=0;i<memory.perceptedObjects.size();++i){
+
+                        if( memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_STRAIGHT &&
+                                memory.perceptedObjects[i]->hasCollisionPoint == true ){
+
+                            // Checl collision point is in turn node
+                            if( memory.perceptedObjects[i]->CPinNode != memory.nextTurnNode ){
+                                continue;
+                            }
+
+                            // If the oncoming vehicle is around collision point, do not enter
+                            if( memory.perceptedObjects[i]->objectTimeToCP >= 0.0 && memory.perceptedObjects[i]->objectTimeToCP < 3.0 ){
+                                shoudStop = true;
+                                break;
+                            }
+
+                            // The oncoming vehicle has already passed collision point
+                            if( memory.perceptedObjects[i]->objectTimeToCP < 0.0 ){
+                                continue;
+                            }
+
+                            // Far oncoming vehicle is neglected
+                            if( memory.perceptedObjects[i]->objectTimeToCP > 6.0 ){
+                                continue;
+                            }
+
+
+                            //@I have already passed collision point
+                            if( memory.perceptedObjects[i]->myTimeToCP < 0.0 ){
+                                continue;
+                            }
+
+
+                            // Check if a vehicle exist in the same lane
+                            bool noNeedToEval = false;
+                            int objID = memory.perceptedObjects[i]->objectID;
+                            for(int j=0;j<pAgent[objID]->memory.perceptedObjects.size();++j){
+                                if( pAgent[objID]->memory.perceptedObjects[j]->recognitionLabel == AGENT_RECOGNITION_LABEL::PRECEDING ){
+                                    int pID = pAgent[objID]->memory.perceptedObjects[j]->objectID;
+                                    for(int k=0;k<memory.perceptedObjects.size();++k){
+                                        if( i == k ){
+                                            break;
+                                        }
+                                        if( memory.perceptedObjects[k]->objectID == pID && memory.perceptedObjects[k]->V < 0.1 ){
+                                            if( memory.perceptedObjects[k]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_STRAIGHT ||
+                                                    memory.perceptedObjects[k]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_LEFT ||
+                                                    memory.perceptedObjects[k]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_RIGHT ){
+                                                if( memory.perceptedObjects[k]->distanceToObject > 0.0 ){
+                                                    noNeedToEval = true;
+                                                }
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if( noNeedToEval == true ){
+                                continue;
+                            }
+
+
+                            // Prediction; The oncoming vehicle will pass collision when I reach the point
+                            float preTime = 1.0;
+                            if( memory.perceptedObjects[i]->myTimeToCP < preTime ){
+                                preTime = memory.perceptedObjects[i]->myTimeToCP;
+                            }
+                            if( memory.perceptedObjects[i]->objectDistanceToCP - memory.perceptedObjects[i]->V * preTime  < -5.0){
+                                continue;
+                            }
+
+
+                            float crossTime = memory.perceptedObjects[i]->myTimeToCP - memory.perceptedObjects[i]->objectTimeToCP;
+                            if( crossTime > param.crossTimeSafetyMargin ){  // oncoming vehicle will pass faster than me
+                                continue;
+                            }
+                            else if( crossTime < (-1.0) * param.crossTimeSafetyMargin ){  // I can pass faster than oncoming vehicle
+                                continue;
+                            }
+
+                            shoudStop = true;
+                            break;
+                        }
+                        else if( ( (pRoad->LeftOrRight == 0 && memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_LEFT ) ||
+                                   (pRoad->LeftOrRight == 1 && memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_RIGHT) ) &&
+                                    memory.perceptedObjects[i]->hasCollisionPoint == true ){
+
+                            // Checl collision point is in turn node
+                            if( memory.perceptedObjects[i]->CPinNode != memory.nextTurnNode ){
+                                continue;
+                            }
+
+                            // Prediction; The oncoming-merging vehicle will pass collision when I reach the point
+                            float preTime = 1.0;
+                            if( memory.perceptedObjects[i]->myTimeToCP < preTime ){
+                                preTime = memory.perceptedObjects[i]->myTimeToCP;
+                            }
+                            if( memory.perceptedObjects[i]->objectDistanceToCP - memory.perceptedObjects[i]->V * preTime  < 0.0){
+                                continue;
+                            }
+
+                            // If the oncoming-merging vehicle is around collision/merging point, do not enter
+                            if( memory.perceptedObjects[i]->objectTimeToCP >= 0.0 && memory.perceptedObjects[i]->objectTimeToCP < 3.0 ){
+                                shoudStop = true;
+                                break;
+                            }
+
+                            // The oncoming vehicle has already passed collision point
+                            if( memory.perceptedObjects[i]->objectTimeToCP < 0.0 ){
+                                continue;
+                            }
+
+                            float crossTime = memory.perceptedObjects[i]->myTimeToCP - memory.perceptedObjects[i]->objectTimeToCP;
+                            if( crossTime > param.crossTimeSafetyMargin ){  // oncoming-merging vehicle will pass faster than me
+                                continue;
+                            }
+                            else if( crossTime < (-1.0) * param.crossTimeSafetyMargin ){  // I can pass faster than oncoming-merging vehicle
+                                continue;
+                            }
+
+                            shoudStop = true;
+                            break;
+                        }
+                    }
+                }
+
+                memory.shouldWaitOverCrossPoint = shoudStop;
+
+                if( shoudStop == true ){
+
+                    if( memory.doStopControl == true ){
+                        float d = memory.distToNearOncomingCP - param.crossWaitPositionSafeyMargin - vHalfLength;;
+                        if( memory.distanceToStopPoint > d ){
+                            memory.distanceToStopPoint = d;
+                            memory.releaseStopCount = -1;
+                        }
+                    }
+                    else{
+                        memory.doStopControl = true;
+                        memory.distanceToStopPoint = memory.distToNearOncomingCP - param.crossWaitPositionSafeyMargin - vHalfLength;
+                        memory.releaseStopCount = -1;
+                        memory.causeOfStopControl = QString("Oncoming");
+                    }
+                }
+            }
+        }
+
+
+        //
+        // Check of vehicles when enter non-signalized intersection, should yeild the way
+        if( memory.shouldYeild == true ){
+
+            if( memory.distToYeildStopLine > 2.5 + vHalfLength ){
+                if( memory.doStopControl == true ){
+                    float d = memory.distToYeildStopLine - vHalfLength;;
+                    if( memory.distanceToStopPoint > d ){
+                        memory.distanceToStopPoint = d;
+                        memory.releaseStopCount = -1;
+                    }
+                }
+                else{
+                    memory.doStopControl = true;
+                    memory.distanceToStopPoint = memory.distToYeildStopLine - vHalfLength;
+                    memory.releaseStopCount = -1;
+                    memory.causeOfStopControl = QString("Yeild 1");
+                }
+
+                memory.leftCrossIsClear = false;
+                memory.rightCrossIsClear = false;
+
+                memory.leftCrossCheckCount = 0;
+                memory.rightCrossCheckCount = 0;
+
+                memory.safetyConfimed = false;
+            }
+            else{
+
+                if( memory.doStopControl == true ){
+                    float d = memory.distToNearestCP - 1.5 - vHalfLength;
+                    if( (pRoad->LeftOrRight == 0 && memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING) ||
+                         (pRoad->LeftOrRight == 1 && memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING)   ){
+                        d -= 5.0;
+                    }
+
+                    if( memory.distanceToStopPoint > d ){
+                        memory.distanceToStopPoint = d;
+                        memory.releaseStopCount = -1;
+                    }
+                }
+                else{
+                    memory.doStopControl = true;
+                    memory.distanceToStopPoint = memory.distToNearestCP - 1.5 - vHalfLength;
+                    if( (pRoad->LeftOrRight == 0 && memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING) ||
+                         (pRoad->LeftOrRight == 1 && memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING)   ){
+                        memory.distanceToStopPoint -= 5.0;
+                    }
+                    memory.releaseStopCount = -1;
+                    memory.causeOfStopControl = QString("Yeild 2");
+                }
+
+                if( memory.distanceToStopPoint < 2.5 + vHalfLength && state.V < 2.0 ){
+
+                    if( memory.safetyConfimed == true ){
+
+                        // If stay for a while after safety confirmed, the situation may be changed, so check again
+                        if( memory.speedZeroCount * calInterval > param.safetyConfirmTime ){
+                            memory.safetyConfimed = false;
+                        }
+                        else{
+                            memory.doStopControl = false;
+                        }
+
+                    }
+                    else{
+
+                        // Check cross vehicles
+                        int checkKind = 0;
+                        if( pRoad->LeftOrRight == 0 ){
+
+                            if( memory.rightCrossIsClear == false ){
+                                checkKind = 2;
+                                memory.rightCrossCheckCount = 0;
+                            }
+                            else if( memory.rightCrossIsClear == true ){
+                                checkKind = 2;
+                                memory.rightCrossCheckCount++;
+                                if( memory.rightCrossCheckCount * calInterval > param.safetyConfirmTime ){
+                                    checkKind = -1;
+                                }
+
+                                if( memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING ){
+
+                                    // If taking much time to confirm left-cross, the situation of right-cross may be changed, check again
+                                    if( memory.leftCrossCheckCount * calInterval > param.safetyConfirmTime * 2.5 ){
+                                        checkKind = 2;
+                                    }
+                                }
+                            }
+
+                        }
+                        else if( pRoad->LeftOrRight == 1 ){
+
+                            if( memory.leftCrossIsClear == false ){
+                                checkKind = 1;
+                                memory.leftCrossCheckCount = 0;
+                            }
+                            else if( memory.leftCrossIsClear == true ){
+                                checkKind = 1;
+                                memory.leftCrossCheckCount++;
+                                if( memory.leftCrossCheckCount * calInterval > param.safetyConfirmTime ){
+                                    checkKind = -1;
+                                }
+
+                                if( memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING ){
+                                    // If taking much time to confirm right-cross, the situation of left-cross may be changed, check again
+                                    if( memory.leftCrossCheckCount * calInterval > param.safetyConfirmTime * 2.5 ){
+                                        checkKind = 1;
+                                    }
+                                }
+                            }
+                        }
+
+                        if( pRoad->LeftOrRight == 0 && memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING && checkKind == -1 ){
+
+                            if( memory.leftCrossIsClear == false ){
+                                checkKind = 2;
+                                memory.leftCrossCheckCount = 0;
+                            }
+                            else if( memory.leftCrossIsClear == true ){
+                                checkKind = 2;
+                                memory.leftCrossCheckCount++;
+                                if( memory.leftCrossCheckCount * calInterval > param.safetyConfirmTime ){
+                                    checkKind = -1;
+                                }
+                            }
+                        }
+                        else if( pRoad->LeftOrRight == 1 && memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING && checkKind == -1 ){
+
+                            if( memory.rightCrossIsClear == false ){
+                                checkKind = 2;
+                                memory.rightCrossCheckCount = 0;
+                            }
+                            else if( memory.rightCrossIsClear == true ){
+                                checkKind = 2;
+                                memory.rightCrossCheckCount++;
+                                if( memory.rightCrossCheckCount * calInterval > param.safetyConfirmTime ){
+                                    checkKind = -1;
+                                }
+                            }
+                        }
+
+                        //qDebug() << "ID=" << ID << " checkKind = " << checkKind;
+
+                        if( checkKind == -1 ){
+                            memory.safetyConfimed = true;
+                            memory.doStopControl = false;
+                            memory.speedZeroCount = 0;
+                        }
+                        else if( checkKind == 1 ){
+
+                            memory.leftCrossIsClear = true;
+
+                            for(int i=0;i<memory.perceptedObjects.size();++i){
+
+                                if( memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::LEFT_CROSSING_STRAIGHT &&
+                                        memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::LEFT_CROSSING_LEFT &&
+                                        memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::LEFT_CROSSING_RIGHT ){
+                                    continue;
+                                }
+
+                                if( memory.perceptedObjects[i]->hasCollisionPoint == false ){
+                                    continue;
+                                }
+
+                                if( memory.perceptedObjects[i]->CPinNode != memory.nextTurnNode ){
+                                    continue;
+                                }
+
+                                if( memory.perceptedObjects[i]->objectDistanceToCP > 0.0 &&
+                                        memory.perceptedObjects[i]->objectDistanceToCP < 10.0 ){
+
+                                    memory.leftCrossIsClear = false;
+                                    memory.leftCrossCheckCount = 0;
+                                    break;
+                                }
+
+                                float decelTime = memory.perceptedObjects[i]->V / param.accelControlGain;
+                                float myTime = memory.perceptedObjects[i]->myDistanceToCP / 5.0;  // Assuem average speed of 5[m/s] to move to collision point
+
+                                float diffTime1 = (memory.perceptedObjects[i]->myTimeToCP > myTime ? memory.perceptedObjects[i]->myTimeToCP : myTime) - memory.perceptedObjects[i]->objectTimeToCP;
+                                float diffTime2 = (memory.perceptedObjects[i]->myTimeToCP < myTime ? memory.perceptedObjects[i]->myTimeToCP : myTime) - memory.perceptedObjects[i]->objectTimeToCP;
+                                if( diffTime1 > param.crossTimeSafetyMargin ){
+                                    // I can after left-cross vehicle
+                                    continue;
+                                }
+                                else if( diffTime2 < (decelTime + param.crossTimeSafetyMargin) * -1.0 ){
+                                    // I can go faster
+                                    continue;
+                                }
+
+                                memory.leftCrossIsClear = false;
+                                memory.leftCrossCheckCount = 0;
+                                break;
+                            }
+                        }
+                        else if( checkKind == 2 ){
+
+                            memory.rightCrossIsClear = true;
+
+                            for(int i=0;i<memory.perceptedObjects.size();++i){
+
+                                if( memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_STRAIGHT &&
+                                        memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_LEFT &&
+                                        memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_RIGHT ){
+                                    continue;
+                                }
+
+                                if( memory.perceptedObjects[i]->hasCollisionPoint == false ){
+                                    continue;
+                                }
+
+                                if( memory.perceptedObjects[i]->CPinNode != memory.nextTurnNode ){
+                                    continue;
+                                }
+
+                                if( memory.perceptedObjects[i]->objectDistanceToCP > 0.0 &&
+                                        memory.perceptedObjects[i]->objectDistanceToCP < 10.0 ){
+
+                                    memory.rightCrossIsClear = false;
+                                    memory.rightCrossCheckCount = 0;
+                                    break;
+                                }
+
+                                float decelTime = memory.perceptedObjects[i]->V / param.accelControlGain;
+                                float myTime = memory.perceptedObjects[i]->myDistanceToCP / 5.0;  // Assuem average speed of 5[m/s] to move to collision point
+
+                                float diffTime1 = (memory.perceptedObjects[i]->myTimeToCP > myTime ? memory.perceptedObjects[i]->myTimeToCP : myTime) - memory.perceptedObjects[i]->objectTimeToCP;
+                                float diffTime2 = (memory.perceptedObjects[i]->myTimeToCP < myTime ? memory.perceptedObjects[i]->myTimeToCP : myTime) - memory.perceptedObjects[i]->objectTimeToCP;
+                                if( diffTime1 > param.crossTimeSafetyMargin ){
+                                    // I can after left-cross vehicle
+                                    continue;
+                                }
+                                else if( diffTime2 < (decelTime + param.crossTimeSafetyMargin) * -1.0 ){
+                                    // I can go faster
+                                    continue;
+                                }
+
+                                memory.rightCrossIsClear = false;
+                                memory.rightCrossCheckCount = 0;
+                                break;
+                            }
+                        }
+                    }
+                }
             }
         }
 

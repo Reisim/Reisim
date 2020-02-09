@@ -47,13 +47,16 @@ void Agent::Control(Road* pRoad)
 
             ax_com = memory.axSpeedControl;
 
+            //qDebug() << "[ID=" << ID << "] ax_com = " << ax_com << " - V";
+
             if( memory.doHeadwayDistanceControl == true ){
 
                 memory.actualTargetHeadwayDistance = memory.targetHeadwayDistance;
 
                 HeadwayControl();
-                if( memory.doHeadwayDistanceControl == true && ax_com > memory.axHeadwayControl ){
+                if( memory.axHeadwayControl < 0.0 && ax_com > memory.axHeadwayControl ){
                     ax_com = memory.axHeadwayControl;
+                    //qDebug() << "[ID=" << ID << "] ax_com = " << ax_com << " - H";
                 }
 
             }
@@ -61,8 +64,9 @@ void Agent::Control(Road* pRoad)
             if( memory.doStopControl == true ){
 
                 StopControl();
-                if( ax_com > memory.axStopControl ){
+                if( memory.axStopControl < 0.0 && ax_com > memory.axStopControl ){
                     ax_com = memory.axStopControl;
+                    //qDebug() << "[ID=" << ID << "] ax_com = " << ax_com << " - S";
                 }
 
             }
@@ -485,6 +489,22 @@ void Agent::Control(Road* pRoad)
         if( memory.overrideSteerByScenario == true ){
            memory.steer = memory.overrideSteerControl * 0.014752; // should be multiplied a gain varied depending on speed
         }
+
+
+        // Winker Operation
+        if( memory.controlMode == AGENT_CONTROL_MODE::AGENT_LOGIC ){
+            if( memory.distanceToTurnNodeWPIn >= 0 && vehicle.GetWinerState() == 0 ){
+                if( memory.distanceToTurnNodeWPIn <= 30.0 || memory.distanceToTurnNodeWPIn < 3.0 * state.V ){
+                    if( memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING ){
+                        vehicle.SetWinker( 1 );
+                    }
+                    else if( memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING ){
+                        vehicle.SetWinker( 2 );
+                    }
+                }
+            }
+        }
+
     }
     else if( agentKind >= 100 ){
 
@@ -645,7 +665,6 @@ void Agent::HeadwayControl()
     if( relV > 0.5f ){
 
         if( isFollowing > 0.0f ){
-            memory.doHeadwayDistanceControl = false;
             memory.axHeadwayControl = 0.0f;
         }
         else{
@@ -730,14 +749,16 @@ void Agent::StopControl()
     //qDebug() << "  distanceToZeroSpeed = " << memory.distanceToZeroSpeed;
 
     if( memory.distanceToStopPoint > memory.distanceToZeroSpeed ){
-        memory.doStopControl = false;
         memory.axStopControl = 0.0;
         return;
     }
 
-    float aReq = (-0.5) * state.V * state.V / (memory.distanceToStopPoint + vHalfLength);
+    float Dist = memory.distanceToStopPoint - vHalfLength;
+    if( Dist < vHalfLength ){
+        Dist = vHalfLength;
+    }
+    float aReq = (-0.5) * state.V * state.V / Dist;
     if( aReq > normalDecel * (-1.0) ){
-        memory.doStopControl = false;
         memory.axStopControl = 0.0;
         return;
     }

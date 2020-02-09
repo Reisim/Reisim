@@ -107,16 +107,36 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                     int crossNodeMyInDir   = -1;
                     int crossNodeObjInDir  = -1;
                     int crossNodeObjOutDir = -1;
-                    for(int j=0;j<pAgent[aID]->memory.myNodeList.size();++j){
-                        int cnIdx = memory.myNodeList.indexOf( pAgent[aID]->memory.myNodeList.at(j) );
+
+                    if( memory.currentTargetNode == pAgent[aID]->memory.currentTargetNode ){
+                        crossNode          = memory.currentTargetNode;
+                        crossNodeMyInDir   = memory.myInDirList.at( memory.currentTargetNodeIndexInNodeList );
+                        crossNodeObjInDir  = pAgent[aID]->memory.myInDirList.at( pAgent[aID]->memory.currentTargetNodeIndexInNodeList );
+                        crossNodeObjOutDir = pAgent[aID]->memory.myOutDirList.at( pAgent[aID]->memory.currentTargetNodeIndexInNodeList );
+                    }
+                    else{
+
+                        int cnIdx = memory.myNodeList.indexOf( pAgent[aID]->memory.currentTargetNode );
                         if( cnIdx >= 0 ){
                             crossNode          = memory.myNodeList.at(cnIdx);
                             crossNodeMyInDir   = memory.myInDirList.at(cnIdx);
-                            crossNodeObjInDir  = pAgent[aID]->memory.myInDirList.at(j);
-                            crossNodeObjOutDir = pAgent[aID]->memory.myOutDirList.at(j);
-                            break;
+                            crossNodeObjInDir  = pAgent[aID]->memory.myInDirList.at( pAgent[aID]->memory.currentTargetNodeIndexInNodeList );
+                            crossNodeObjOutDir = pAgent[aID]->memory.myOutDirList.at( pAgent[aID]->memory.currentTargetNodeIndexInNodeList );
+                        }
+                        else {
+                            for(int j=0;j<pAgent[aID]->memory.myNodeList.size();++j){
+                                int cnIdx = memory.myNodeList.indexOf( pAgent[aID]->memory.myNodeList.at(j) );
+                                if( cnIdx >= 0 ){
+                                    crossNode          = memory.myNodeList.at(cnIdx);
+                                    crossNodeMyInDir   = memory.myInDirList.at(cnIdx);
+                                    crossNodeObjInDir  = pAgent[aID]->memory.myInDirList.at(j);
+                                    crossNodeObjOutDir = pAgent[aID]->memory.myOutDirList.at(j);
+                                    break;
+                                }
+                            }
                         }
                     }
+
 
                     if( crossNode >= 0 ){
 
@@ -130,18 +150,18 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                             if( dirLabel == DIRECTION_LABEL::RIGHT_CROSSING  ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::ONCOMING_RIGHT;
                             }
-                            else if( dirLabel == DIRECTION_LABEL::LEFT_CORSSING ){
+                            else if( dirLabel == DIRECTION_LABEL::LEFT_CROSSING ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::ONCOMING_LEFT;
                             }
                             else{
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::ONCOMING_STRAIGHT;
                             }
                         }
-                        else if( dir == DIRECTION_LABEL::LEFT_CORSSING ){
+                        else if( dir == DIRECTION_LABEL::LEFT_CROSSING ){
                             if( dirLabel == DIRECTION_LABEL::RIGHT_CROSSING  ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::LEFT_CROSSING_RIGHT;
                             }
-                            else if( dirLabel == DIRECTION_LABEL::LEFT_CORSSING ){
+                            else if( dirLabel == DIRECTION_LABEL::LEFT_CROSSING ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::LEFT_CROSSING_LEFT;
                             }
                             else{
@@ -152,7 +172,7 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                             if( dirLabel == DIRECTION_LABEL::RIGHT_CROSSING  ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_RIGHT;
                             }
-                            else if( dirLabel == DIRECTION_LABEL::LEFT_CORSSING ){
+                            else if( dirLabel == DIRECTION_LABEL::LEFT_CROSSING ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_LEFT;
                             }
                             else{
