@@ -953,11 +953,11 @@ void GraphicCanvas::wheelEvent(QWheelEvent *e)
     }
     if( e->delta() > 0.0 ){
         if( Z_eye < -12.0 ){
-            Z_eye /= (1.2 * s);
+            Z_eye /= (1.05 * s);
         }
     }
     else if( e->delta() < 0.0 ){
-        Z_eye *= 1.2 * s;
+        Z_eye *= 1.05 * s;
     }
     QOpenGLWidget::update();
 }

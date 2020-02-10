@@ -2267,8 +2267,26 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  distanceToTurnNodeWPIn = " << agent[nearID]->memory.distanceToTurnNodeWPIn;
 
     qDebug() << "Parameters:";
-    qDebug() << "  maxDeceleration = " << agent[nearID]->param.maxDeceleration;
     qDebug() << "  accelControlGain = " << agent[nearID]->param.accelControlGain;
+    qDebug() << "  deadZoneSpeedControl = " << agent[nearID]->param.deadZoneSpeedControl;
+    qDebug() << "  maxDeceleration = " << agent[nearID]->param.maxDeceleration;
+    qDebug() << "  accelOffDeceleration = " << agent[nearID]->param.accelOffDeceleration;
     qDebug() << "  steeringControlGain = " << agent[nearID]->param.steeringControlGain;
+    qDebug() << "  latAccelAtTurn = " << agent[nearID]->param.latAccelAtTurn;
+    qDebug() << "  headwayTime = " << agent[nearID]->param.headwayTime;
+    qDebug() << "  headwayControlGain = " << agent[nearID]->param.headwayControlGain;
+    qDebug() << "  minimumPerceptibleDecelerationOfPreceding = " << agent[nearID]->param.minimumPerceptibleDecelerationOfPreceding;
+    qDebug() << "  minimumHeadwayDistanceAtStop = " << agent[nearID]->param.minimumHeadwayDistanceAtStop;
+    qDebug() << "  minimumDistanceToStopLine = " << agent[nearID]->param.minimumDistanceToStopLine;
+    qDebug() << "  visibleDistance = " << agent[nearID]->param.visibleDistance;
+    qDebug() << "  startRelay = " << agent[nearID]->param.startRelay;
+    qDebug() << "  crossTimeSafetyMargin = " << agent[nearID]->param.crossTimeSafetyMargin;
+    qDebug() << "  crossWaitPositionSafeyMargin = " << agent[nearID]->param.crossWaitPositionSafeyMargin;
+    qDebug() << "  safetyConfirmTime = " << agent[nearID]->param.safetyConfirmTime;
 
+    qDebug() << "Debug Info:";
+    QStringList divStr = agent[nearID]->strForDebug.split("\n");
+    for(int i=0;i<divStr.size();++i){
+        qDebug() << "  " << QString(divStr[i]);
+    }
 }

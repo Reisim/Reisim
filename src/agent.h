@@ -371,6 +371,7 @@ public:
     struct AgentParam      param;
     struct AgentState      state;
 
+    QString strForDebug;
 
     Vehicle vehicle;
     float vHalfLength;

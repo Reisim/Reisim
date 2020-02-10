@@ -72,6 +72,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
             memory.speedZeroCount = 0;
         }
 
+        memory.causeOfStopControl = QString("---");
 
         //
         // Risk evaluation for Traffic Signal
@@ -289,13 +290,18 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                             }
 
                             // Far oncoming vehicle is neglected
-                            if( memory.perceptedObjects[i]->objectTimeToCP > 6.0 ){
+                            if( memory.perceptedObjects[i]->objectTimeToCP > 6.0 && memory.perceptedObjects[i]->objectDistanceToCP > 30.0 ){
                                 continue;
                             }
 
 
                             //@I have already passed collision point
                             if( memory.perceptedObjects[i]->myTimeToCP < 0.0 ){
+                                continue;
+                            }
+
+                            //@I am far from collision point
+                            if( memory.perceptedObjects[i]->myTimeToCP > 6.0 && memory.perceptedObjects[i]->myDistanceToCP > 60.0 ){
                                 continue;
                             }
 
@@ -346,6 +352,8 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                 continue;
                             }
 
+                            strForDebug += QString("[1]Oncoming Risk by ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
+
                             shoudStop = true;
                             break;
                         }
@@ -385,6 +393,8 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                             else if( crossTime < (-1.0) * param.crossTimeSafetyMargin ){  // I can pass faster than oncoming-merging vehicle
                                 continue;
                             }
+
+                            strForDebug += QString("[2]Oncoming Risk by ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
 
                             shoudStop = true;
                             break;
@@ -444,7 +454,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
             else{
 
                 if( memory.doStopControl == true ){
-                    float d = memory.distToNearestCP - 1.5 - vHalfLength;
+                    float d = memory.distanceToTurnNodeWPIn - vHalfLength;
                     if( (pRoad->LeftOrRight == 0 && memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING) ||
                          (pRoad->LeftOrRight == 1 && memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING)   ){
                         d -= 5.0;
@@ -457,11 +467,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                 }
                 else{
                     memory.doStopControl = true;
-                    memory.distanceToStopPoint = memory.distToNearestCP - 1.5 - vHalfLength;
-                    if( (pRoad->LeftOrRight == 0 && memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING) ||
-                         (pRoad->LeftOrRight == 1 && memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING)   ){
-                        memory.distanceToStopPoint -= 5.0;
-                    }
+                    memory.distanceToStopPoint = memory.distanceToTurnNodeWPIn - vHalfLength;
                     memory.releaseStopCount = -1;
                     memory.causeOfStopControl = QString("Yeild 2");
                 }
@@ -501,6 +507,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                     // If taking much time to confirm left-cross, the situation of right-cross may be changed, check again
                                     if( memory.leftCrossCheckCount * calInterval > param.safetyConfirmTime * 2.5 ){
                                         checkKind = 2;
+                                        memory.rightCrossCheckCount = 0;
                                     }
                                 }
                             }
@@ -523,10 +530,13 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                     // If taking much time to confirm right-cross, the situation of left-cross may be changed, check again
                                     if( memory.leftCrossCheckCount * calInterval > param.safetyConfirmTime * 2.5 ){
                                         checkKind = 1;
+                                        memory.leftCrossCheckCount = 0;
                                     }
                                 }
                             }
                         }
+
+                        strForDebug += QString("[1]checkKind=%1\n").arg(checkKind);
 
                         if( pRoad->LeftOrRight == 0 && memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING && checkKind == -1 ){
 
@@ -557,7 +567,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                             }
                         }
 
-                        //qDebug() << "ID=" << ID << " checkKind = " << checkKind;
+                        strForDebug += QString("[2]checkKind=%1\n").arg(checkKind);
 
                         if( checkKind == -1 ){
                             memory.safetyConfimed = true;
@@ -584,6 +594,11 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                     continue;
                                 }
 
+                                // Reject fat vehicle
+                                if( memory.perceptedObjects[i]->objectTimeToCP > 8.0 && memory.perceptedObjects[i]->objectDistanceToCP > 40.0 ){
+                                    continue;
+                                }
+
                                 if( memory.perceptedObjects[i]->objectDistanceToCP > 0.0 &&
                                         memory.perceptedObjects[i]->objectDistanceToCP < 10.0 ){
 
@@ -593,18 +608,22 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                 }
 
                                 float decelTime = memory.perceptedObjects[i]->V / param.accelControlGain;
-                                float myTime = memory.perceptedObjects[i]->myDistanceToCP / 5.0;  // Assuem average speed of 5[m/s] to move to collision point
+                                float myTime = memory.perceptedObjects[i]->myDistanceToCP / 2.0;  // Assuem average speed of 2[m/s] to move to collision point
+                                if( state.V > 2.0 ){
+                                    myTime = memory.perceptedObjects[i]->myDistanceToCP / state.V;
+                                }
 
-                                float diffTime1 = (memory.perceptedObjects[i]->myTimeToCP > myTime ? memory.perceptedObjects[i]->myTimeToCP : myTime) - memory.perceptedObjects[i]->objectTimeToCP;
-                                float diffTime2 = (memory.perceptedObjects[i]->myTimeToCP < myTime ? memory.perceptedObjects[i]->myTimeToCP : myTime) - memory.perceptedObjects[i]->objectTimeToCP;
-                                if( diffTime1 > param.crossTimeSafetyMargin ){
+                                float diffTime = myTime - memory.perceptedObjects[i]->objectTimeToCP;
+                                if( diffTime > param.crossTimeSafetyMargin ){
                                     // I can after left-cross vehicle
                                     continue;
                                 }
-                                else if( diffTime2 < (decelTime + param.crossTimeSafetyMargin) * -1.0 ){
+                                else if( diffTime < (decelTime + param.crossTimeSafetyMargin) * -1.0 ){
                                     // I can go faster
                                     continue;
                                 }
+
+                                strForDebug += QString("[1]Crossing Risk by ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
 
                                 memory.leftCrossIsClear = false;
                                 memory.leftCrossCheckCount = 0;
@@ -631,6 +650,11 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                     continue;
                                 }
 
+                                // Reject fat vehicle
+                                if( memory.perceptedObjects[i]->objectTimeToCP > 8.0 && memory.perceptedObjects[i]->objectDistanceToCP > 40.0 ){
+                                    continue;
+                                }
+
                                 if( memory.perceptedObjects[i]->objectDistanceToCP > 0.0 &&
                                         memory.perceptedObjects[i]->objectDistanceToCP < 10.0 ){
 
@@ -640,18 +664,23 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                 }
 
                                 float decelTime = memory.perceptedObjects[i]->V / param.accelControlGain;
-                                float myTime = memory.perceptedObjects[i]->myDistanceToCP / 5.0;  // Assuem average speed of 5[m/s] to move to collision point
 
-                                float diffTime1 = (memory.perceptedObjects[i]->myTimeToCP > myTime ? memory.perceptedObjects[i]->myTimeToCP : myTime) - memory.perceptedObjects[i]->objectTimeToCP;
-                                float diffTime2 = (memory.perceptedObjects[i]->myTimeToCP < myTime ? memory.perceptedObjects[i]->myTimeToCP : myTime) - memory.perceptedObjects[i]->objectTimeToCP;
-                                if( diffTime1 > param.crossTimeSafetyMargin ){
+                                float myTime = memory.perceptedObjects[i]->myDistanceToCP / 2.0;  // Assuem average speed of 2[m/s] to move to collision point
+                                if( state.V > 2.0 ){
+                                    myTime = memory.perceptedObjects[i]->myDistanceToCP / state.V;
+                                }
+
+                                float diffTime = myTime - memory.perceptedObjects[i]->objectTimeToCP;
+                                if( diffTime > param.crossTimeSafetyMargin ){
                                     // I can after left-cross vehicle
                                     continue;
                                 }
-                                else if( diffTime2 < (decelTime + param.crossTimeSafetyMargin) * -1.0 ){
+                                else if( diffTime < (decelTime + param.crossTimeSafetyMargin) * -1.0 ){
                                     // I can go faster
                                     continue;
                                 }
+
+                                strForDebug += QString("[2]Crossing Risk by ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
 
                                 memory.rightCrossIsClear = false;
                                 memory.rightCrossCheckCount = 0;

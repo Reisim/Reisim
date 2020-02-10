@@ -16,6 +16,8 @@
 
 void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<TrafficSignal*> trafficSignal )
 {
+    strForDebug = QString("");
+
 
     //
     //  Calculation of position on path
