@@ -117,16 +117,16 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                     else{
 
                         int cnIdx = memory.myNodeList.indexOf( pAgent[aID]->memory.currentTargetNode );
-                        if( cnIdx >= 0 ){
+                        if( cnIdx >= memory.currentTargetNodeIndexInNodeList ){
                             crossNode          = memory.myNodeList.at(cnIdx);
                             crossNodeMyInDir   = memory.myInDirList.at(cnIdx);
                             crossNodeObjInDir  = pAgent[aID]->memory.myInDirList.at( pAgent[aID]->memory.currentTargetNodeIndexInNodeList );
                             crossNodeObjOutDir = pAgent[aID]->memory.myOutDirList.at( pAgent[aID]->memory.currentTargetNodeIndexInNodeList );
                         }
                         else {
-                            for(int j=0;j<pAgent[aID]->memory.myNodeList.size();++j){
+                            for(int j=pAgent[aID]->memory.currentTargetNodeIndexInNodeList;j<pAgent[aID]->memory.myNodeList.size();++j){
                                 int cnIdx = memory.myNodeList.indexOf( pAgent[aID]->memory.myNodeList.at(j) );
-                                if( cnIdx >= 0 ){
+                                if( cnIdx >= memory.currentTargetNodeIndexInNodeList ){
                                     crossNode          = memory.myNodeList.at(cnIdx);
                                     crossNodeMyInDir   = memory.myInDirList.at(cnIdx);
                                     crossNodeObjInDir  = pAgent[aID]->memory.myInDirList.at(j);

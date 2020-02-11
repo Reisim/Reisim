@@ -2249,7 +2249,10 @@ void SystemThread::ShowAgentData(float x,float y)
 
     qDebug() << "  lateralDeviationFromTargetPath = " << agent[nearID]->memory.lateralDeviationFromTargetPath;
     qDebug() << "  lateralDeviationFromTargetPathAtPreviewPoint = " << agent[nearID]->memory.lateralDeviationFromTargetPathAtPreviewPoint;
+    qDebug() << "  lateralShiftTarget = " << agent[nearID]->memory.lateralShiftTarget;
+    qDebug() << "  avoidTarget = " << agent[nearID]->memory.avoidTarget;
     qDebug() << "  steer = " << agent[nearID]->memory.steer;
+
 
     qDebug() << "Guidance Info:";
     qDebug() << "  targetPathList = " << agent[nearID]->memory.targetPathList;
@@ -2265,6 +2268,7 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  nextTurnNode = " << agent[nearID]->memory.nextTurnNode;
     qDebug() << "  nextTurnNodeIndexInNodeList = " << agent[nearID]->memory.nextTurnNodeIndexInNodeList;
     qDebug() << "  distanceToTurnNodeWPIn = " << agent[nearID]->memory.distanceToTurnNodeWPIn;
+    qDebug() << "  distanceToNodeWPIn = " << agent[nearID]->memory.distanceToNodeWPIn;
 
     qDebug() << "Parameters:";
     qDebug() << "  accelControlGain = " << agent[nearID]->param.accelControlGain;

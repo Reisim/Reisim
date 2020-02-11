@@ -148,5 +148,10 @@ void Agent::InitializeMemory()
 
     memory.leftCrossCheckCount = 0;
     memory.rightCrossCheckCount = 0;
+
+    memory.lateralShiftTarget = 0.0;
+    memory.avoidTarget = -1;
+
+    memory.isChaningLane = false;
 }
 

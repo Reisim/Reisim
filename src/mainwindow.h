@@ -59,6 +59,7 @@ signals:
     void SimulationResume();
     void SetSpeedAdjustVal(int);
     void SetStopGraphicUpdate(bool);
+    void SetSimulationFrequency(int);
 
 
 public slots:

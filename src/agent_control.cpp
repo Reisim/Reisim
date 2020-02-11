@@ -52,6 +52,9 @@ void Agent::Control(Road* pRoad)
             if( memory.doHeadwayDistanceControl == true ){
 
                 memory.actualTargetHeadwayDistance = memory.targetHeadwayDistance;
+                if( memory.precedingObstacle == 1 ){
+                    memory.actualTargetHeadwayDistance += 10.0;
+                }
 
                 HeadwayControl();
                 if( memory.axHeadwayControl < 0.0 && ax_com > memory.axHeadwayControl ){
@@ -457,6 +460,10 @@ void Agent::Control(Road* pRoad)
         }
 
 
+        if( memory.accel > 0.0 && state.V < 3.33 ){
+            memory.accel *= 2.0;
+        }
+
 
         //
         // Lateral Control
@@ -477,13 +484,19 @@ void Agent::Control(Road* pRoad)
             lowSpeedAdjustGain = 2.5 - 1.5 * state.V / 8.0;
         }
 
-        memory.steer = (-1.0) * memory.lateralDeviationFromTargetPathAtPreviewPoint * param.steeringControlGain * lowSpeedAdjustGain;
+        float Y = memory.lateralDeviationFromTargetPathAtPreviewPoint - memory.lateralShiftTarget;
+        memory.steer = (-1.0) * Y * param.steeringControlGain * lowSpeedAdjustGain;
 
         if( memory.steer > 4.2 ){
             memory.steer = 4.2;
             }
         else if( memory.steer < -4.2 ){
             memory.steer = -4.2;
+        }
+
+        // Do not steer at stop
+        if( state.V < 0.1 ){
+            memory.steer = 0.0;
         }
 
         if( memory.overrideSteerByScenario == true ){

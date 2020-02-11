@@ -879,7 +879,7 @@ void GraphicCanvas::paintGL()
 
 void GraphicCanvas::resizeGL(int w, int h)
 {
-    qDebug() << "[resizeGL] w = " << w << " h = " << h;
+//    qDebug() << "[resizeGL] w = " << w << " h = " << h;
 
     projection.setToIdentity();
     projection.perspective( 45.0, float(w) / float(h), 0.1, 100000.0 );

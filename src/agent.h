@@ -81,6 +81,7 @@ struct AgentPerception
     float Ax;
 
     int objectPath;
+    int objectTargetNode;
     float deviationFromObjectPath;
 
     int nearestTargetPath;
@@ -200,6 +201,10 @@ struct AgentMemory
     int previewPointPath;
     float lateralDeviationFromTargetPath;
     float steeringControlGainMultiplier;
+    float lateralShiftTarget;
+    int avoidTarget;
+
+    bool isChaningLane;
 
 
     // hazard and risk valuation
@@ -208,6 +213,7 @@ struct AgentMemory
     float distanceToPrecedingVehicle;
     float speedPrecedingVehicle;
     float axPrecedingVehicle;
+    int precedingObstacle;
 
     float targetLateralShift;
     float targetLateralShiftByScenario;
@@ -244,6 +250,7 @@ struct AgentMemory
     int currentTargetDirectionPedestPath;
     int scenarioPathSelectID;
     float distanceToTurnNodeWPIn;
+    float distanceToNodeWPIn;
 
     QList<int> myNodeList;
     QList<int> myInDirList;

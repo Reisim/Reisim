@@ -87,6 +87,8 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
 
     memory.distanceToTurnNodeWPIn = -1.0;
+    memory.distanceToNodeWPIn     = -1.0;
+
     if( memory.nextTurnNode >= 0 ){
 
         QList<int> destPaths;
@@ -101,20 +103,94 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
         }
 
         float dist = 0.0;
+        bool foundWP = false;
         for(int i=memory.currentTargetPathIndexInList;i>=0;i--){
             int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
             dist += pRoad->paths[pIdx]->pathLength;
             if( pRoad->paths[pIdx]->connectingNode == memory.nextTurnNode ){
                 if( destPaths.indexOf(memory.targetPathList.at(i)) >= 0 ){
+                    dist -= memory.distanceFromStartWPInCurrentPath;
+                    foundWP = true;
                     break;
                 }
             }
         }
-        dist -= memory.distanceFromStartWPInCurrentPath;
-
-        memory.distanceToTurnNodeWPIn = dist;
+        if( foundWP == true ){
+            memory.distanceToTurnNodeWPIn = dist;
+        }
+        else{
+            dist = 0.0;
+            for(int i=memory.currentTargetPathIndexInList+1;i<memory.targetPathList.size();i++){
+                int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
+                if( pRoad->paths[pIdx]->connectingNode == memory.nextTurnNode ){
+                    if( destPaths.indexOf(memory.targetPathList.at(i)) >= 0 ){
+                        dist -= memory.distanceFromStartWPInCurrentPath;
+                        foundWP = true;
+                        break;
+                    }
+                    else{
+                        dist += pRoad->paths[pIdx]->pathLength;
+                    }
+                }
+            }
+            if( foundWP == true ){
+                memory.distanceToTurnNodeWPIn = dist;
+            }
+        }
     }
 
+
+    if( memory.currentTargetNode != memory.nextTurnNode ){
+
+        QList<int> destPaths;
+        int inDir = memory.myInDirList.at( memory.currentTargetNodeIndexInNodeList );
+        int tnIdx = pRoad->nodeId2Index.indexOf( memory.currentTargetNode );
+        for(int i=0;i<pRoad->nodes[tnIdx]->inBoundaryWPs.size();++i){
+            if( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->relatedDirection == inDir ){
+                for(int j=0;j<pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP.size();++j){
+                    destPaths.append( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP[j] );
+                }
+            }
+        }
+        float dist = 0.0;
+        bool foundWP = false;
+        for(int i=memory.currentTargetPathIndexInList;i>=0;i--){
+            int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
+            dist += pRoad->paths[pIdx]->pathLength;
+            if( pRoad->paths[pIdx]->connectingNode == memory.currentTargetNode ){
+                if( destPaths.indexOf(memory.targetPathList.at(i)) >= 0 ){
+                    dist -= memory.distanceFromStartWPInCurrentPath;
+                    foundWP = true;
+                    break;
+                }
+            }
+        }
+        if( foundWP == true ){
+            memory.distanceToNodeWPIn = dist;
+        }
+        else{
+            dist = 0.0;
+            for(int i=memory.currentTargetPathIndexInList+1;i<memory.targetPathList.size();i++){
+                int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
+                if( pRoad->paths[pIdx]->connectingNode == memory.currentTargetNode ){
+                    if( destPaths.indexOf(memory.targetPathList.at(i)) >= 0 ){
+                        dist -= memory.distanceFromStartWPInCurrentPath;
+                        foundWP = true;
+                        break;
+                    }
+                    else{
+                        dist += pRoad->paths[pIdx]->pathLength;
+                    }
+                }
+            }
+            if( foundWP == true ){
+                memory.distanceToNodeWPIn = dist;
+            }
+        }
+    }
+    else{
+        memory.distanceToNodeWPIn = memory.distanceToTurnNodeWPIn;
+    }
 
 
 
@@ -167,6 +243,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
             memory.perceptedObjects[alreadyPercepted]->Ax      = pAgent[i]->state.accel - pAgent[i]->state.brake;
 
             memory.perceptedObjects[alreadyPercepted]->objectPath              = pAgent[i]->memory.currentTargetPath;
+            memory.perceptedObjects[alreadyPercepted]->objectTargetNode        = pAgent[i]->memory.currentTargetNode;
             memory.perceptedObjects[alreadyPercepted]->deviationFromObjectPath = pAgent[i]->memory.lateralDeviationFromTargetPath;
 
             memory.perceptedObjects[alreadyPercepted]->nearestTargetPath              = -1;
@@ -282,6 +359,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
             ap->Ax      = pAgent[i]->state.accel - pAgent[i]->state.brake;
 
             ap->objectPath              = pAgent[i]->memory.currentTargetPath;
+            ap->objectTargetNode        = pAgent[i]->memory.currentTargetNode;
             ap->deviationFromObjectPath = pAgent[i]->memory.lateralDeviationFromTargetPath;
 
             ap->nearestTargetPath              = -1;

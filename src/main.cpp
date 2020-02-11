@@ -146,6 +146,7 @@ int main(int argc, char *argv[])
     QObject::connect( &w, SIGNAL(SetLogFileName(QString)), sys, SLOT(SetLogFileName(QString)) );
     QObject::connect( &w, SIGNAL(SetLogOutputInterval(int)), sys, SLOT(SetLogOutputInterval(int)) );
     QObject::connect( &w, SIGNAL(SetLogOutputFolder(QString)), sys, SLOT(SetLogOutputFolder(QString)) );
+    QObject::connect( &w, SIGNAL(SetSimulationFrequency(int)), sys, SLOT(SetSimulationFrequency(int)) );
     QObject::connect( &w, SIGNAL(SimulationStart()), sys, SLOT(SimulationStart()) );
     QObject::connect( &w, SIGNAL(SimulationStop()), sys, SLOT(SimulationStop()) );
     QObject::connect( &w, SIGNAL(SimulationPause()), sys, SLOT(SimulationPause()) );

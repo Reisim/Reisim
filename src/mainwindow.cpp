@@ -221,7 +221,20 @@ void MainWindow::LoadSettingFile(QString filename)
                 emit SetStopGraphicUpdate(true);
             }
             else{
+                qDebug() << "Simulation Mode";
                 tmpDSmode = false;
+            }
+        }
+        else if( tag.contains("Calculation Time Step") ){
+
+            double ts = QString(divLine[1]).trimmed().toDouble();
+            int hz = (int)(1.0 / ts);
+
+            qDebug() << "Calculation Time Step : " << ts << " , hz = " << hz;
+
+            if( tmpDSmode == false ){
+
+                emit SetSimulationFrequency( hz );
             }
         }
         else if( tag.contains("Start Trigger") ){

@@ -176,6 +176,10 @@ void Agent::SetTargetNodeListByTargetPaths(Road* pRoad)
 
 
     int pIdx = pRoad->pathId2Index.indexOf( memory.currentTargetPath );
+    if( memory.currentTargetNode != pRoad->paths[pIdx]->connectingNode && memory.isChaningLane == false ){
+        vehicle.SetWinker(0);
+    }
+
     memory.currentTargetNode = pRoad->paths[pIdx]->connectingNode;
 
     memory.currentTargetNodeIndexInNodeList = -1;
