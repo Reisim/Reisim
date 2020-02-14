@@ -618,7 +618,13 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                     memory.causeOfStopControl = QString("Yeild 2");
                 }
 
-                if( memory.distanceToStopPoint < 2.5 + vHalfLength && state.V < 2.0 ){
+
+                if( memory.distanceToStopPoint < 2.5 + vHalfLength && state.V >= 2.0 ){
+                    if( memory.safetyConfimed == true ){
+                        memory.doStopControl = false;
+                    }
+                }
+                else if( memory.distanceToStopPoint < 2.5 + vHalfLength && state.V < 2.0 ){
 
                     if( memory.safetyConfimed == true ){
 
