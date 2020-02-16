@@ -20,6 +20,8 @@
 
 #include "networkdrivecheck.h"
 
+#include <windows.h>
+
 extern QMutex *mutex;
 extern QWaitCondition *cond;
 
@@ -133,6 +135,21 @@ void SystemThread::run()
     emit RedrawRequest();
 
 
+#ifdef _PERFORMANCE_CHECK
+    LARGE_INTEGER start, end;
+
+    LARGE_INTEGER freq;
+    QueryPerformanceFrequency(&freq);
+
+    double calTime[10];
+    int calCount[10];
+    for(int i=0;i<10;++i){
+        calTime[i] = 0.0;
+        calCount[i] = 0;
+    }
+#endif
+
+
     stopped = false;
     while( stopped == false ){
 
@@ -143,12 +160,6 @@ void SystemThread::run()
         //
         // if DS mode, synchronize execution
         if( DSMode == true ){
-
-//            mutex_sync->lock();
-//            allowDataGetForDS = 1;
-//            cond_sync->wakeAll();
-//            mutex_sync->unlock();
-
 
             mutex->lock();
             if( g_DSTimingFlag == 0 ){
@@ -187,9 +198,17 @@ void SystemThread::run()
 
         //
         // Generate agents
+#ifdef _PERFORMANCE_CHECK
+        QueryPerformanceCounter(&start);
+#endif
+
         simManage->AppearAgents( agent, maxAgent, road );
 
-
+#ifdef _PERFORMANCE_CHECK
+        QueryPerformanceCounter(&end);
+        calTime[0] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+        calCount[0]++;
+#endif
 
         //
         // Raise Event
@@ -219,17 +238,79 @@ void SystemThread::run()
                 continue;
             }
 
+#ifdef _PERFORMANCE_CHECK
+            QueryPerformanceCounter(&start);
+#endif
+
             agent[i]->Perception( agent, maxAgent, road, trafficSignal );
+
+#ifdef _PERFORMANCE_CHECK
+            QueryPerformanceCounter(&end);
+            calTime[1] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+            calCount[1]++;
+#endif
+
+#ifdef _PERFORMANCE_CHECK
+            QueryPerformanceCounter(&start);
+#endif
 
             agent[i]->Recognition( agent, maxAgent, road );
 
+#ifdef _PERFORMANCE_CHECK
+            QueryPerformanceCounter(&end);
+            calTime[2] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+            calCount[2]++;
+#endif
+
+#ifdef _PERFORMANCE_CHECK
+            QueryPerformanceCounter(&start);
+#endif
+
             agent[i]->HazardIdentification( agent, maxAgent, road );
+
+#ifdef _PERFORMANCE_CHECK
+            QueryPerformanceCounter(&end);
+            calTime[3] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+            calCount[3]++;
+#endif
+
+#ifdef _PERFORMANCE_CHECK
+            QueryPerformanceCounter(&start);
+#endif
 
             agent[i]->RiskEvaluation( agent, maxAgent, road );
 
+#ifdef _PERFORMANCE_CHECK
+            QueryPerformanceCounter(&end);
+            calTime[4] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+            calCount[4]++;
+#endif
+
+#ifdef _PERFORMANCE_CHECK
+            QueryPerformanceCounter(&start);
+#endif
+
             agent[i]->Control( road );
 
+#ifdef _PERFORMANCE_CHECK
+            QueryPerformanceCounter(&end);
+            calTime[5] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+            calCount[5]++;
+#endif
+
+
+#ifdef _PERFORMANCE_CHECK
+            QueryPerformanceCounter(&start);
+#endif
+
             agent[i]->UpdateState();
+
+#ifdef _PERFORMANCE_CHECK
+            QueryPerformanceCounter(&end);
+            calTime[6] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+            calCount[6]++;
+#endif
+
         }
 
 
@@ -282,11 +363,43 @@ void SystemThread::run()
                 continue;
             }
 
+#ifdef _PERFORMANCE_CHECK
+            QueryPerformanceCounter(&start);
+#endif
+
             agent[i]->CheckPathList( road );
+
+#ifdef _PERFORMANCE_CHECK
+            QueryPerformanceCounter(&end);
+            calTime[7] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+            calCount[7]++;
+#endif
         }
 
 
+#ifdef _PERFORMANCE_CHECK
+            QueryPerformanceCounter(&start);
+#endif
+
         simManage->DisappearAgents( agent, maxAgent);
+
+#ifdef _PERFORMANCE_CHECK
+        QueryPerformanceCounter(&end);
+        calTime[8] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+        calCount[8]++;
+#endif
+
+
+
+#ifdef _PERFORMANCE_CHECK
+        if( calCount[0] >= 50 ){
+            for(int i=0;i<9;i++){
+                calTime[i] /= calCount[i];
+                qDebug() << "Mean Time[" << i << "] = " << calTime[i];
+                calCount[i] = 0;
+            }
+        }
+#endif
 
     }
 
@@ -2169,6 +2282,9 @@ void SystemThread::ShowAgentData(float x,float y)
 
     qDebug() << "Recognizied Object Info:";
     for(int i=0;i<agent[nearID]->memory.perceptedObjects.size();++i){
+        if( agent[nearID]->memory.perceptedObjects[i]->isValidData == false ){
+            continue;
+        }
         qDebug() << "  OBJ:" << agent[nearID]->memory.perceptedObjects[i]->objectID
                  << " Label=" << labelStr[ agent[nearID]->memory.perceptedObjects[i]->recognitionLabel ]
                  << " Dist=" << agent[nearID]->memory.perceptedObjects[i]->distanceToObject
@@ -2178,6 +2294,9 @@ void SystemThread::ShowAgentData(float x,float y)
 
     qDebug() << "Recognizied Traffic Signal Info:";
     for(int i=0;i<agent[nearID]->memory.perceptedSignals.size();++i){
+        if(agent[nearID]->memory.perceptedSignals[i]->isValidData == false ){
+            continue;
+        }
         qDebug() << "  OBJ:" << agent[nearID]->memory.perceptedSignals[i]->objectID
                  << " Type=" << agent[nearID]->memory.perceptedSignals[i]->objectType
                  << " Disp = " << agent[nearID]->memory.perceptedSignals[i]->signalDisplay
@@ -2186,6 +2305,9 @@ void SystemThread::ShowAgentData(float x,float y)
 
     qDebug() << "Collision/Merging Point Info:";
     for(int i=0;i<agent[nearID]->memory.perceptedObjects.size();++i){
+        if( agent[nearID]->memory.perceptedObjects[i]->isValidData == false ){
+            continue;
+        }
         qDebug() << "  OBJ:" << agent[nearID]->memory.perceptedObjects[i]->objectID
                  << " hasCP = " << agent[nearID]->memory.perceptedObjects[i]->hasCollisionPoint;
         if( agent[nearID]->memory.perceptedObjects[i]->hasCollisionPoint == true ){

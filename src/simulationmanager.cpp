@@ -466,10 +466,14 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             }
 
 
+            pAgent[objID]->memory.targetPathLength.clear();
             for(int j=0;j<pAgent[objID]->memory.targetPathList.size();++j){
+
+                float len = pRoad->GetPathLength( pAgent[objID]->memory.targetPathList[j] );
+                pAgent[objID]->memory.targetPathLength.append( len );
+
                 if( pAgent[objID]->memory.targetPathList[j] == pAgent[objID]->memory.currentTargetPath ){
                     pAgent[objID]->memory.currentTargetPathIndexInList = j;
-                    break;
                 }
             }
 

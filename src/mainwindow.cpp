@@ -87,6 +87,13 @@ MainWindow::MainWindow(QWidget *parent)
     cbStopGraphicUpdate->setChecked(false);
     connect(cbStopGraphicUpdate,SIGNAL(toggled(bool)),this,SLOT(StopGraphicUpdateChanged(bool)));
 
+    fontScaler = new QSlider( Qt::Horizontal );
+    fontScaler->setMinimum(1);
+    fontScaler->setMaximum(200);
+    fontScaler->setValue(1);
+    fontScaler->setFixedWidth(100);
+    connect(fontScaler,SIGNAL(valueChanged(int)),this,SLOT(SetFontScale(int)));
+
 
     controlLayout->addWidget( startBtn );
     controlLayout->addWidget( pauseBtn );
@@ -99,6 +106,7 @@ MainWindow::MainWindow(QWidget *parent)
     controlLayout->addWidget( cbShowPathID );
     controlLayout->addWidget( cbShowTSID );
     controlLayout->addWidget( cbStopGraphicUpdate );
+    controlLayout->addWidget( fontScaler );
     controlLayout->addStretch();
 
     //--------
@@ -440,3 +448,8 @@ void MainWindow::StopGraphicUpdateChanged(bool v)
     emit SetStopGraphicUpdate(v);
 }
 
+void MainWindow::SetFontScale(int s)
+{
+    canvas->SetFontScale(s);
+    canvas->update();
+}

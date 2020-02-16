@@ -14,6 +14,11 @@
 #include "agent.h"
 #include <QDebug>
 
+#include <windows.h>
+
+
+
+
 void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<TrafficSignal*> trafficSignal )
 {
     strForDebug = QString("");
@@ -32,12 +37,18 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
     }
 
 
+#ifdef _PERFORMANCE_CHECK_AGENT
+    QueryPerformanceCounter(&start);
+#endif
+
     float preview_dist = 3.5;
     float preview_x = state.x + preview_dist * state.cosYaw;
     float preview_y = state.y + preview_dist * state.sinYaw;
 
-    int minIdx = -1;
-    float minDev = 0.0;
+
+    memory.lateralDeviationFromTargetPathAtPreviewPoint = 0.0;
+    memory.previewPointPath = -1;
+
     for(int i=memory.currentTargetPathIndexInList;i>=0;i--){
 
         float tdev,txt,tyt,txd,tyd,ts;
@@ -59,9 +70,6 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
 //        qDebug() << "i=" << i << " chk=" << chk << " dev=" << tdev;
 
-//        if( ID == 13 ){
-//            qDebug() << "path = " << memory.targetPathList[i] << " chk = " << chk << " tdev=" << tdev;
-//        }
         if( chk != memory.targetPathList[i] ){
             continue;
         }
@@ -70,21 +78,24 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
             break;
         }
 
-        if( minIdx < 0 || fabs(minDev) > fabs(tdev) ){
-            minIdx = i;
-            minDev = tdev;
-        }
+        memory.lateralDeviationFromTargetPathAtPreviewPoint = tdev;
+        memory.previewPointPath = memory.targetPathList[i];
+
+        break;
     }
 
-    if( minIdx >= 0 ){
-        memory.lateralDeviationFromTargetPathAtPreviewPoint = minDev;
-        memory.previewPointPath = memory.targetPathList[minIdx];
-    }
-    else{
-        memory.lateralDeviationFromTargetPathAtPreviewPoint = 0.0;
-        memory.previewPointPath = -1;
-    }
 
+#ifdef _PERFORMANCE_CHECK_AGENT
+    QueryPerformanceCounter(&end);
+    calTime[0] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+    calCount[0]++;
+#endif
+
+
+
+#ifdef _PERFORMANCE_CHECK_AGENT
+    QueryPerformanceCounter(&start);
+#endif
 
     memory.distanceToTurnNodeWPIn = -1.0;
     memory.distanceToNodeWPIn     = -1.0;
@@ -140,6 +151,18 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
     }
 
 
+#ifdef _PERFORMANCE_CHECK_AGENT
+    QueryPerformanceCounter(&end);
+    calTime[1] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+    calCount[1]++;
+#endif
+
+
+
+#ifdef _PERFORMANCE_CHECK_AGENT
+    QueryPerformanceCounter(&start);
+#endif
+
     if( memory.currentTargetNode != memory.nextTurnNode ){
 
         QList<int> destPaths;
@@ -193,6 +216,12 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
     }
 
 
+#ifdef _PERFORMANCE_CHECK_AGENT
+    QueryPerformanceCounter(&end);
+    calTime[2] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+    calCount[2]++;
+#endif
+
 
     //
     //  Perception
@@ -202,9 +231,16 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
     // Agents
     for(int j=0;j<memory.perceptedObjects.size();++j){
-        memory.perceptedObjects[j]->inView = false;
-        memory.perceptedObjects[j]->noUpdateCount++;
+        if( memory.perceptedObjects[j]->isValidData == true ){
+            memory.perceptedObjects[j]->inView = false;
+            memory.perceptedObjects[j]->noUpdateCount++;
+        }
     }
+
+
+#ifdef _PERFORMANCE_CHECK_AGENT
+    QueryPerformanceCounter(&start);
+#endif
 
     for(int i=0;i<maxAgent;++i){
 
@@ -216,14 +252,29 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
             continue;
         }
 
+
+        // check the object is in agent view
         float rx = pAgent[i]->state.x - state.x;
+        if( rx < -param.visibleDistance || rx > param.visibleDistance ){
+            continue;
+        }
+
         float ry = pAgent[i]->state.y - state.y;
+        if( ry < -param.visibleDistance || ry > param.visibleDistance ){
+            continue;
+        }
+
         if( rx * rx + ry * ry > VD2 ){
             continue;
         }
 
+
+
         int alreadyPercepted = -1;
         for(int j=0;j<memory.perceptedObjects.size();++j){
+            if( memory.perceptedObjects[j]->isValidData == false ){
+                continue;
+            }
             if( memory.perceptedObjects[j]->objectID == pAgent[i]->ID ){
                 alreadyPercepted = j;
                 break;
@@ -252,20 +303,71 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
             int latMinIndex = -1;
             float latMin = 0.0;
-            for(int k=0;k<memory.targetPathList.size();++k){
+            float txtMin = 0.0;
+            float tytMin = 0.0;
+            float txdMin = 0.0;
+            float tydMin = 0.0;
+            float tsMin  = 0.0;
+
+            float checkDistance = 0.0;
+            for(int k=memory.currentTargetPathIndexInList;k>=0;--k){   // Forward Check
 
                 float tdev,txt,tyt,txd,tyd,ts;
                 int chk = pRoad->GetDeviationFromPath( memory.targetPathList[k],
                                                        pAgent[i]->state.x, pAgent[i]->state.y, pAgent[i]->state.yaw,
                                                        tdev, txt, tyt, txd, tyd, ts,
                                                        false, true );
+
                 if( chk != memory.targetPathList[k] ){
+                    checkDistance += memory.targetPathLength[k];
                     continue;
                 }
 
-                if( latMinIndex < 0 || latMin > fabs(tdev) ){
+                if( latMinIndex < 0 || fabs(latMin) > fabs(tdev) ){
                     latMinIndex = k;
-                    latMin = fabs(tdev);
+                    latMin = tdev;
+                    txtMin = txt;
+                    tytMin = tyt;
+                    txdMin = txd;
+                    tydMin = tyd;
+                    tsMin  = ts;
+                }
+
+                checkDistance += memory.targetPathLength[k];
+                if( checkDistance > param.visibleDistance ){
+                    break;
+                }
+            }
+            if( latMinIndex < 0 ){
+
+                checkDistance = 0.0;
+                for(int k=memory.currentTargetPathIndexInList+1;k<memory.targetPathList.size();++k){   // Backward Check
+
+                    float tdev,txt,tyt,txd,tyd,ts;
+                    int chk = pRoad->GetDeviationFromPath( memory.targetPathList[k],
+                                                           pAgent[i]->state.x, pAgent[i]->state.y, pAgent[i]->state.yaw,
+                                                           tdev, txt, tyt, txd, tyd, ts,
+                                                           false, true );
+
+                    if( chk != memory.targetPathList[k] ){
+                        checkDistance += memory.targetPathLength[k];
+                        continue;
+                    }
+
+                    if( latMinIndex < 0 || fabs(latMin) > fabs(tdev) ){
+                        latMinIndex = k;
+                        latMin = tdev;
+                        txtMin = txt;
+                        tytMin = tyt;
+                        txdMin = txd;
+                        tydMin = tyd;
+                        tsMin  = ts;
+                    }
+
+                    checkDistance += memory.targetPathLength[k];
+                    if( checkDistance > param.visibleDistance ){
+                        break;
+                    }
                 }
             }
 
@@ -274,27 +376,14 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
                 int k = latMinIndex;
 
-//                qDebug() << "Selected: " << memory.targetPathList[k];
-
-                float tdev,txt,tyt,txd,tyd,distFromSWP;
-                int chk = pRoad->GetDeviationFromPath( memory.targetPathList[k],
-                                                       pAgent[i]->state.x, pAgent[i]->state.y, pAgent[i]->state.yaw,
-                                                       tdev, txt, tyt, txd, tyd, distFromSWP,
-                                                       false, true );
-
-//                qDebug() << "ts=" << ts;
-//                qDebug() << "distanceFromStartWPInCurrentPath=" << memory.distanceFromStartWPInCurrentPath;
-//                qDebug() << "k=" << k << " currentTargetPathIndexInList=" << memory.currentTargetPathIndexInList;
-
-
                 AgentPerception *ap = memory.perceptedObjects[alreadyPercepted];
                 ap->nearestTargetPath              = memory.targetPathList[k];
-                ap->deviationFromNearestTargetPath = tdev;
-                ap->xOnTargetPath                  = txt;
-                ap->yOnTargetPath                  = tyt;
+                ap->deviationFromNearestTargetPath = latMin;
+                ap->xOnTargetPath                  = txtMin;
+                ap->yOnTargetPath                  = tytMin;
 
-                ap->innerProductToNearestPathTangent = txd * (pAgent[i]->state.cosYaw) + tyd * (pAgent[i]->state.sinYaw);
-                ap->innerProductToNearestPathNormal  = (-tyd) * ap->cos_yaw + txd * ap->sin_yaw;
+                ap->innerProductToNearestPathTangent = txdMin * (pAgent[i]->state.cosYaw) + tydMin * (pAgent[i]->state.sinYaw);
+                ap->innerProductToNearestPathNormal  = (-tydMin) * ap->cos_yaw + txdMin * ap->sin_yaw;
                 ap->effectiveHalfWidth = fabs(ap->innerProductToNearestPathTangent) * ap->vHalfWidth + fabs(ap->innerProductToNearestPathNormal) * ap->vHalfLength;
 
 
@@ -311,7 +400,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
                     }
                     if( l == k ){
                         foundObj = true;
-                        distObj += distFromSWP;
+                        distObj += tsMin;
                     }
                     if( foundMe == true && foundObj == true ){
                         break;
@@ -339,7 +428,22 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
         }
         else{
 
-            struct AgentPerception *ap = new struct AgentPerception;
+            int sIndex = -1;
+            for(int j=0;j<memory.perceptedObjects.size();++j){
+                if( memory.perceptedObjects[j]->isValidData == false ){
+                    sIndex = j;
+                    break;
+                }
+            }
+            if( sIndex < 0 ){
+                struct AgentPerception *ap = new struct AgentPerception;
+                memory.perceptedObjects.append( ap );
+                sIndex = memory.perceptedObjects.size() - 1;
+            }
+
+            struct AgentPerception *ap = memory.perceptedObjects[sIndex];
+
+            ap->isValidData = true;
 
             ap->inView = true;
             ap->noUpdateCount = 0;
@@ -368,20 +472,73 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
             int latMinIndex = -1;
             float latMin = 0.0;
-            for(int k=0;k<memory.targetPathList.size();++k){
+            float txtMin = 0.0;
+            float tytMin = 0.0;
+            float txdMin = 0.0;
+            float tydMin = 0.0;
+            float tsMin  = 0.0;
+
+            float checkDistance = 0.0;
+            for(int k=memory.currentTargetPathIndexInList;k>=0;--k){
 
                 float tdev,txt,tyt,txd,tyd,ts;
                 int chk = pRoad->GetDeviationFromPath( memory.targetPathList[k],
                                                        pAgent[i]->state.x, pAgent[i]->state.y, pAgent[i]->state.yaw,
                                                        tdev, txt, tyt, txd, tyd, ts,
                                                        false, true );
+
+
                 if( chk != memory.targetPathList[k] ){
+                    checkDistance += memory.targetPathLength[k];
                     continue;
                 }
 
-                if( latMinIndex < 0 || latMin > fabs(tdev) ){
+                if( latMinIndex < 0 || fabs(latMin) > fabs(tdev) ){
                     latMinIndex = k;
-                    latMin = fabs(tdev);
+                    latMin = tdev;
+                    txtMin = txt;
+                    tytMin = tyt;
+                    txdMin = txd;
+                    tydMin = tyd;
+                    tsMin  = ts;
+                }
+
+                checkDistance += memory.targetPathLength[k];
+                if( checkDistance > param.visibleDistance ){
+                    break;
+                }
+            }
+
+            if( latMinIndex < 0 ){
+                checkDistance = 0.0;
+                for(int k=memory.currentTargetPathIndexInList+1;k<memory.targetPathList.size();++k){
+
+                    float tdev,txt,tyt,txd,tyd,ts;
+                    int chk = pRoad->GetDeviationFromPath( memory.targetPathList[k],
+                                                           pAgent[i]->state.x, pAgent[i]->state.y, pAgent[i]->state.yaw,
+                                                           tdev, txt, tyt, txd, tyd, ts,
+                                                           false, true );
+
+
+                    if( chk != memory.targetPathList[k] ){
+                        checkDistance += memory.targetPathLength[k];
+                        continue;
+                    }
+
+                    if( latMinIndex < 0 || fabs(latMin) > fabs(tdev) ){
+                        latMinIndex = k;
+                        latMin = tdev;
+                        txtMin = txt;
+                        tytMin = tyt;
+                        txdMin = txd;
+                        tydMin = tyd;
+                        tsMin  = ts;
+                    }
+
+                    checkDistance += memory.targetPathLength[k];
+                    if( checkDistance > param.visibleDistance ){
+                        break;
+                    }
                 }
             }
 
@@ -389,18 +546,12 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
                 int k = latMinIndex;
 
-                float tdev,txt,tyt,txd,tyd,distFromSWP;
-                int chk = pRoad->GetDeviationFromPath( memory.targetPathList[k],
-                                                       pAgent[i]->state.x, pAgent[i]->state.y, pAgent[i]->state.yaw,
-                                                       tdev, txt, tyt, txd, tyd, distFromSWP,
-                                                       false, true );
-
                 ap->nearestTargetPath              = memory.targetPathList[k];
-                ap->deviationFromNearestTargetPath = tdev;
-                ap->xOnTargetPath                  = txt;
-                ap->yOnTargetPath                  = tyt;
-                ap->innerProductToNearestPathTangent = txd * ap->cos_yaw + tyd * ap->sin_yaw;
-                ap->innerProductToNearestPathNormal  = (-tyd) * ap->cos_yaw + txd * ap->sin_yaw;
+                ap->deviationFromNearestTargetPath = latMin;
+                ap->xOnTargetPath                  = txtMin;
+                ap->yOnTargetPath                  = tytMin;
+                ap->innerProductToNearestPathTangent = txdMin * ap->cos_yaw + tydMin * ap->sin_yaw;
+                ap->innerProductToNearestPathNormal  = (-tydMin) * ap->cos_yaw + txdMin * ap->sin_yaw;
                 ap->effectiveHalfWidth = fabs(ap->innerProductToNearestPathTangent) * ap->vHalfWidth + fabs(ap->innerProductToNearestPathNormal) * ap->vHalfLength;
 
                 float dist = 0.0;
@@ -416,7 +567,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
                     }
                     if( l == k ){
                         foundObj = true;
-                        distObj += distFromSWP;
+                        distObj += tsMin;
                     }
                     if( foundMe == true && foundObj == true ){
                         break;
@@ -434,20 +585,26 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
                 }
                 dist = distObj - distMe;
 
-                ap->distanceToObject               = dist;
+                ap->distanceToObject = dist;
             }
 
 
-            memory.perceptedObjects.append( ap );
         }
     }
 
     for(int j=memory.perceptedObjects.size()-1;j>=0;--j){
         if( memory.perceptedObjects[j]->noUpdateCount > 3 ){
-            delete memory.perceptedObjects[j];
-            memory.perceptedObjects.removeAt(j);
+            memory.perceptedObjects[j]->isValidData = false;
         }
     }
+
+
+#ifdef _PERFORMANCE_CHECK_AGENT
+    QueryPerformanceCounter(&end);
+    calTime[3] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+    calCount[3]++;
+#endif
+
 
 
 
@@ -475,9 +632,17 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
     // Traffic Signals
 
     for(int i=0;i<memory.perceptedSignals.size();++i){
-        memory.perceptedSignals[i]->inView = false;
-        memory.perceptedSignals[i]->noUpdateCount++;
+        if( memory.perceptedSignals[i]->isValidData == true ){
+            memory.perceptedSignals[i]->inView = false;
+            memory.perceptedSignals[i]->noUpdateCount++;
+        }
     }
+
+
+#ifdef _PERFORMANCE_CHECK_AGENT
+    QueryPerformanceCounter(&start);
+#endif
+
 
     if( memory.routeType == AGENT_ROUTE_TYPE::NODE_LIST ){
 
@@ -524,6 +689,9 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
                 int psIdx = -1;
                 for(int k=0;k<memory.perceptedSignals.size();++k){
+                    if( memory.perceptedSignals[k]->isValidData == false ){
+                        continue;
+                    }
                     if( memory.perceptedSignals[k]->objectID == trafficSignal[j]->id ){
                         psIdx = k;
                         break;
@@ -532,8 +700,22 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
                 if( psIdx < 0 ){
 
-                    struct TrafficSignalPerception* ts = new struct TrafficSignalPerception;
+                    for(int k=0;k<memory.perceptedSignals.size();++k){
+                        if( memory.perceptedSignals[k]->isValidData == false ){
+                            psIdx = k;
+                            continue;
+                        }
+                    }
+                    if( psIdx < 0 ){
+                        struct TrafficSignalPerception* ts = new struct TrafficSignalPerception;
+                        memory.perceptedSignals.append( ts );
 
+                        psIdx = memory.perceptedSignals.size() - 1;
+                    }
+
+                    struct TrafficSignalPerception* ts = memory.perceptedSignals[psIdx];
+
+                    ts->isValidData = true;
                     ts->objectID    = trafficSignal[j]->id;
                     ts->objectType  = 'v';
                     ts->x           = trafficSignal[j]->xTS;
@@ -542,9 +724,6 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
                     ts->relatedNode = cNode;
                     ts->SLonPathID  = -1;
 
-                    memory.perceptedSignals.append( ts );
-
-                    psIdx = memory.perceptedSignals.size() - 1;
                 }
 
                 memory.perceptedSignals[psIdx]->signalDisplay = trafficSignal[j]->GetCurrentDisplayInfo();
@@ -626,16 +805,17 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
 
     for(int j=memory.perceptedSignals.size()-1;j>=0;--j){
-
-    }
-
-
-    for(int j=memory.perceptedSignals.size()-1;j>=0;--j){
         if( memory.perceptedSignals[j]->noUpdateCount > 3 ){
-            delete memory.perceptedSignals[j];
-            memory.perceptedSignals.removeAt(j);
+            memory.perceptedSignals[j]->isValidData = false;
         }
     }
+
+
+#ifdef _PERFORMANCE_CHECK_AGENT
+    QueryPerformanceCounter(&end);
+    calTime[4] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+    calCount[4]++;
+#endif
 
 
 //    qDebug() << "Percetion of Traffic Signals:";
@@ -644,6 +824,20 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 //                 << " Color = " << memory.perceptedSignals[i]->signalDisplay
 //                 << " Dist = " << memory.perceptedSignals[i]->distToSL;
 //    }
+
+
+
+#ifdef _PERFORMANCE_CHECK_AGENT
+    if( calCount[0] == 500 ){
+        qDebug() << "Agent : ID = " << ID;
+        for(int i=0;i<5;i++){
+            calTime[i] /= calCount[i];
+            qDebug() << "   Mean Time[" << i << "] = " << calTime[i];
+            calCount[i] = 0;
+        }
+    }
+#endif
+
 }
 
 

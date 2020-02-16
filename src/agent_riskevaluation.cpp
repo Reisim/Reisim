@@ -23,6 +23,11 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
         if( memory.precedingVehicleIDByScenario >= 0 ){
 
             for(int i=0;i<memory.perceptedObjects.size();++i){
+
+                if( memory.perceptedObjects[i]->isValidData == false ){
+                    continue;
+                }
+
                 if( memory.perceptedObjects[i]->objectID == memory.precedingVehicleIDByScenario ){
 
                     memory.doHeadwayDistanceControl   = true;
@@ -96,6 +101,10 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
 
             for(int i=0;i<memory.perceptedSignals.size();++i){
 
+                if( memory.perceptedSignals[i]->isValidData == false ){
+                    continue;
+                }
+
                 strForDebug += QString("Check Signal %1\n").arg( memory.perceptedSignals[i]->objectID );
 
                 bool alreadyPassed = false;
@@ -162,6 +171,10 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                     // Check remaining cross vehicles inside intersection
                     for(int i=0;i<memory.perceptedObjects.size();++i){
 
+                        if( memory.perceptedObjects[i]->isValidData == false ){
+                            continue;
+                        }
+
                         if( memory.currentTargetNode != memory.perceptedObjects[i]->objectTargetNode ){
                             continue;
                         }
@@ -205,6 +218,11 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
             int tmpAvoidTarget = memory.avoidTarget;
             memory.avoidTarget = -1;
             for(int i=0;i<memory.perceptedObjects.size();++i){
+
+                if( memory.perceptedObjects[i]->isValidData == false ){
+                    continue;
+                }
+
                 if( memory.perceptedObjects[i]->objectID == tmpAvoidTarget ){
                     if( memory.perceptedObjects[i]->distanceToObject > 0.0 ){
                         memory.avoidTarget = tmpAvoidTarget;
@@ -218,6 +236,11 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
         float vLenH = 0.0;
 
         for(int i=0;i<memory.perceptedObjects.size();++i){
+
+            if( memory.perceptedObjects[i]->isValidData == false ){
+                continue;
+            }
+
             if( memory.perceptedObjects[i]->recognitionLabel == PRECEDING ){
                 if( memory.precedingVehicleID < 0 ||  memory.distanceToPrecedingVehicle > memory.perceptedObjects[i]->distanceToObject ){
                     memory.precedingVehicleID = memory.perceptedObjects[i]->objectID;
@@ -381,6 +404,10 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                 else{
                     for(int i=0;i<memory.perceptedObjects.size();++i){
 
+                        if( memory.perceptedObjects[i]->isValidData == false ){
+                            continue;
+                        }
+
                         if( memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_STRAIGHT &&
                                 memory.perceptedObjects[i]->hasCollisionPoint == true ){
 
@@ -433,11 +460,17 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                             bool noNeedToEval = false;
                             int objID = memory.perceptedObjects[i]->objectID;
                             for(int j=0;j<pAgent[objID]->memory.perceptedObjects.size();++j){
+                                if( pAgent[objID]->memory.perceptedObjects[j]->isValidData == false ){
+                                    continue;
+                                }
                                 if( pAgent[objID]->memory.perceptedObjects[j]->recognitionLabel == AGENT_RECOGNITION_LABEL::PRECEDING ){
                                     int pID = pAgent[objID]->memory.perceptedObjects[j]->objectID;
                                     for(int k=0;k<memory.perceptedObjects.size();++k){
                                         if( i == k ){
                                             break;
+                                        }
+                                        if( memory.perceptedObjects[k]->isValidData == false ){
+                                            continue;
                                         }
                                         if( memory.perceptedObjects[k]->objectID == pID && memory.perceptedObjects[k]->V < 0.1 ){
                                             if( memory.perceptedObjects[k]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_STRAIGHT ||
@@ -693,11 +726,11 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                         if( pRoad->LeftOrRight == 0 && memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING && checkKind == -1 ){
 
                             if( memory.leftCrossIsClear == false ){
-                                checkKind = 2;
+                                checkKind = 1;
                                 memory.leftCrossCheckCount = 0;
                             }
                             else if( memory.leftCrossIsClear == true ){
-                                checkKind = 2;
+                                checkKind = 1;
                                 memory.leftCrossCheckCount++;
                                 if( memory.leftCrossCheckCount * calInterval > param.safetyConfirmTime ){
                                     checkKind = -1;
@@ -731,6 +764,10 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                             memory.leftCrossIsClear = true;
 
                             for(int i=0;i<memory.perceptedObjects.size();++i){
+
+                                if( memory.perceptedObjects[i]->isValidData == false ){
+                                    continue;
+                                }
 
                                 if( memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::LEFT_CROSSING_STRAIGHT &&
                                         memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::LEFT_CROSSING_LEFT &&
@@ -787,6 +824,10 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                             memory.rightCrossIsClear = true;
 
                             for(int i=0;i<memory.perceptedObjects.size();++i){
+
+                                if( memory.perceptedObjects[i]->isValidData == false ){
+                                    continue;
+                                }
 
                                 if( memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_STRAIGHT &&
                                         memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_LEFT &&

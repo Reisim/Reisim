@@ -122,6 +122,7 @@ public:
     void SetVIDFlag(bool v){ showVID = v; }
     void SetPathIDFlag(bool v){ showPathID = v; }
     void SetTSIDFlag(bool v){ showTSID = v; }
+    void SetFontScale(int s){ fontScale = s; }
 
     int Get3DPhysCoordFromPickPoint(int xp,int yp, float &x,float &y);
 
@@ -203,6 +204,8 @@ private:
     bool showVID;
     bool showPathID;
     bool showTSID;
+
+    int fontScale;
 };
 
 #endif // GRAPHICCANVAS_H

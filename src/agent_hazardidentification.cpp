@@ -21,6 +21,10 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
         // Collision or Mergining Point Check
         for(int i=0;i<memory.perceptedObjects.size();++i){
 
+            if( memory.perceptedObjects[i]->isValidData == false ){
+                continue;
+            }
+
             if( memory.perceptedObjects[i]->recognitionLabel < AGENT_RECOGNITION_LABEL::ONCOMING_STRAIGHT ){
                 memory.perceptedObjects[i]->hasCollisionPoint = false;
                 continue;

@@ -67,7 +67,7 @@ Agent::Agent()
     param.minimumPerceptibleDecelerationOfPreceding = 0.3 * 9.81;
     param.minimumHeadwayDistanceAtStop = 2.5;
     param.minimumDistanceToStopLine = 0.0;
-    param.visibleDistance = 400.0;
+    param.visibleDistance = 200.0;
     param.startRelay = 1.0;
     param.crossTimeSafetyMargin = 4.0;
     param.crossWaitPositionSafeyMargin = 7.5;
@@ -79,6 +79,14 @@ Agent::Agent()
     isBehaviorEmbeded  = false;
     justWarped = false;
     notAllowedAppear   = false;
+
+#ifdef _PERFORMANCE_CHECK_AGENT
+    QueryPerformanceFrequency(&freq);
+    for(int i=0;i<10;++i){
+        calTime[i] = 0.0;
+        calCount[i] = 0;
+    }
+#endif
 }
 
 
@@ -109,19 +117,19 @@ void Agent::InitializeMemory()
     memory.currentTargetPath = -1;
     memory.currentTargetPathIndexInList = -1;
 
-    if( memory.perceptedObjects.size() > 0 ){
-        for(int i=0;i<memory.perceptedObjects.size();++i){
-            delete memory.perceptedObjects[i];
-        }
-        memory.perceptedObjects.clear();
-    }
+//    if( memory.perceptedObjects.size() > 0 ){
+//        for(int i=0;i<memory.perceptedObjects.size();++i){
+//            delete memory.perceptedObjects[i];
+//        }
+//        memory.perceptedObjects.clear();
+//    }
 
-    if( memory.perceptedSignals.size() > 0 ){
-        for(int i=0;i<memory.perceptedSignals.size();++i){
-            delete memory.perceptedSignals[i];
-        }
-        memory.perceptedSignals.clear();
-    }
+//    if( memory.perceptedSignals.size() > 0 ){
+//        for(int i=0;i<memory.perceptedSignals.size();++i){
+//            delete memory.perceptedSignals[i];
+//        }
+//        memory.perceptedSignals.clear();
+//    }
 
     memory.doHeadwayDistanceControl = false;
     memory.axHeadwayControl = 0.0;

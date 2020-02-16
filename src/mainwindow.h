@@ -83,6 +83,7 @@ public slots:
     void ShowTSIDChanged(bool);
     void ExitProgram();
     void StopGraphicUpdateChanged(bool);
+    void SetFontScale(int);
 
 
 private:
@@ -107,6 +108,7 @@ private:
     QCheckBox *cbShowPathID;
     QCheckBox *cbShowTSID;
     QCheckBox *cbStopGraphicUpdate;
+    QSlider *fontScaler;
 
     ConfigWindow *confWin;
 };

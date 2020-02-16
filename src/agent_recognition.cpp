@@ -21,6 +21,10 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
 
         for(int i=0;i<memory.perceptedObjects.size();++i){
 
+            if( memory.perceptedObjects[i]->isValidData == false ){
+                continue;
+            }
+
             memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::UNDEFINED_RECOGNITION_LABEL;
 
             if( memory.perceptedObjects[i]->objectType >= 100 ){

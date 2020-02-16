@@ -73,6 +73,8 @@ GraphicCanvas::GraphicCanvas(QOpenGLWidget *parent) : QOpenGLWidget(parent)
     showPathID = false;
     showTSID = false;
 
+    fontScale = 1;
+
     currentWidth = 800;
     currentHeight = 600;
 }
@@ -840,6 +842,8 @@ void GraphicCanvas::paintGL()
             QQuaternion letterQuat = cameraQuat.conjugated();
             model2World.setRotation( letterQuat );
 
+            model2World.setScale( QVector3D(fontScale * 0.1, fontScale* 0.1, fontScale* 0.1) );
+
             program->setUniformValue( u_modelToWorld,  w2c * model2World.getWorldMatrix() );
 
             glActiveTexture( GL_TEXTURE0 );
@@ -874,6 +878,8 @@ void GraphicCanvas::paintGL()
 
         VAOText.release();
     }
+
+    model2World.setScale( QVector3D(1.0, 1.0, 1.0) );
 }
 
 
@@ -920,8 +926,8 @@ void GraphicCanvas::mouseMoveEvent(QMouseEvent *e)
         float a = diff.length();
         if( a > 0.0 ){
 
-            cameraYaw += diff.x();
-            cameraPitch += diff.y();
+            cameraYaw += diff.x() * 0.5;
+            cameraPitch += diff.y() * 0.5;
 
             cameraQuat = QQuaternion(cos(cameraPitch*0.5), sin(cameraPitch*0.5) , 0.0 , 0.0 ) * QQuaternion(cos(cameraYaw*0.5), 0.0 , 0.0 , sin(cameraYaw*0.5));
         }
@@ -949,10 +955,10 @@ void GraphicCanvas::wheelEvent(QWheelEvent *e)
 {
     float s = 1.0;
     if( e->modifiers() & Qt::ControlModifier ){
-        s *= 5.0;
+        s *= 2.2;
     }
     if( e->delta() > 0.0 ){
-        if( Z_eye < -12.0 ){
+        if( Z_eye < -0.2 ){
             Z_eye /= (1.05 * s);
         }
     }

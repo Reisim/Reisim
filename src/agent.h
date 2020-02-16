@@ -23,6 +23,10 @@
 #include "road.h"
 #include "trafficsignal.h"
 
+#ifdef _PERFORMANCE_CHECK_AGENT
+#include <windows.h>
+#endif
+
 
 enum AGENT_CONTROL_MODE
 {
@@ -108,6 +112,8 @@ struct AgentPerception
 
     bool inView;
     int noUpdateCount;
+
+    bool isValidData;
 };
 
 struct TrafficSignalPerception
@@ -130,6 +136,8 @@ struct TrafficSignalPerception
 
     bool inView;
     int noUpdateCount;
+
+    bool isValidData;
 };
 
 struct AgentMemory
@@ -243,6 +251,7 @@ struct AgentMemory
 
     // guidance
     QVector<int> targetPathList;
+    QList<float> targetPathLength;
     QVector<int> targetPathListBackup;
     int currentTargetPath;
     int currentTargetPathIndexInList;
@@ -386,6 +395,14 @@ public:
 
     bool justWarped;
     bool skipSetControlInfo;
+
+
+#ifdef _PERFORMANCE_CHECK_AGENT
+    LARGE_INTEGER start, end;
+    LARGE_INTEGER freq;
+    double calTime[10];
+    int calCount[10];
+#endif
 };
 
 #endif // AGENT_H

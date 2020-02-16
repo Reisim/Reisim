@@ -742,7 +742,7 @@ void Road::CalculatePathShape(struct Path *p)
     if( L < 1.0 ){
         L = 1.0;
     }
-    float D = 1.0 + 0.6 * ( L - 1.0);
+    float D = 1.0 + 0.6 * ( L - 1.0 );
 
     float px[4],py[4];
     px[0] = -(eCt) * D;
@@ -1190,7 +1190,7 @@ void Road::CheckSideBoundaryWPs(struct Node *n)
         int wpIdx = wpId2Index.indexOf( wpId );
         wps[wpIdx]->isNodeOutWP = true;
         wps[wpIdx]->relatedNode = n->id;
-        wps[wpIdx]->relatedNodeLeg = n->inBoundaryWPs[i]->relatedDirection;
+        wps[wpIdx]->relatedNodeLeg = n->outBoundaryWPs[i]->relatedDirection;
     }
 }
 

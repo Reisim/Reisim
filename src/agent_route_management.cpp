@@ -67,7 +67,7 @@ void Agent::CheckPathList(Road* pRoad)
                                                                  memory.targetPathList );
                 if( currentPath < 0 ){
                     qDebug() << "[CheckPathList:Warning]----------------------------------";
-                    qDebug() << " Agent ID = " << ID << " cannot determin nearest path from assigned list.";
+                    qDebug() << " Agent ID = " << ID << " cannot determine nearest path from assigned list.";
                     qDebug() << "   currentTargetPath = " << memory.currentTargetPath;
                     qDebug() << "   Assigned Path List : ";
                     for(int j=0;j<memory.targetPathList.size();++j){
