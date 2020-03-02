@@ -14,7 +14,7 @@
 #include "road.h"
 #include <QDebug>
 
-int Road::GetNearestPathFromList(float xp, float yp, float yawAngle, float &dist, QVector<int> &pathList)
+int Road::GetNearestPathFromList(float xp, float yp, float yawAngle, float &dist, QList<int> &pathList)
 {
     int ret = -1;
 
@@ -126,6 +126,27 @@ int Road::GetDeviationFromPath(int pathID,
     int ret = -1;
 
     distFromStartWP = 0.0;
+
+
+    // Check
+    {
+        float rx1 = xp - paths[index]->pos.first()->x();
+        float ry1 = yp - paths[index]->pos.first()->y();
+        float dx1 = paths[index]->derivative.first()->x();
+        float dy1 = paths[index]->derivative.first()->y();
+        float ip1 = rx1 * dx1 + ry1 * dy1;
+
+        float rx2 = xp - paths[index]->pos.last()->x();
+        float ry2 = yp - paths[index]->pos.last()->y();
+        float dx2 = paths[index]->derivative.last()->x();
+        float dy2 = paths[index]->derivative.last()->y();
+        float ip2 = rx2 * dx2 + ry2 * dy2;
+
+        if( ip1 * ip2 > 0.0 ){
+            return ret;
+        }
+    }
+
 
     for(int i=0;i<paths[index]->pos.size()-1;++i){
 
@@ -266,32 +287,7 @@ int Road::GetDeviationFromPath(int pathID,
 }
 
 
-int Road::GetDirectionByPedestPathLink(int pedestPathID, int connectedPedestPathID)
-{
-    int ret = 0;
-    int idx = pedestPathID2Index.indexOf( pedestPathID );
-    if( idx < 0 ){
-        return ret;
-    }
-    for(int i=0;i<pedestPaths[idx]->connectedPedestPath1.size();++i){
-        if( pedestPaths[idx]->connectedPedestPath1[i] == connectedPedestPathID ){
-            ret = 1;
-            break;
-        }
-    }
-    if( ret == 0 ){
-        for(int i=0;i<pedestPaths[idx]->connectedPedestPath2.size();++i){
-            if( pedestPaths[idx]->connectedPedestPath2[i] == connectedPedestPathID ){
-                ret = 2;
-                break;
-            }
-        }
-    }
-    return ret;
-}
-
-
-int Road::GetNearestPedestPath(float xp,float yp,float &dist,int &overEdge,int objectID)
+int Road::GetNearestPedestPathSectionIndex(float xp,float yp,float &dist,int &overEdge,int objectID)
 {
     int ret = -1;
     float nearestDist = 0.0;
@@ -301,23 +297,30 @@ int Road::GetNearestPedestPath(float xp,float yp,float &dist,int &overEdge,int o
             continue;
         }
 
-        float dx = xp - pedestPaths[i]->x1;
-        float dy = yp - pedestPaths[i]->y1;
+        for(int j=0;j<pedestPaths[i]->shape.size()-1;++j){
 
-        float ip = dx * pedestPaths[i]->eX + dy * pedestPaths[i]->eY;
-        float cp = dy * pedestPaths[i]->eX - dx * pedestPaths[i]->eY;
+            float dx = xp - pedestPaths[i]->shape[j]->pos.x();
+            float dy = yp - pedestPaths[i]->shape[j]->pos.y();
 
-        if( ret < 0 || fabs(nearestDist) > fabs(cp) ){
-            ret = pedestPaths[i]->id;
-            nearestDist = cp;
-            if( ip > pedestPaths[i]->Length ){
-                overEdge = 2;
-            }
-            else if( ip < 0.0 ){
-                overEdge = 1;
-            }
-            else{
-                overEdge = 0;
+            float ct = pedestPaths[i]->shape[j]->cosA;
+            float st = pedestPaths[i]->shape[j]->sinA;
+
+            float ip = dx * ct + dy * st;
+            float cp = dy * ct - dx * st;
+
+            if( ret < 0 || fabs(nearestDist) > fabs(cp) ){
+                ret = j;
+                nearestDist = cp;
+
+                if( j == 0 && ip < 0.0 ){
+                    overEdge = 0;
+                }
+                else if( j == pedestPaths[i]->shape.size() - 2 && ip > pedestPaths[i]->shape[j]->distanceToNextPos ){
+                    overEdge = 2;
+                }
+                else{
+                    overEdge = 1;
+                }
             }
         }
     }
@@ -328,48 +331,79 @@ int Road::GetNearestPedestPath(float xp,float yp,float &dist,int &overEdge,int o
 }
 
 
-int Road::GetDeviationFromPedestPath(int pedestPathID,float xp,float yp,
-                                     float &dev,float &z,
-                                     float &xdir1,float &ydir1,
-                                     float &xdir2,float &ydir2)
+int Road::GetDeviationFromPedestPathAllSection(int pedestPathID, float xp, float yp, float &dev)
+{
+    int ret = -1;
+    float nearestDist = 0.0;
+
+    int plIdx = pedestPathID2Index.indexOf( pedestPathID );
+    if( plIdx < 0 ){
+        return ret;
+    }
+
+
+    for(int j=0;j<pedestPaths[plIdx]->shape.size()-1;++j){
+
+        float dx = xp - pedestPaths[plIdx]->shape[j]->pos.x();
+        float dy = yp - pedestPaths[plIdx]->shape[j]->pos.y();
+
+        float ct = pedestPaths[plIdx]->shape[j]->cosA;
+        float st = pedestPaths[plIdx]->shape[j]->sinA;
+
+        float ip = dx * ct + dy * st;
+        if( ip < -0.5 || ip > pedestPaths[plIdx]->shape[j]->distanceToNextPos + 0.5 ){
+            continue;
+        }
+
+        float cp = dy * ct - dx * st;
+        if( ret < 0 || fabs(nearestDist) > fabs(cp) ){
+            ret = j;
+            nearestDist = cp;
+        }
+
+    }
+
+    dev = nearestDist;
+    return ret;
+}
+
+
+int Road::GetDeviationFromPedestPath(int pedestPathID,int sectIndex,float xp,float yp,
+                                     float &dev,float &z,float &xdir,float &ydir,float lateralShift)
 {
     int idx = pedestPathID2Index.indexOf( pedestPathID );
     if( idx < 0 ){
         return -1;
     }
 
-    float dx = xp - pedestPaths[idx]->x1;
-    float dy = yp - pedestPaths[idx]->y1;
-
-    float ip = dx * pedestPaths[idx]->eX + dy * pedestPaths[idx]->eY;
-    float cp = dy * pedestPaths[idx]->eX - dx * pedestPaths[idx]->eY;
-
-    dev = cp;
-    z = pedestPaths[idx]->z1 + ip / pedestPaths[idx]->Length * ( pedestPaths[idx]->z2 - pedestPaths[idx]->z1 );
-
-    xdir1 = pedestPaths[idx]->x1 - xp;
-    ydir1 = pedestPaths[idx]->y1 - yp;
-    float L = sqrt( xdir1 * xdir1 + ydir1 * ydir1 );
-    if( L > 1.0 ){
-        xdir1 /= L;
-        ydir1 /= L;
+    if( sectIndex < 0 || sectIndex >= pedestPaths[idx]->shape.size() - 1 ){
+        return -1;
     }
 
-    xdir2 = pedestPaths[idx]->x2 - xp;
-    ydir2 = pedestPaths[idx]->y2 - yp;
-    L = sqrt( xdir2 * xdir2 + ydir2 * ydir2 );
+    float dx = xp - pedestPaths[idx]->shape[sectIndex]->pos.x();
+    float dy = yp - pedestPaths[idx]->shape[sectIndex]->pos.y();
+
+    float ip = dx * (pedestPaths[idx]->shape[sectIndex]->cosA) + dy * (pedestPaths[idx]->shape[sectIndex]->sinA);
+    float cp = dy * (pedestPaths[idx]->shape[sectIndex]->cosA) - dx * (pedestPaths[idx]->shape[sectIndex]->sinA);
+
+    dev = cp;
+    z = pedestPaths[idx]->shape[sectIndex]->pos.z() + ip / (pedestPaths[idx]->shape[sectIndex]->distanceToNextPos) * ( pedestPaths[idx]->shape[sectIndex+1]->pos.z() - pedestPaths[idx]->shape[sectIndex]->pos.z() );
+
+    xdir = pedestPaths[idx]->shape[sectIndex+1]->pos.x() - lateralShift * pedestPaths[idx]->shape[sectIndex]->sinA - xp;
+    ydir = pedestPaths[idx]->shape[sectIndex+1]->pos.y() + lateralShift * pedestPaths[idx]->shape[sectIndex]->cosA - yp;
+    float L = sqrt( xdir * xdir + ydir * ydir );
     if( L > 1.0 ){
-        xdir2 /= L;
-        ydir2 /= L;
+        xdir /= L;
+        ydir /= L;
     }
 
     return 0;
 }
 
 
-QVector<int> Road::GetPathList(int routeIndex, int currentPath, bool &needLC, int &nodeUntil, RandomGenerator *rndGen)
+QList<int> Road::GetPathList(int routeIndex, int currentPath, bool &needLC, int &nodeUntil, RandomGenerator *rndGen)
 {
-    QVector<int> ret;
+    QList<int> ret;
 
     needLC = false;
     nodeUntil = -1;

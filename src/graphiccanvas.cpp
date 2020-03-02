@@ -133,167 +133,8 @@ void GraphicCanvas::initializeGL()
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    bool useTemporalModel = false;
-
-    QString pathTo = QApplication::applicationDirPath();
-
-    QFile file( CheckNetworkDrive( pathTo + QString("/vehicle_data.txt") ) );
-    if( !file.open(QIODevice::ReadOnly | QIODevice::Text) ){
-        qDebug() << "!! Can not open vehicle_data.txt.";
-        qDebug() << "   Only one vehicle type is used.";
-
-        useTemporalModel = true;
-    }
-    else{
-
-        QTextStream in(&file);
-        QString line;
-
-        line = in.readLine();
-        line = in.readLine();
-        if( line.contains("Vehicle Data for Re:sim") == false ){
-            useTemporalModel = true;
-        }
-        line = in.readLine();
-        if( useTemporalModel == false ){
-
-            struct VehicleModel *v = NULL;
-
-            while( in.atEnd() == false ){
-
-                line = in.readLine();
-                if( line.startsWith("#") || line.contains(";") == false ){
-                    continue;
-                }
-
-                QStringList divLine = line.split(";");
-                QString tag = QString(divLine[0]).trimmed();
-                if( tag == QString("Model ID") ){
-                    v = new struct VehicleModel;
-                    v->modelID = QString( divLine[1]).trimmed().toInt();
-                }
-                else if( tag == QString("Type") ){
-                    if( v ){
-                        v->Type = QString( divLine[1]).trimmed().toInt();
-                    }
-                }
-                else if( tag == QString("Length") ){
-                    if( v ){
-                        v->length = QString( divLine[1]).trimmed().toFloat();
-                    }
-                }
-                else if( tag == QString("Width") ){
-                    if( v ){
-                        v->width = QString( divLine[1]).trimmed().toFloat();
-                    }
-                }
-                else if( tag == QString("Height") ){
-                    if( v ){
-                        v->height = QString( divLine[1]).trimmed().toFloat();
-                    }
-                }
-                else if( tag == QString("WheelBase") ){
-                    if( v ){
-                        v->wheelBase = QString( divLine[1]).trimmed().toFloat();
-                    }
-                }
-                else if( tag == QString("Front-Rear Weight Ratio") ){
-                    if( v ){
-                        v->FRWeightRatio = QString( divLine[1]).trimmed().toFloat();
-                    }
-                }
-                else if( tag == QString("Distance From Rear Axle to Rear End") ){
-                    if( v ){
-                        v->distRA2RE = QString( divLine[1]).trimmed().toFloat();
-                    }
-                }
-                else if( tag == QString("Polygon Model") ){
-                    if( v ){
-                        v->polygonFileName = QString( divLine[1] ).trimmed();
-
-                        v->lf = 1.0/(1.0+v->FRWeightRatio)*v->wheelBase;
-                        v->lr = v->wheelBase - v->lf;
-                        v->distCG2RE = v->lf + v->distRA2RE;
-                        v->distCG2FE = v->length - v->distCG2RE;
-
-                        vehicleModels.append( v );
-
-
-                        if( v->polygonFileName.isNull() || v->polygonFileName.isEmpty() ){
-                            //
-                            //  Use simple polygon expression for vehicle
-                            //
-
-                            v->objFileDataSet = false;
-
-                            int idx = vehicleModels.size() - 1;
-                            SetVehiclePolygon(idx,
-                                              v->distCG2FE,
-                                              v->distCG2RE,
-                                              v->width,
-                                              v->height);
-                        }
-                        else{
-                            //
-                            //  If polygonFileName is not Null, Load OBJECT model
-                            //
-
-                            v->objFileDataSet = true;
-
-
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if( useTemporalModel ){
-
-        struct VehicleModel* v = new struct VehicleModel;
-
-        v->modelID   = 0;
-        v->Type      = 0;
-        v->length    = 4.0;
-        v->width     = 1.695;
-        v->height    = 1.55;
-        v->wheelBase = 2.53;
-        v->FRWeightRatio = 1.778;
-        v->distRA2RE     = 0.68;
-        v->polygonFileName = QString();
-
-        v->lf = 1.0/(1.0+v->FRWeightRatio)*v->wheelBase;
-        v->lr = v->wheelBase - v->lf;
-        v->distCG2RE = v->lf + v->distRA2RE;
-        v->distCG2FE = v->length - v->distCG2RE;
-
-        vehicleModels.append( v );
-
-        int idx = vehicleModels.size() - 1;
-        SetVehiclePolygon(idx,
-                          v->distCG2FE,
-                          v->distCG2RE,
-                          v->width,
-                          v->height);
-
-
-    }
-
-
-    //
-    //  Polygons for Traffic Participants
-    //
-    personModels.append( new struct PersonModel );  // for pedestrian  [index = 0]
-    personModels.append( new struct PersonModel );  // for bicycle     [index = 1]
-
-    SetPersonPolygon( 0, 1.0, 1.7, 0.5 );
-    SetPersonPolygon( 1, 1.0, 1.7, 2.0 );
-
-
 
     // Font
-    makeCurrent();
-
     Characters.clear();
 
     FT_Library ft;
@@ -303,7 +144,7 @@ void GraphicCanvas::initializeGL()
 
     FT_Face face;
 
-    pathTo = QApplication::applicationDirPath();
+    QString pathTo = QApplication::applicationDirPath();
     pathTo += QString("/togoshi-mono.TTF");
 
     if (FT_New_Face(ft, pathTo.toLocal8Bit().data() , 0, &face)){
@@ -501,10 +342,12 @@ void GraphicCanvas::paintGL()
         nAppearAgent++;
 
         if( agent[i]->agentKind < 100 ){
-            int vehicleShapeID = agent[i]->vehicle.GetVehicleModelID();
-            int brakeLame   = agent[i]->vehicle.GetBrakeLampState();
-            int winkerState = agent[i]->vehicle.GetWinkerIsBlink();
 
+            int vehicleShapeID = agent[i]->vehicle.GetVehicleModelID();
+            int brakeLame      = agent[i]->vehicle.GetBrakeLampState();
+            int winkerState    = agent[i]->vehicle.GetWinkerIsBlink();
+
+//
 
             //
             //
@@ -518,6 +361,8 @@ void GraphicCanvas::paintGL()
             }
             else{
 
+//                qDebug() << "agent[" << i << "] vehicleShapeID = " << vehicleShapeID;
+
                 vehicleModels[vehicleShapeID]->simplePoly.vehiclePolygonArray.bind();
 
                 model2World.setTranslation(QVector3D( agent[i]->state.x ,
@@ -526,6 +371,8 @@ void GraphicCanvas::paintGL()
 
                 float half_psi = agent[i]->state.yaw * 0.5;
                 model2World.setRotation( QQuaternion( cos(half_psi), 0.0, 0.0, sin(half_psi) ) );
+
+                model2World.setScale( QVector3D( 1.0, 1.0, 1.0 ) );
 
                 program->setUniformValue( u_modelToWorld,  w2c * model2World.getWorldMatrix() );
 
@@ -587,9 +434,11 @@ void GraphicCanvas::paintGL()
         }
         else if( agent[i]->agentKind >= 100 ){
 
+            int personShapeID = agent[i]->vehicle.GetVehicleModelID();
+
             program->setUniformValue( u_worldToView, projection );
 
-            personModels[0]->personPolygonArray.bind();
+            personModels[personShapeID]->personPolygonArray.bind();
 
             model2World.setTranslation(QVector3D( agent[i]->state.x ,
                                                   agent[i]->state.y ,
@@ -613,15 +462,15 @@ void GraphicCanvas::paintGL()
             int offsetPos = program->uniformLocation("offsetPos");
             program->setUniformValue( offsetPos, QVector3D(0.0,0.0,0.0) );
 
-            glDrawArrays(GL_QUADS, 0, personModels[0]->personPolygon.size() );
+            glDrawArrays(GL_QUADS, 0, personModels[personShapeID]->personPolygon.size() );
 
             program->setUniformValue( useTex, 10 );
             program->setUniformValue( colorPos, QVector4D(1.0, 1.0, 1.0, 1.0) );
 
             glLineWidth(1);
-            glDrawArrays(GL_LINE_STRIP, 0, personModels[0]->personPolygon.size() );
+            glDrawArrays(GL_LINE_STRIP, 0, personModels[personShapeID]->personPolygon.size() );
 
-            personModels[0]->personPolygonArray.release();
+            personModels[personShapeID]->personPolygonArray.release();
         }
 
     }
@@ -1082,6 +931,8 @@ void GraphicCanvas::SetVehiclePolygon(int index,float lf,float lr,float width,fl
     vehicleModels[index]->simplePoly.isAllSet = true;
 
     doneCurrent();
+
+    qDebug() << "[SetVehiclePolygon] index=" << index << " lf=" << lf << " lr=" << lr << " w=" << w << " h=" << height;
 }
 
 
@@ -1177,22 +1028,6 @@ void GraphicCanvas::SetPersonPolygon(int index,float width,float height,float de
     personModels[index]->personPolygonArray.release();
 
     doneCurrent();
-}
-
-
-void GraphicCanvas::CopyVehicleShapeParameter()
-{
-    for(int i=0;i<vehicleModels.size();++i){
-
-        emit SetVehicleParameter(vehicleModels[i]->modelID,
-                                 vehicleModels[i]->Type,
-                                 vehicleModels[i]->length,
-                                 vehicleModels[i]->width,
-                                 vehicleModels[i]->height,
-                                 vehicleModels[i]->wheelBase,
-                                 vehicleModels[i]->distRA2RE,
-                                 vehicleModels[i]->FRWeightRatio);
-    }
 }
 
 
@@ -1594,11 +1429,15 @@ void GraphicCanvas::SetRoadData()
     for(int i=0;i<road->paths.size();++i){
         nPoly += road->paths[i]->numDivPath + 1;
     }
+    for(int i=0;i<road->pedestPaths.size();++i){
+        nPoly += road->pedestPaths[i]->shape.size() - 1;
+    }
     int nVertex = nPoly * 4;
     qDebug() << " nVertex = " << nVertex;
 
-    float xmin = -50.0,xmax = 50.0;
-    float ymin = -50.0,ymax = 50.0;
+
+    float xmin = -50.0, xmax = 50.0;
+    float ymin = -50.0, ymax = 50.0;
 
     bool setEyePos = true;
 
@@ -1729,6 +1568,79 @@ void GraphicCanvas::SetRoadData()
             }
         }
 
+        for(int i=0;i<road->pedestPaths.size();++i){
+
+            for(int j=0;j<road->pedestPaths[i]->shape.size()-1;++j){
+
+                float half_width = road->pedestPaths[i]->shape[j]->width * 0.5;
+                float xs = road->pedestPaths[i]->shape[j]->pos.x();
+                float ys = road->pedestPaths[i]->shape[j]->pos.y();
+                float zs = road->pedestPaths[i]->shape[j]->pos.z() + 0.1;
+                float cs = road->pedestPaths[i]->shape[j]->cosA;
+                float ss = road->pedestPaths[i]->shape[j]->sinA;
+                float x1 = xs - ss * half_width;
+                float y1 = ys + cs * half_width;
+                float x2 = xs + ss * half_width;
+                float y2 = ys - cs * half_width;
+
+                float xe = road->pedestPaths[i]->shape[j+1]->pos.x();
+                float ye = road->pedestPaths[i]->shape[j+1]->pos.y();
+                float ze = road->pedestPaths[i]->shape[j+1]->pos.z() + 0.1;
+                float ce = road->pedestPaths[i]->shape[j]->cosA;
+                float se = road->pedestPaths[i]->shape[j]->sinA;
+                float x4 = xe - se * half_width;
+                float y4 = ye + ce * half_width;
+                float x3 = xe + se * half_width;
+                float y3 = ye - ce * half_width;
+
+                if( road->pedestPaths[i]->scenarioObjectID >= 0 ){
+                    zs += 0.1;
+                    ze += 0.1;
+                }
+
+                if( road->paths[i]->scenarioObjectID >= 0 ){
+                    pathPolygons->pathPolygonData << x1 << y1 << zs << 0.0f << 0.0f << 0.2f << 0.3f << 0.7f;
+                    pathPolygons->pathPolygonData << x2 << y2 << zs << 0.0f << 0.0f << 0.2f << 0.3f << 0.7f;
+                    pathPolygons->pathPolygonData << x3 << y3 << ze << 0.0f << 0.0f << 0.2f << 0.3f << 0.7f;
+                    pathPolygons->pathPolygonData << x4 << y4 << ze << 0.0f << 0.0f << 0.2f << 0.3f << 0.7f;
+                }
+                else{
+                    pathPolygons->pathPolygonData << x1 << y1 << zs << 0.0f << 0.0f << 0.1f << 0.8f << 0.4f;
+                    pathPolygons->pathPolygonData << x2 << y2 << zs << 0.0f << 0.0f << 0.1f << 0.8f << 0.4f;
+                    pathPolygons->pathPolygonData << x3 << y3 << ze << 0.0f << 0.0f << 0.1f << 0.8f << 0.4f;
+                    pathPolygons->pathPolygonData << x4 << y4 << ze << 0.0f << 0.0f << 0.1f << 0.8f << 0.4f;
+                }
+
+                if( xs < xmin ){
+                    xmin = xs;
+                }
+                if( xe < xmin ){
+                    xmin = xe;
+                }
+
+                if( xs > xmax ){
+                    xmax = xs;
+                }
+                if( xe > xmax ){
+                    xmax = xe;
+                }
+
+                if( ys < ymin ){
+                    ymin = ys;
+                }
+                if( ye < ymin ){
+                    ymin = ye;
+                }
+
+                if( ys > ymax ){
+                    ymax = ys;
+                }
+                if( ye > ymax ){
+                    ymax = ye;
+                }
+            }
+        }
+
         //qDebug() << "pathPolygonData set.";
 
         pathPolygons->pathPolygonsBuffer->setUsagePattern( QOpenGLBuffer::StaticDraw );
@@ -1746,7 +1658,6 @@ void GraphicCanvas::SetRoadData()
 
         program->enableAttributeArray( 2 );
         program->setAttributeBuffer( 2, GL_FLOAT, 5 * sizeof(GLfloat) , 3, 8 * sizeof(GLfloat) );
-
 
         pathPolygons->pathPolygonsBuffer->release();
         pathPolygons->pathPolygonsArray.release();
@@ -1773,6 +1684,60 @@ void GraphicCanvas::SetRoadData()
     }
 
     qDebug() << "X_eye = " << X_eye << " Y_eye = " << Y_eye << " Z_eye = " << Z_eye;
+
+    doneCurrent();
+}
+
+
+void GraphicCanvas::SetTrafficParticipantsData()
+{
+    makeCurrent();
+
+    for(int i=0;i<road->vehicleKind.size();++i){
+
+        struct VehicleModel *vm = new struct VehicleModel;
+
+        vm->modelID = road->vehicleKind[i]->id;
+
+        vm->wheelBase = road->vehicleKind[i]->length * 0.8;
+        vm->lf        = road->vehicleKind[i]->length * 0.4;
+        vm->lr        = road->vehicleKind[i]->length * 0.4;
+        vm->distCG2FE = road->vehicleKind[i]->length * 0.5;
+        vm->distCG2RE = road->vehicleKind[i]->length * 0.5;
+        vm->distRA2RE = road->vehicleKind[i]->length * 0.1;
+        vm->FRWeightRatio = 0.5;
+
+        vm->objFileDataSet = false;
+
+        vehicleModels.append( vm );
+        int idx = vehicleModels.size() - 1;
+
+        SetVehiclePolygon(idx,
+                          road->vehicleKind[i]->length * 0.5,
+                          road->vehicleKind[i]->length * 0.5,
+                          road->vehicleKind[i]->width,
+                          road->vehicleKind[i]->height );
+    }
+
+    for(int i=0;i<road->pedestrianKind.size();++i){
+
+        struct PersonModel *pm = new struct PersonModel;
+
+        pm->id = road->pedestrianKind[i]->id;
+
+        personModels.append( pm );
+
+        int idx = personModels.size() - 1;
+        SetPersonPolygon( idx,
+                          road->pedestrianKind[i]->width,
+                          road->pedestrianKind[i]->height,
+                          road->pedestrianKind[i]->length );
+    }
+
+
+    qDebug() << "[GraphicCanvas::SetTrafficParticipantsData]";
+    qDebug() << " vehicleModel : n = " << vehicleModels.size();
+    qDebug() << " personModels : n = " << personModels.size();
 
     doneCurrent();
 }
@@ -1831,6 +1796,34 @@ int GraphicCanvas::Get3DPhysCoordFromPickPoint(int xp,int yp, float &x,float &y)
         y = 0.0;
 
         return -1;
+    }
+}
+
+
+void GraphicCanvas::LocateAtAgent(int id)
+{
+    if( id < 0 || id >= maxAgent ){
+        return;
+    }
+
+    for(int i=0;i<maxAgent;++i){
+
+        if( agent[i]->agentStatus == 0 ){
+            continue;
+        }
+
+        if( agent[i]->ID == id ){
+
+            X_eye = agent[i]->state.x;
+            Y_eye = agent[i]->state.y;
+
+            X_eye *= (-1.0);
+            Y_eye *= (-1.0);
+
+            update();
+
+            break;
+        }
     }
 }
 

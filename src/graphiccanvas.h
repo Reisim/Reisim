@@ -71,6 +71,7 @@ struct VehicleModel
 
 struct PersonModel
 {
+    int id;
     QVector<GLfloat> personPolygon;
     QOpenGLBuffer *personPolygonBuffer;
     QOpenGLVertexArrayObject personPolygonArray;
@@ -113,11 +114,12 @@ public:
     void resizeGL(int w, int h);
 
     void SetVehiclePolygon(int index,float lf,float lr,float width,float height);
-    void CopyVehicleShapeParameter();
-
     void SetPersonPolygon(int index,float width,float height,float depth);
+
     void SetTSData();
     void SetRoadData();
+    void SetTrafficParticipantsData();
+
 
     void SetVIDFlag(bool v){ showVID = v; }
     void SetPathIDFlag(bool v){ showPathID = v; }
@@ -125,6 +127,8 @@ public:
     void SetFontScale(int s){ fontScale = s; }
 
     int Get3DPhysCoordFromPickPoint(int xp,int yp, float &x,float &y);
+
+    void LocateAtAgent(int id);
 
     Agent **agent;
     int maxAgent;
@@ -135,13 +139,6 @@ public:
     Road *road;
 
 signals:
-    void SetVehicleParameter(int ID,int Type,
-                             float length,
-                             float width,
-                             float height,
-                             float wheelBase,
-                             float distRR2RE,
-                             float FRWeightRatio);
     void ShowAgentData(float x,float Y);
 
 

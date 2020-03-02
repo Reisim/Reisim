@@ -12,6 +12,8 @@
 
 
 #include "mainwindow.h"
+#include <QApplication>
+#include <QInputDialog>
 #include <QDebug>
 #include <time.h>
 
@@ -386,12 +388,6 @@ void MainWindow::SetNumberTrafficSignalToCanvas(int n)
 }
 
 
-void MainWindow::CopyVehicleShapeParameter()
-{
-    canvas->CopyVehicleShapeParameter();
-}
-
-
 void MainWindow::RedrawRequest()
 {
     canvas->update();
@@ -405,6 +401,9 @@ void MainWindow::SetRoadDataToCanvas(Road *road)
 
     qDebug() << "  call SetRoadData()";
     canvas->SetRoadData();
+
+    qDebug() << "  call SetTrafficParticipantsData()";
+    canvas->SetTrafficParticipantsData();
 }
 
 
@@ -453,3 +452,45 @@ void MainWindow::SetFontScale(int s)
     canvas->SetFontScale(s);
     canvas->update();
 }
+
+
+void MainWindow::keyPressEvent(QKeyEvent *e)
+{
+    Qt::KeyboardModifiers modifi = QApplication::keyboardModifiers();
+    int key = e->key();
+
+    if( modifi & Qt::AltModifier ){
+        if( key == Qt::Key_F ){
+
+            SimulationPause();
+
+            int id = QInputDialog::getInt(this,"Search Agent","ID");
+            canvas->LocateAtAgent(id);
+        }
+        else if( key == Qt::Key_T ){
+
+            SimulationPause();
+
+            QString tmpStopTimeStr = QInputDialog::getText(this,"Set Temp-stop Time","H:M:S");
+            QStringList tmpStopTimeStrDiv = tmpStopTimeStr.split(":");
+            if( tmpStopTimeStrDiv.size() == 1 ){
+                int sec = QString( tmpStopTimeStrDiv[0] ).trimmed().toInt();
+                emit SetTmpStpoTime(0,0,sec);
+            }
+            else if( tmpStopTimeStrDiv.size() == 2 ){
+                int min = QString( tmpStopTimeStrDiv[0] ).trimmed().toInt();
+                int sec = QString( tmpStopTimeStrDiv[1] ).trimmed().toInt();
+                emit SetTmpStpoTime(0,min,sec);
+            }
+            else if( tmpStopTimeStrDiv.size() == 3 ){
+                int hur = QString( tmpStopTimeStrDiv[0] ).trimmed().toInt();
+                int min = QString( tmpStopTimeStrDiv[1] ).trimmed().toInt();
+                int sec = QString( tmpStopTimeStrDiv[2] ).trimmed().toInt();
+                emit SetTmpStpoTime(hur,min,sec);
+            }
+
+            SimulationResume();
+        }
+    }
+}
+

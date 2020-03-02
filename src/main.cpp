@@ -24,6 +24,8 @@
 #include "mainwindow.h"
 #include "systemthread.h"
 #include "networkdrivecheck.h"
+#include "caldistributethread.h"
+
 
 #include <QMutex>
 #include <QWaitCondition>
@@ -36,6 +38,14 @@ QWaitCondition *cond_sync = NULL;
 
 QMutex *mutex_log = NULL;
 QWaitCondition *cond_log = NULL;
+
+
+int maxWorkerThread = 8;
+QList<QWaitCondition *> workerCond;
+QList<int> statusWorkerThread;
+QMutex *workerMutex = NULL;
+bool allWorkerThreadFinshed = false;
+QWaitCondition *condSimMain;
 
 
 int main(int argc, char *argv[])
@@ -61,6 +71,16 @@ int main(int argc, char *argv[])
 
     mutex_log = new QMutex();
     cond_log  = new QWaitCondition();
+
+    workerMutex = new QMutex();
+    for(int i=0;i<maxWorkerThread;++i){
+        QWaitCondition *wc = new QWaitCondition();
+        workerCond.append( wc );
+        statusWorkerThread.append( 0 );
+    }
+    condSimMain = new QWaitCondition();
+
+
 
     qDebug() << "Current Directory = " << QDir::currentPath();
 
@@ -137,6 +157,28 @@ int main(int argc, char *argv[])
 
 
     //
+    //  Create Worker Thread
+    CalDistributeThread **workerThread = new CalDistributeThread* [maxWorkerThread];
+    for(int i=0;i<maxWorkerThread;++i){
+        workerThread[i] = new CalDistributeThread();
+        if( !workerThread ){
+            qDebug() << "! Cannot create CalDistributeThread !";
+            getchar();
+            return -1;
+        }
+
+        workerThread[i]->evalIDs = new QList<int>;
+        workerThread[i]->pWorkingMode = sys->pWorkingMode;
+
+        workerThread[i]->setThreadID(i);
+        workerThread[i]->start();
+
+        sys->evalIDs.append( workerThread[i]->evalIDs );
+    }
+
+
+
+    //
     //  Set connections
     //
     QObject::connect( &w, SIGNAL(SetScenraioFile(QString)), sys, SLOT(SetScenarioFile(QString)) );
@@ -153,24 +195,28 @@ int main(int argc, char *argv[])
     QObject::connect( &w, SIGNAL(SimulationResume()), sys, SLOT(SimulationResume()) );
     QObject::connect( &w, SIGNAL(SetSpeedAdjustVal(int)), sys, SLOT(SetSpeedAdjustVal(int)) );
     QObject::connect( &w, SIGNAL(SetStopGraphicUpdate(bool)), sys, SLOT(SetStopGraphicUpdate(bool)) );
-    QObject::connect( w.GetPointerGraphicCanvas(), SIGNAL(SetVehicleParameter(int,int,float,float,float,float,float,float)),
-                      sys, SLOT(WrapSetVehicleParameter(int,int,float,float,float,float,float,float)) );
+
     QObject::connect( w.GetPointerGraphicCanvas(), SIGNAL(ShowAgentData(float,float)),sys, SLOT(ShowAgentData(float,float)) );
+
+    QObject::connect( &w, SIGNAL(SetTmpStpoTime(int,int,int)), sys, SLOT(SetTmpStopTime(int,int,int)) );
 
     QObject::connect( sys, SIGNAL(UpdateSimulationTimeDisplay(QString)), &w, SLOT(UpdateSimulationTimeDisplay(QString)) );
     QObject::connect( sys, SIGNAL(SetAgentPointer(Agent**)), &w, SLOT(SetAgentPointerToCanvas(Agent**)) );
-    QObject::connect( sys, SIGNAL(SetTrafficSignalPointer(QList<TrafficSignal*>)), &w, SLOT(SetTrafficSignalPointerToCanvas(QList<TrafficSignal*>)) );
+    QObject::connect( sys, SIGNAL(SetTrafficSignalList(QList<TrafficSignal*>)), &w, SLOT(SetTrafficSignalPointerToCanvas(QList<TrafficSignal*>)) );
     QObject::connect( sys, SIGNAL(SetMaxNumberAgent(int)), &w, SLOT(SetMaxNumberAgentToCanvas(int)) );
     QObject::connect( sys, SIGNAL(SetNumberTrafficSignal(int)), &w, SLOT(SetNumberTrafficSignalToCanvas(int)) );
     QObject::connect( sys, SIGNAL(RedrawRequest()), &w, SLOT(RedrawRequest()) );
-    QObject::connect( sys, SIGNAL(SetRoadDataToCanvas(Road*)), &w, SLOT(SetRoadDataToCanvas(Road*)) );
+    QObject::connect( sys, SIGNAL(SetRoadPointer(Road*)), &w, SLOT(SetRoadDataToCanvas(Road*)) );
+    QObject::connect( sys, SIGNAL(TmpStopSimulation()), &w, SLOT(PauseSimulation()) );
     QObject::connect( sys, SIGNAL(ExitProgram()), &w, SLOT(ExitProgram()) );
 
+    for(int i=0;i<maxWorkerThread;++i){
+        QObject::connect( sys, SIGNAL(SetAgentPointer(Agent**)), workerThread[i], SLOT(SetAgentPointer(Agent**)) );
+        QObject::connect( sys, SIGNAL(SetMaxNumberAgent(int)), workerThread[i], SLOT(SetMaxNumberAgent(int)) );
+        QObject::connect( sys, SIGNAL(SetRoadPointer(Road*)), workerThread[i], SLOT(SetRoadPointer(Road*)) );
+        QObject::connect( sys, SIGNAL(SetTrafficSignalPointer(TrafficSignal*)), workerThread[i], SLOT(SetTrafficSignalPointer(TrafficSignal*)) );
+    }
 
-    //
-    //  Copy vehicle shape parameter in graphic canvas to simManager
-    //
-    w.CopyVehicleShapeParameter();
 
 
 
@@ -228,6 +274,14 @@ int main(int argc, char *argv[])
     //
     //
     int ret = a.exec();
+
+    for(int i=0;i<maxWorkerThread;++i){
+        workerThread[i]->stop();
+        workerMutex->lock();
+        workerCond[i]->wakeAll();
+        workerMutex->unlock();
+    }
+
 
     ReleaseNetworkDriveInfo();
 

@@ -91,12 +91,12 @@ float SimulationManager::GetSimulationTimeInSec()
 }
 
 
-int SimulationManager::GetVehicleShapeByWheelbase(float wl)
+int SimulationManager::GetVehicleShapeByWheelbase(float wl,Road *pRoad)
 {
     int ret = -1;
     int mismatch = 0.0;
-    for(int i=0;i<vehicleShape.size();++i){
-        float err = fabs(wl - vehicleShape[i]->wheelBase);
+    for(int i=0;i<pRoad->vehicleKind.size();++i){
+        float err = fabs(wl - pRoad->vehicleKind[i]->length);
         if(ret < 0 || mismatch > err ){
             ret = i;
             mismatch = err;
@@ -105,31 +105,6 @@ int SimulationManager::GetVehicleShapeByWheelbase(float wl)
     return ret;
 }
 
-
-void SimulationManager::SetVehicleShapeParameter(int ID, int Type, float length, float width, float height, float wheelBase, float distRR2RE, float FRWeightRatio)
-{
-    if( ID == 0 ){
-        if( vehicleShape.size() > 0 ){
-            for(int i=0;i<vehicleShape.size();++i){
-                delete vehicleShape[i];
-            }
-            vehicleShape.clear();
-        }
-    }
-
-    struct VehicleShapeParameter *v = new struct VehicleShapeParameter();
-
-    v->ID                     = ID;
-    v->Type                   = Type;
-    v->length                 = length;
-    v->width                  = width;
-    v->height                 = height;
-    v->wheelBase              = wheelBase;
-    v->distRearAxletoRearEdge = distRR2RE;
-    v->FRWeightRatio          = FRWeightRatio;
-
-    vehicleShape.append( v );
-}
 
 
 void SimulationManager::CopyScenarioData(int fromAID, int toAID)
@@ -247,7 +222,9 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 {
     int nAppear = 0;
     int maxNAppearAtATime = 3;
-
+    if( DSMode == false ){
+        maxNAppearAtATime = 100;
+    }
 
     if( IDAllowed < 0 ){
 
@@ -309,6 +286,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             }
 
 
+
             //
             //  Generate Agent
             //
@@ -329,6 +307,19 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             pAgent[objID]->calInterval = simTime.dt;
             pAgent[objID]->ID = objID;
 
+            float simHz = 1.0 / simTime.dt;
+
+            // Perception and Recognition; 10[Hz]
+            pAgent[objID]->cognitionCountMax = (int)(simHz / 10.0);
+            pAgent[objID]->cognitionCount = 0;
+
+            // Hazard Identification and Risk Evaluation; 3[Hz]
+            pAgent[objID]->decisionMakingCountMax = (int)(simHz / 3.0);
+            pAgent[objID]->decisionMalingCount = 0;
+
+            // Control; 10[Hz]
+            pAgent[objID]->controlCountMax = (int)(simHz / 10.0);
+            pAgent[objID]->controlCount = 0;
 
 
 //            qDebug() << "Try to generate : objID = " << objID;
@@ -338,9 +329,9 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             //
             int onIdx = pRoad->nodeId2Index.indexOf( pRoad->odRoute[i]->originNode );
 
-            QVector<QVector<int>> targetPathLists;
-            QVector<bool> needLCs;
-            QVector<int> nodeUntils;
+            QList<QList<int>> targetPathLists;
+            QList<bool> needLCs;
+            QList<int> nodeUntils;
 
             // List up All possible path list
             for(int j=0;j<pRoad->nodes[onIdx]->outBoundaryWPs.size();++j){
@@ -357,7 +348,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
                     bool needLC = false;
                     int nodeUntil = -1;
-                    QVector<int> tmpTargetPathList = pRoad->GetPathList( i, tmpCurPath, needLC, nodeUntil, &(this->rndGen) );
+                    QList<int> tmpTargetPathList = pRoad->GetPathList( i, tmpCurPath, needLC, nodeUntil, &(this->rndGen) );
 
 
 //                    qDebug() << "GetPathList Result for outBoundart-WP = " << pRoad->nodes[onIdx]->outBoundaryWPs[j]->wpId
@@ -524,25 +515,32 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             pAgent[objID]->agentKind = 0;
 
             pAgent[objID]->vehicle.SetVehicleModelID( 0 );
-            for(int j=0;j<vehicleShape.size();++j){
-                if( vehicleShape[j]->ID == 0 ){
-                    pAgent[objID]->vehicle.SetVehicleParam(  vehicleShape[j]->length,
-                                                                vehicleShape[j]->width,
-                                                                vehicleShape[j]->height,
-                                                                vehicleShape[j]->wheelBase,
-                                                                vehicleShape[j]->distRearAxletoRearEdge,
-                                                                vehicleShape[j]->FRWeightRatio );
 
-                    pAgent[objID]->vHalfLength = vehicleShape[j]->length * 0.5;
-                    pAgent[objID]->vHalfWidth  = vehicleShape[j]->width  * 0.5;
+            {
+                float rnd = rndGen.GenUniform();
+                float p = 0.0;
 
-//                    qDebug() << "VHalfLen = " << pAgent[objID]->vHalfLength
-//                             << " VHalfWid = " << pAgent[objID]->vHalfWidth;
+                for(int j=0;j<pRoad->odRoute[i]->vehicleKindSelectProbability.size();++j){
+
+                    if( p <= rnd && rnd < p + pRoad->odRoute[i]->vehicleKindSelectProbability[j] ){
+
+                        pAgent[objID]->vehicle.SetVehicleModelID( j );
+
+                        float L = pRoad->vehicleKind[j]->length;
+                        float W = pRoad->vehicleKind[j]->width;
+                        float H = pRoad->vehicleKind[j]->height;
+
+                        pAgent[objID]->vehicle.SetVehicleParam( L, W, H, L * 0.8, L * 0.1, 0.5 );
+
+                        pAgent[objID]->vHalfLength = L * 0.5;
+                        pAgent[objID]->vHalfWidth  = W  * 0.5;
+                        break;
+                    }
+                    else{
+                        p += pRoad->odRoute[i]->vehicleKindSelectProbability[j];
+                    }
                 }
             }
-
-
-
 
 
             // Set initial state
@@ -578,10 +576,146 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
             pAgent[objID]->SetTargetNodeListByTargetPaths( pRoad );
 
+            pAgent[objID]->BackupMemory();
+
 //            qDebug() << "Generate Agent : objID = " << objID;
         }
-
     }
+
+
+    for(int i=0;i<pRoad->pedestPaths.size();++i){
+
+        if( pRoad->pedestPaths[i]->meanArrivalTime < 0.0 ){
+            continue;
+        }
+
+        if( pRoad->pedestPaths[i]->NextAppearTime <  0.0 ){
+
+            pRoad->pedestPaths[i]->NextAppearTime = GetExponentialDist( pRoad->pedestPaths[i]->meanArrivalTime );
+
+        }
+        else{
+
+            bool genFlag = false;
+            if( simTimeSec >= pRoad->pedestPaths[i]->NextAppearTime ){
+                if( nAppear < maxNAppearAtATime ){
+                    genFlag = true;
+                    nAppear++;
+
+                    // Set next timing
+                    pRoad->pedestPaths[i]->NextAppearTime = simTimeSec;
+                    pRoad->pedestPaths[i]->NextAppearTime += GetExponentialDist( pRoad->pedestPaths[i]->meanArrivalTime );
+                    //qDebug() << "OD[" << i << "] : NextAppearTime = " <<  pRoad->odRoute[i]->NextAppearTime;
+                }
+            }
+
+            if( genFlag == false ){
+                continue;
+            }
+
+
+            //
+            //  Generate Agent
+            //
+            int objID = -1;
+            for(int n=IDAllowed;n<maxAgentNumber;++n){
+                if( pAgent[n]->agentStatus == 0 ){
+                    objID = n;
+                    break;
+                }
+            }
+            if( objID < 0 ){
+                continue;
+            }
+
+
+            // Initialize
+            pAgent[objID]->InitializeMemory();
+            pAgent[objID]->calInterval = simTime.dt;
+            pAgent[objID]->ID = objID;
+
+
+            float simHz = 1.0 / simTime.dt;
+
+            // Perception and Recognition; 10[Hz]
+            pAgent[objID]->cognitionCountMax = (int)(simHz / 10.0);
+            pAgent[objID]->cognitionCount = 0;
+
+            // Hazard Identification and Risk Evaluation; 3[Hz]
+            pAgent[objID]->decisionMakingCountMax = (int)(simHz / 3.0);
+            pAgent[objID]->decisionMalingCount = 0;
+
+            // Control; 10[Hz]
+            pAgent[objID]->controlCountMax = (int)(simHz / 10.0);
+            pAgent[objID]->controlCount = 0;
+
+
+
+            // random select
+            int selPedestModelIdx = 0;
+            {
+                float rnd = rndGen.GenUniform();
+                float H = 0.0;
+                for(int k=0;k<pRoad->pedestPaths[i]->pedestKindSelectProbability.size();++k){
+                    float pThr = pRoad->pedestPaths[i]->pedestKindSelectProbability[k];
+                    if( H <= rnd && rnd < H + pThr ){
+                        selPedestModelIdx = k;
+                        break;
+                    }
+                    else{
+                        H += pThr;
+                    }
+                }
+            }
+
+
+            pAgent[objID]->agentKind = 100 + selPedestModelIdx;
+
+            pAgent[objID]->vehicle.SetVehicleID( selPedestModelIdx );
+
+            pAgent[objID]->state.V = 0.0;
+            pAgent[objID]->state.x = pRoad->pedestPaths[i]->shape.first()->pos.x();
+            pAgent[objID]->state.y = pRoad->pedestPaths[i]->shape.first()->pos.y();
+            pAgent[objID]->state.z = pRoad->pedestPaths[i]->shape.first()->pos.z();
+            pAgent[objID]->state.yaw = pRoad->pedestPaths[i]->shape.first()->angleToNextPos;
+            pAgent[objID]->state.cosYaw = pRoad->pedestPaths[i]->shape.first()->cosA;
+            pAgent[objID]->state.sinYaw = pRoad->pedestPaths[i]->shape.first()->sinA;
+
+
+            pAgent[objID]->memory.targetPathList.clear();
+            pAgent[objID]->memory.targetPathList.append( pRoad->pedestPaths[i]->id );
+
+            pAgent[objID]->memory.currentTargetPath = pRoad->pedestPaths[i]->id;
+            pAgent[objID]->memory.currentTargetPathIndexInList = 0;
+
+
+            float maxWID = pRoad->pedestPaths[i]->shape.first()->width * 0.5;
+            pAgent[objID]->memory.lateralShiftTarget = ( GetNormalDist( 0.0, 2.0 ) )* maxWID;
+            if( pAgent[objID]->memory.lateralShiftTarget > maxWID ){
+                pAgent[objID]->memory.lateralShiftTarget = maxWID;
+            }
+            else if( pAgent[objID]->memory.lateralShiftTarget < -maxWID ){
+                pAgent[objID]->memory.lateralShiftTarget = -maxWID;
+            }
+
+//            qDebug() << "lateralShiftTarget = " << pAgent[objID]->memory.lateralShiftTarget;
+
+
+            // Set control information
+            pAgent[objID]->memory.controlMode = AGENT_CONTROL_MODE::AGENT_LOGIC;
+            pAgent[objID]->memory.targetSpeed = 1.5;
+
+
+            // Set Flags
+            pAgent[objID]->agentStatus = 1;
+            pAgent[objID]->isScenarioObject = false;
+
+            pAgent[objID]->BackupMemory();
+
+//            qDebug() << "Generate Agent[Pedestrian] : objID = " << objID;
+        }
+    }
+
 
 
 
@@ -719,6 +853,23 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
         pAgent[objectID]->InitializeMemory();
         pAgent[objectID]->calInterval = simTime.dt;
 
+
+        float simHz = 1.0 / simTime.dt;
+
+        // Perception and Recognition; 10[Hz]
+        pAgent[objectID]->cognitionCountMax = (int)(simHz / 10.0);
+        pAgent[objectID]->cognitionCount = 0;
+
+        // Hazard Identification and Risk Evaluation; 3[Hz]
+        pAgent[objectID]->decisionMakingCountMax = (int)(simHz / 3.0);
+        pAgent[objectID]->decisionMalingCount = 0;
+
+        // Control; 10[Hz]
+        pAgent[objectID]->controlCountMax = (int)(simHz / 10.0);
+        pAgent[objectID]->controlCount = 0;
+
+
+
         if( scenario[currentScenarioID]->scenarioItems[i]->type == 'v' ){
             pAgent[objectID]->agentKind = 0;
         }
@@ -748,20 +899,25 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             pAgent[objectID]->state.sinYaw = sin( YAi );
 
 
-            pAgent[objectID]->vehicle.SetVehicleModelID( scenario[currentScenarioID]->scenarioItems[i]->objectModelID );
-            for(int j=0;j<vehicleShape.size();++j){
-                if( vehicleShape[j]->ID == scenario[currentScenarioID]->scenarioItems[i]->objectModelID ){
-                    pAgent[objectID]->vehicle.SetVehicleParam(  vehicleShape[j]->length,
-                                                                vehicleShape[j]->width,
-                                                                vehicleShape[j]->height,
-                                                                vehicleShape[j]->wheelBase,
-                                                                vehicleShape[j]->distRearAxletoRearEdge,
-                                                                vehicleShape[j]->FRWeightRatio );
+            int vmID = scenario[currentScenarioID]->scenarioItems[i]->objectModelID;
 
-                    pAgent[objectID]->vHalfLength = vehicleShape[j]->length * 0.5;
-                    pAgent[objectID]->vHalfWidth  = vehicleShape[j]->width  * 0.5;
-                }
+            if( vmID < 0 || vmID >= pRoad->vehicleKind.size() ){
+                vmID = 0;
             }
+
+            pAgent[objectID]->vehicle.SetVehicleModelID( vmID );  // This ID is used to draw the object in canvas
+
+            {
+                float L = pRoad->vehicleKind[vmID]->length;
+                float W = pRoad->vehicleKind[vmID]->width;
+                float H = pRoad->vehicleKind[vmID]->height;
+
+                pAgent[objectID]->vehicle.SetVehicleParam( L, W, H, L * 0.8, L * 0.1, 0.5 );
+
+                pAgent[objectID]->vHalfLength = L * 0.5;
+                pAgent[objectID]->vHalfWidth  = W  * 0.5;
+            }
+
 
             // Set route information
             ScenarioObjectControlInfo* controlInfo = scenario[currentScenarioID]->scenarioItems[i]->controlInfo;
@@ -969,6 +1125,12 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             pAgent[objectID]->state.cosYaw = cos( YAi );
             pAgent[objectID]->state.sinYaw = sin( YAi );
 
+            int pmID = scenario[currentScenarioID]->scenarioItems[i]->objectModelID;
+            if( pmID < 0 || pmID >= pRoad->pedestrianKind.size() ){
+                pmID = 0;
+            }
+            pAgent[objectID]->vehicle.SetVehicleID( pmID );   // This ID is used to draw the object in canvas
+
 
             // Set route information
             for(int j=0;j<scenario[currentScenarioID]->scenarioItems[i]->controlInfo->pedestPathRoute.size();++j){
@@ -976,57 +1138,16 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                 pAgent[objectID]->memory.targetPathList.prepend( ppath );
             }
 
+            pAgent[objectID]->memory.currentTargetPath = pAgent[objectID]->memory.targetPathList.first();
+
             int overEdge = 0;
             float dist = 0.0;
-            int nearPedestPathID = pRoad->GetNearestPedestPath(xi,yi,dist,overEdge,objectID);
-            for(int j=0;j<pAgent[objectID]->memory.targetPathList.size();++j){
-                if( pAgent[objectID]->memory.targetPathList[j] == nearPedestPathID ){
-                    pAgent[objectID]->memory.currentTargetPath = nearPedestPathID;
-                    pAgent[objectID]->memory.currentTargetPathIndexInList = j;
-
-                    if( j > 0 ){
-                        int nextPPath = pAgent[objectID]->memory.targetPathList[j-1];
-                        int linkID = pRoad->GetDirectionByPedestPathLink( pAgent[objectID]->memory.currentTargetPath, nextPPath);
-                        pAgent[objectID]->memory.currentTargetDirectionPedestPath = linkID;
-                        if( linkID < 1 ){
-                            qDebug() << "[Warning]----------------------------------";
-                            qDebug() << " Scenario Pedestrian ID = " << objectID << " cannot determin direction to move on pedest-path.";
-                            qDebug() << "   Assigned Path List : ";
-                            for(int j=0;j<pAgent[objectID]->memory.targetPathList.size();++j){
-                                qDebug() << "           PedestPath " << pAgent[objectID]->memory.targetPathList[j];
-                            }
-                            qDebug() << "   Current Target Pedest Path = " << pAgent[objectID]->memory.currentTargetPath;
-                            qDebug() << "   Next Target Pedest Path = " << nextPPath;
-                            qDebug() << "   This pedestrian will not move and disappear.";
-                        }
-                    }
-                    else{
-
-                        int idx = pRoad->pedestPathID2Index.indexOf( pAgent[objectID]->memory.currentTargetPath );
-                        if( idx >= 0 ){
-                            float ip = pAgent[objectID]->state.cosYaw * pRoad->pedestPaths[idx]->eX + pAgent[objectID]->state.sinYaw * pRoad->pedestPaths[idx]->eY;
-                            if( ip >= 0.0 ){
-                                pAgent[objectID]->memory.currentTargetDirectionPedestPath = 1;
-                            }
-                            else{
-                                pAgent[objectID]->memory.currentTargetDirectionPedestPath = 2;
-                            }
-                        }
-                        else{
-                            pAgent[objectID]->memory.currentTargetDirectionPedestPath = 0;
-
-                            qDebug() << "[Warning]----------------------------------";
-                            qDebug() << " Scenario Pedestrian ID = " << objectID << " cannot determin direction to move on pedest-path.";
-                            qDebug() << "   Assigned Path List : ";
-                            for(int j=0;j<pAgent[objectID]->memory.targetPathList.size();++j){
-                                qDebug() << "           PedestPath " << pAgent[objectID]->memory.targetPathList[j];
-                            }
-                            qDebug() << "   Current Target Pedest Path = " << pAgent[objectID]->memory.currentTargetPath;
-                            qDebug() << "   This pedestrian will not move and disappear.";
-                        }
-
-                    }
-                }
+            int nearPPSectIndex = pRoad->GetNearestPedestPathSectionIndex(xi,yi,dist,overEdge,objectID);
+            if( nearPPSectIndex >= 0 ){
+                pAgent[objectID]->memory.currentTargetPathIndexInList = nearPPSectIndex;
+            }
+            else{
+                pAgent[objectID]->memory.currentTargetPathIndexInList = 0;
             }
 
             // Set control information

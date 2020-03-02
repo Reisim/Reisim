@@ -20,6 +20,7 @@ void Agent::Control(Road* pRoad)
 //    qDebug() << "agent: ID = " << ID << " kind=" << agentKind << " control-mode=" << memory.controlMode
 //             << " x = " << state.x << " y=" << state.y;
 
+
     if( agentKind < 100 ){
 
         memory.distanceToZeroSpeed = state.V * state.V * 0.5f / param.accelControlGain + state.V + vHalfLength;
@@ -35,6 +36,16 @@ void Agent::Control(Road* pRoad)
         memory.brake = 0.0;
 
         if( memory.controlMode == AGENT_CONTROL_MODE::AGENT_LOGIC ){
+
+
+            controlCount++;
+            if( controlCount >= controlCountMax ){
+                controlCount = 0;
+            }
+            else{
+                return;
+            }
+
 
             memory.actualTargetSpeed = memory.targetSpeed;
             memory.distanceAdjustLowSpeed = 0.0;
@@ -460,7 +471,9 @@ void Agent::Control(Road* pRoad)
         }
 
 
-        if( memory.accel > 0.0 && state.V < 3.33 ){
+        if( (memory.nextTurnNode != memory.currentTargetNode ||
+             (memory.nextTurnDirection != DIRECTION_LABEL::LEFT_CROSSING && memory.nextTurnDirection != DIRECTION_LABEL::RIGHT_CROSSING) ) &&
+                memory.accel > 0.0 && state.V < 3.33 ){
             memory.accel *= 2.0;
         }
 
@@ -521,13 +534,32 @@ void Agent::Control(Road* pRoad)
     }
     else if( agentKind >= 100 ){
 
+
+        controlCount++;
+        if( controlCount >= controlCountMax ){
+            controlCount = 0;
+        }
+        else{
+            return;
+        }
+
+
         float tV = memory.targetSpeed;
         if( isScenarioObject == true ){
             tV = memory.targetSpeedByScenario;
         }
 
-        float dv = (tV - state.V) * calInterval;
-        float dvMax = 0.5 * calInterval;
+
+        if( memory.shouldStopAtSignalSL == true ){
+            tV = 0.0;
+        }
+
+        if( memory.doHeadwayDistanceControl == true ){
+            tV = 0.0;
+        }
+
+        float dv = (tV - state.V);
+        float dvMax = 2.0 * calInterval;
         if( dv > dvMax ){
             dv = dvMax;
         }
@@ -539,54 +571,22 @@ void Agent::Control(Road* pRoad)
             state.V = 0.0;
         }
 
-        float   dev = 0.0;
-        float     z = 0.0;
-        float xdir1 = 0.0;
-        float ydir1 = 0.0;
-        float xdir2 = 0.0;
-        float ydir2 = 0.0;
-        pRoad->GetDeviationFromPedestPath( memory.currentTargetPath, state.x, state.y,
-                                           dev, z, xdir1, ydir1, xdir2, ydir2 );
-
-//        if( ID == 25 ){
-//            qDebug() << "currentTargetPath = " << memory.currentTargetPath << "  edge = " << memory.currentTargetDirectionPedestPath;
-//            int idx = pRoad->pedestPathID2Index.indexOf( memory.currentTargetPath );
-//            qDebug() << "  edge 1 : x = " << pRoad->pedestPaths[idx]->x1 << ", y = " << pRoad->pedestPaths[idx]->y1;
-//            qDebug() << "  edge 2 : x = " << pRoad->pedestPaths[idx]->x2 << ", y = " << pRoad->pedestPaths[idx]->y2;
-//            qDebug() << "position : x = " << state.x << ", y = " << state.y;
-//            qDebug() << "   dev = " << dev;
-//            qDebug() << "   xdir1 = " << xdir1 << " ydir1 = " << ydir1;
-//            qDebug() << "   xdir2 = " << xdir2 << " ydir2 = " << ydir2;
-//        }
-
-
+        float  dev = 0.0;
+        float    z = 0.0;
         float xdir = 0.0;
         float ydir = 0.0;
-        if( memory.currentTargetDirectionPedestPath == 1 ){
-            xdir = xdir1;
-            ydir = ydir1;
-        }
-        else if( memory.currentTargetDirectionPedestPath == 2 ){
-            xdir = xdir2;
-            ydir = ydir2;
-        }
+        pRoad->GetDeviationFromPedestPath( memory.currentTargetPath, memory.currentTargetPathIndexInList,
+                                           state.x, state.y, dev, z, xdir, ydir,
+                                           memory.lateralShiftTarget );
 
-        float S = sqrt(xdir * xdir + ydir * ydir);
-        xdir /= S;
-        ydir /= S;
+//        qDebug() << "currentTargetPathIndexInList = " << memory.currentTargetPathIndexInList << " xdir=" << xdir << " ydir=" << ydir;
 
-        float mxdir = xdir * 0.005 + state.cosYaw * 0.995;
-        float mydir = ydir * 0.005 + state.sinYaw * 0.995;
+        float mxdir = xdir * 0.2 + state.cosYaw * 0.8;
+        float mydir = ydir * 0.2 + state.sinYaw * 0.8;
 
         state.yaw = atan2( mydir, mxdir );
         state.cosYaw = mxdir;
         state.sinYaw = mydir;
-
-//        if( ID == 55 ){
-//            qDebug() << "   xdir = " << xdir << " ydir = " << ydir;
-//            qDebug() << "   yaw = " << state.yaw << " " << state.yaw * 57.3;
-//            qDebug() << "   v = " << state.V << " dv = " << dv;
-//        }
 
         state.z = 0.0;
     }

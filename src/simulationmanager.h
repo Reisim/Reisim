@@ -84,19 +84,6 @@ struct SimulationTime
 };
 
 
-struct VehicleShapeParameter
-{
-    int ID;
-    int Type;
-    float length;
-    float width;
-    float height;
-    float wheelBase;
-    float distRearAxletoRearEdge;
-    float FRWeightRatio;
-};
-
-
 struct ObjectTriggerData
 {
     int targetObjectID;
@@ -165,13 +152,13 @@ struct ScenarioObjectControlInfo
     int targetObjectID;
     float stopAtX;
     float stopAtY;
-    QVector<float> profileAxis;
-    QVector<float> speedProfile;
+    QList<float> profileAxis;
+    QList<float> speedProfile;
     int routeType;
-    QVector<struct ScenarioNodeRoute*> nodeRoute;
-    QVector<struct ScenarioWPRoute*> wpRoute;
-    QVector<struct ScenarioPedestPathRoute*> ppRouteElem;
-    QVector<int> pedestPathRoute;
+    QList<struct ScenarioNodeRoute*> nodeRoute;
+    QList<struct ScenarioWPRoute*> wpRoute;
+    QList<struct ScenarioPedestPathRoute*> ppRouteElem;
+    QList<int> pedestPathRoute;
 };
 
 
@@ -232,14 +219,6 @@ public:
     void SetDSMode() { DSMode = true; }
 
     void AppearAgents(Agent**,int,Road *);
-    void SetVehicleShapeParameter(int ID,int Type,
-                                  float length,
-                                  float width,
-                                  float height,
-                                  float wheelBase,
-                                  float distRR2RE,
-                                  float FRWeightRatio);
-
     void DisappearAgents(Agent**,int);
 
     void RaiseEvent(Agent**,int,Road *);
@@ -261,7 +240,11 @@ public:
     int GetScenarioObjectRouteType(int sId,int itemId){ return scenario[sId]->scenarioItems[itemId]->controlInfo->routeType; }
     int GetNumberPPElemOfScenarioObject(int sId,int itemId){ return scenario[sId]->scenarioItems[itemId]->controlInfo->ppRouteElem.size(); }
     struct ScenarioPedestPathRoute* GetPPElemOfScenarioObject(int sId,int itemId,int idx){ return scenario[sId]->scenarioItems[itemId]->controlInfo->ppRouteElem[idx]; }
-    void SetPedestPathRouteToScenarioObject(int sId,int itemId,int ppID){ scenario[sId]->scenarioItems[itemId]->controlInfo->pedestPathRoute.append( ppID ) ;}
+    void SetPedestPathRouteToScenarioObject(int sId,int itemId,int ppID){
+        if( scenario[sId]->scenarioItems[itemId]->controlInfo->pedestPathRoute.indexOf( ppID ) < 0 ){
+            scenario[sId]->scenarioItems[itemId]->controlInfo->pedestPathRoute.append( ppID ) ;
+        }
+    }
 
     void CheckScenarioState();
 
@@ -269,7 +252,7 @@ public:
     double GetNormalDist(double mean,double std){ return rndGen.GetNormalDist(mean, std); }
     double GetExponentialDist(double mean){ return rndGen.GetExponentialDist(mean); }
 
-    int GetVehicleShapeByWheelbase(float wl);
+    int GetVehicleShapeByWheelbase(float wl,Road *pRoad);
     void DumpScenarioData();
     void SetTargetPathListScenarioVehicle(Agent** pAgent,Road *pRoad,int aID);
     void CopyScenarioData(int fromAID,int toAID);
@@ -281,7 +264,6 @@ public:
 private:
     struct SimulationTime simTime;
 
-    QVector<struct VehicleShapeParameter*> vehicleShape;
     QVector<struct ScenarioData *> scenario;
     int currentScenarioID;
 

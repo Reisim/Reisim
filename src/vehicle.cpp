@@ -153,56 +153,60 @@ void Vehicle::UpdateState(float dt)
     state.yawRate  = input.steer * 0.3;
 
 
-    //
-    //  Copy state variables
-    y[0] = state.vx;
-    y[1] = state.yawAngle;
-    y[2] = state.X;
-    y[3] = state.Y;
+    if( state.vx > 0.01 || state.ax > 0.0 ){
+
+        //
+        //  Copy state variables
+        y[0] = state.vx;
+        y[1] = state.yawAngle;
+        y[2] = state.X;
+        y[3] = state.Y;
 
 
-    hh = dt * 0.5f;
-    h6 = dt * 0.16666667f;
+        hh = dt * 0.5f;
+        h6 = dt * 0.16666667f;
 
-    //
-    StateEquation(y,dydx);
+        //
+        StateEquation(y,dydx);
 
 
-    //
-    for(int i=0;i<MAX_STATE;++i){
-        yt[i] = y[i] + hh * dydx[i];
+        //
+        for(int i=0;i<MAX_STATE;++i){
+            yt[i] = y[i] + hh * dydx[i];
+        }
+        StateEquation(yt,dyt);
+
+        //
+        for(int i=0;i<MAX_STATE;++i){
+            yt[i] = y[i] + hh * dyt[i];
+        }
+        StateEquation(yt,dym);
+
+        //
+        for(int i=0;i<MAX_STATE;++i){
+            yt[i] = y[i] + dt * dym[i];
+            dym[i] += dyt[i];
+        }
+        StateEquation(yt,dyt);
+
+        //
+        //  Final Stop
+        for(int i=0;i<MAX_STATE;++i){
+            y[i] += h6*(dydx[i]+dyt[i]+dym[i]+dym[i]);
+        }
+
+        // Vehicle speed should not be negative
+        if( y[0] < 0.0 ){
+            y[0] = 0.0;
+        }
+
+
+        state.vx       = y[0];
+        state.yawAngle = y[1];
+        state.X        = y[2];
+        state.Y        = y[3];
+
     }
-    StateEquation(yt,dyt);
-
-    //
-    for(int i=0;i<MAX_STATE;++i){
-        yt[i] = y[i] + hh * dyt[i];
-    }
-    StateEquation(yt,dym);
-
-    //
-    for(int i=0;i<MAX_STATE;++i){
-        yt[i] = y[i] + dt * dym[i];
-        dym[i] += dyt[i];
-    }
-    StateEquation(yt,dyt);
-
-    //
-    //  Final Stop
-    for(int i=0;i<MAX_STATE;++i){
-        y[i] += h6*(dydx[i]+dyt[i]+dym[i]+dym[i]);
-    }
-
-    // Vehicle speed should not be negative
-    if( y[0] < 0.0 ){
-        y[0] = 0.0;
-    }
-
-
-    state.vx       = y[0];
-    state.yawAngle = y[1];
-    state.X        = y[2];
-    state.Y        = y[3];
 
 
     winker_count++;

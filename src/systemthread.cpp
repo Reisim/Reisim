@@ -37,6 +37,12 @@ extern QWaitCondition *cond_log;
 
 extern int logThreadOpeFlag;
 
+extern int maxWorkerThread;
+extern QList<QWaitCondition *> workerCond;
+extern QMutex *workerMutex;
+extern QList<int> statusWorkerThread;
+extern bool allWorkerThreadFinshed;
+extern QWaitCondition *condSimMain;
 
 
 SystemThread::SystemThread(QObject *parent) :
@@ -78,6 +84,13 @@ SystemThread::SystemThread(QObject *parent) :
     stopGraphicUpdate = false;
 
     signalDataFile  = QString();
+
+    pWorkingMode = new int;
+    *pWorkingMode = 0;
+
+    tmpStopHour   = -1;
+    tmpStopMin    = -1;
+    tmpStopSecond = -1;
 }
 
 void SystemThread::Stop()
@@ -190,6 +203,20 @@ void SystemThread::run()
         QString simTime = simManage->GetSimulationTimeStr();
         float simTimeFVal = simManage->GetSimulationTimeInSec();
 
+
+        if( tmpStopHour >= 0 && tmpStopMin >= 0 && tmpStopSecond >= 0 ){
+
+            float tmpStopSimTimeFVal = tmpStopHour * 3600 + tmpStopMin * 60 + tmpStopSecond;
+            if( simTimeFVal >= tmpStopSimTimeFVal ){
+                tmpStopHour   = -1;
+                tmpStopMin    = -1;
+                tmpStopSecond = -1;
+                emit TmpStopSimulation();
+            }
+
+        }
+
+
         //qDebug() << simTime;
 
         emit UpdateSimulationTimeDisplay(simTime);
@@ -210,23 +237,46 @@ void SystemThread::run()
         calCount[0]++;
 #endif
 
+
+
+#ifdef _PERFORMANCE_CHECK
+        QueryPerformanceCounter(&start);
+#endif
+
         //
         // Raise Event
         simManage->RaiseEvent( agent, maxAgent, road );
+
+#ifdef _PERFORMANCE_CHECK
+        QueryPerformanceCounter(&end);
+        calTime[1] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+        calCount[1]++;
+#endif
 
 
 
         //
         // Update Traffic Signal Display
         //
+
+#ifdef _PERFORMANCE_CHECK
+        QueryPerformanceCounter(&start);
+#endif
+
         for(int i=0;i<numTrafficSignals;++i){
             trafficSignal[i]->CheckDisplayInfoUpdate( simTimeFVal );
         }
 
+#ifdef _PERFORMANCE_CHECK
+        QueryPerformanceCounter(&end);
+        calTime[2] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+        calCount[2]++;
+#endif
 
 
-        //
-        // Control
+
+        // Set Agent IDs to Working Threads
+        QList<int> evalAgentQueue;
         for(int i=0;i<maxAgent;++i){
             if( agent[i]->agentStatus == 0 ){
                 continue;
@@ -237,81 +287,93 @@ void SystemThread::run()
             if( agent[i]->isBehaviorEmbeded == true ){
                 continue;
             }
-
-#ifdef _PERFORMANCE_CHECK
-            QueryPerformanceCounter(&start);
-#endif
-
-            agent[i]->Perception( agent, maxAgent, road, trafficSignal );
-
-#ifdef _PERFORMANCE_CHECK
-            QueryPerformanceCounter(&end);
-            calTime[1] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
-            calCount[1]++;
-#endif
-
-#ifdef _PERFORMANCE_CHECK
-            QueryPerformanceCounter(&start);
-#endif
-
-            agent[i]->Recognition( agent, maxAgent, road );
-
-#ifdef _PERFORMANCE_CHECK
-            QueryPerformanceCounter(&end);
-            calTime[2] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
-            calCount[2]++;
-#endif
-
-#ifdef _PERFORMANCE_CHECK
-            QueryPerformanceCounter(&start);
-#endif
-
-            agent[i]->HazardIdentification( agent, maxAgent, road );
-
-#ifdef _PERFORMANCE_CHECK
-            QueryPerformanceCounter(&end);
-            calTime[3] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
-            calCount[3]++;
-#endif
-
-#ifdef _PERFORMANCE_CHECK
-            QueryPerformanceCounter(&start);
-#endif
-
-            agent[i]->RiskEvaluation( agent, maxAgent, road );
-
-#ifdef _PERFORMANCE_CHECK
-            QueryPerformanceCounter(&end);
-            calTime[4] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
-            calCount[4]++;
-#endif
-
-#ifdef _PERFORMANCE_CHECK
-            QueryPerformanceCounter(&start);
-#endif
-
-            agent[i]->Control( road );
-
-#ifdef _PERFORMANCE_CHECK
-            QueryPerformanceCounter(&end);
-            calTime[5] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
-            calCount[5]++;
-#endif
-
-
-#ifdef _PERFORMANCE_CHECK
-            QueryPerformanceCounter(&start);
-#endif
-
-            agent[i]->UpdateState();
-
-#ifdef _PERFORMANCE_CHECK
-            QueryPerformanceCounter(&end);
-            calTime[6] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
-            calCount[6]++;
-#endif
-
+            evalAgentQueue.append( agent[i]->ID );
         }
+
+        for(int i=0;i<maxWorkerThread;++i){
+            evalIDs[i]->clear();
+            for(int j=i;j<evalAgentQueue.size();j+=maxWorkerThread){
+                evalIDs[i]->append( evalAgentQueue[j] );
+            }
+        }
+
+
+        // Backup agent's memory for referencing from other agent
+        {
+            *pWorkingMode = 1;
+
+
+            // Wake up Working Threads
+
+            allWorkerThreadFinshed = false;
+            for(int i=0;i<maxWorkerThread;++i){
+                statusWorkerThread[i] = 1;
+            }
+
+            for(int i=0;i<maxWorkerThread;++i){
+                workerMutex->lock();
+                workerCond[i]->wakeAll();
+                workerMutex->unlock();
+            }
+
+            // Wait until all threads done their work
+            workerMutex->lock();
+            if( allWorkerThreadFinshed == false ){
+                condSimMain->wait(workerMutex);
+            }
+            workerMutex->unlock();
+        }
+
+
+        // Agent's main logic
+        {
+            *pWorkingMode = 2;
+
+            // Wake up Working Threads
+            allWorkerThreadFinshed = false;
+            for(int i=0;i<maxWorkerThread;++i){
+                statusWorkerThread[i] = 1;
+            }
+
+            for(int i=0;i<maxWorkerThread;++i){
+                workerMutex->lock();
+                workerCond[i]->wakeAll();
+                workerMutex->unlock();
+            }
+
+            // Wait until all threads done their work
+            workerMutex->lock();
+            if( allWorkerThreadFinshed == false ){
+                condSimMain->wait(workerMutex);
+            }
+            workerMutex->unlock();
+        }
+
+
+        //  Update agent state
+        {
+            *pWorkingMode = 3;
+
+            // Wake up Working Threads
+            allWorkerThreadFinshed = false;
+            for(int i=0;i<maxWorkerThread;++i){
+                statusWorkerThread[i] = 1;
+            }
+
+            for(int i=0;i<maxWorkerThread;++i){
+                workerMutex->lock();
+                workerCond[i]->wakeAll();
+                workerMutex->unlock();
+            }
+
+            // Wait until all threads done their work
+            workerMutex->lock();
+            if( allWorkerThreadFinshed == false ){
+                condSimMain->wait(workerMutex);
+            }
+            workerMutex->unlock();
+        }
+
 
 
         //
@@ -350,31 +412,30 @@ void SystemThread::run()
 
 
 
-        //
-        // Check vehicles that reach to end of route
-        for(int i=0;i<maxAgent;++i){
-            if( agent[i]->agentStatus == 0 ){
-                continue;
-            }
-            if( agent[i]->isSInterfaceObject == true ){
-                continue;
-            }
-            if( agent[i]->isBehaviorEmbeded == true ){
-                continue;
+        //  Check vehicles that reach to end of route
+        {
+            *pWorkingMode = 4;
+
+            // Wake up Working Threads
+            allWorkerThreadFinshed = false;
+            for(int i=0;i<maxWorkerThread;++i){
+                statusWorkerThread[i] = 1;
             }
 
-#ifdef _PERFORMANCE_CHECK
-            QueryPerformanceCounter(&start);
-#endif
+            for(int i=0;i<maxWorkerThread;++i){
+                workerMutex->lock();
+                workerCond[i]->wakeAll();
+                workerMutex->unlock();
+            }
 
-            agent[i]->CheckPathList( road );
-
-#ifdef _PERFORMANCE_CHECK
-            QueryPerformanceCounter(&end);
-            calTime[7] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
-            calCount[7]++;
-#endif
+            // Wait until all threads done their work
+            workerMutex->lock();
+            if( allWorkerThreadFinshed == false ){
+                condSimMain->wait(workerMutex);
+            }
+            workerMutex->unlock();
         }
+
 
 
 #ifdef _PERFORMANCE_CHECK
@@ -385,17 +446,17 @@ void SystemThread::run()
 
 #ifdef _PERFORMANCE_CHECK
         QueryPerformanceCounter(&end);
-        calTime[8] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
-        calCount[8]++;
+        calTime[3] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+        calCount[3]++;
 #endif
 
 
 
 #ifdef _PERFORMANCE_CHECK
-        if( calCount[0] >= 50 ){
-            for(int i=0;i<9;i++){
+        if( calCount[0] >= 5000 ){
+            for(int i=0;i<4;i++){
                 calTime[i] /= calCount[i];
-                qDebug() << "Mean Time[" << i << "] = " << calTime[i];
+                qDebug() << "[System] Mean Time[" << i << "] = " << calTime[i];
                 calCount[i] = 0;
             }
         }
@@ -1133,7 +1194,10 @@ void SystemThread::LoadScenarioFile()
 
             qDebug() << "emit SetTrafficSignalPointer";
 
-            emit SetTrafficSignalPointer(trafficSignal);
+            emit SetTrafficSignalList(trafficSignal);
+            for(int i=0;i<trafficSignal.size();++i){
+                emit SetTrafficSignalPointer( trafficSignal.at(i) );
+            }
         }
 
         //qDebug() << "end of TS";
@@ -1317,6 +1381,8 @@ void SystemThread::LoadRoadData(QString roadDataFile)
         return;
     }
     qDebug() << "[SystemThread::LoadRoadData] roadDataFile = " << roadDataFile;
+
+
     road->LoadRoadData( roadDataFile );
 
 
@@ -1383,8 +1449,8 @@ void SystemThread::LoadRoadData(QString roadDataFile)
     road->CheckPedestPathConnection();
 
 
-    qDebug() << "emit SetRoadDataToCanvas signal";
-    emit SetRoadDataToCanvas( road );
+    qDebug() << "emit SetRoadPointer signal";
+    emit SetRoadPointer( road );
 }
 
 
@@ -1470,13 +1536,6 @@ void SystemThread::SimulationStop()
     }
 }
 
-
-void SystemThread::WrapSetVehicleParameter(int ID, int Type, float length, float width, float height, float wheelBase, float distRR2RE, float FRWeightRatio)
-{
-    if( simManage ){
-        simManage->SetVehicleShapeParameter( ID, Type, length, width, height, wheelBase, distRR2RE, FRWeightRatio );
-    }
-}
 
 
 void SystemThread::SetSpeedAdjustVal(int val)
@@ -1836,7 +1895,7 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
 
     if( agent[id]->vehicle.GetVehicleModelID() < 0 ){
         float wheelbase = so->lf + so->lr;
-        int vModelID = simManage->GetVehicleShapeByWheelbase( wheelbase );
+        int vModelID = simManage->GetVehicleShapeByWheelbase( wheelbase, road );
         agent[id]->vehicle.SetVehicleModelID( vModelID );
     }
 
@@ -2237,7 +2296,8 @@ void SystemThread::ShowAgentData(float x,float y)
         "RIGHT_CROSSING_STRAIGHT",
         "RIGHT_CROSSING_LEFT    ",
         "RIGHT_CROSSING_RIGHT   ",
-        "UNDEFINED_RECOGNITION_LABEL"
+        "UNDEFINED              ",
+        "PEDESTRIAN             ",
     };
 
 
@@ -2270,11 +2330,12 @@ void SystemThread::ShowAgentData(float x,float y)
         return;
     }
 
-    qDebug() << "Picked Agent ID = " << agent[nearID]->ID;
+    qDebug() << "Picked Agent ID = " << agent[nearID]->ID << " : agentKind = " << agent[nearID]->agentKind;
 
     qDebug() << "Vehicle State:";
     qDebug() << "  X = " << agent[nearID]->state.x;
     qDebug() << "  Y = " << agent[nearID]->state.y;
+    qDebug() << "  Z = " << agent[nearID]->state.z;
     qDebug() << "  Yaw = " << agent[nearID]->state.yaw;
     qDebug() << "  V = " << agent[nearID]->state.V;
     qDebug() << "  Accel = " << agent[nearID]->vehicle.input.accel;
@@ -2289,7 +2350,9 @@ void SystemThread::ShowAgentData(float x,float y)
                  << " Label=" << labelStr[ agent[nearID]->memory.perceptedObjects[i]->recognitionLabel ]
                  << " Dist=" << agent[nearID]->memory.perceptedObjects[i]->distanceToObject
                  << " e = " << agent[nearID]->memory.perceptedObjects[i]->deviationFromNearestTargetPath
-                 << " W = " << agent[nearID]->memory.perceptedObjects[i]->effectiveHalfWidth;
+                 << " W = " << agent[nearID]->memory.perceptedObjects[i]->effectiveHalfWidth
+                 << " Type = " << agent[nearID]->memory.perceptedObjects[i]->objectType
+                 << " Evaled = " << agent[nearID]->memory.perceptedObjects[i]->relPosEvaled;
     }
 
     qDebug() << "Recognizied Traffic Signal Info:";
@@ -2379,6 +2442,7 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "Guidance Info:";
     qDebug() << "  targetPathList = " << agent[nearID]->memory.targetPathList;
     qDebug() << "  currentPath = " << agent[nearID]->memory.currentTargetPath;
+    qDebug() << "  currentTargetPathIndexInList = " << agent[nearID]->memory.currentTargetPathIndexInList;
     qDebug() << "  myNodeList = " << agent[nearID]->memory.myNodeList;
     qDebug() << "  myInDirList = " << agent[nearID]->memory.myInDirList;
     qDebug() << "  myOutDirList = " << agent[nearID]->memory.myOutDirList;
@@ -2408,6 +2472,7 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  startRelay = " << agent[nearID]->param.startRelay;
     qDebug() << "  crossTimeSafetyMargin = " << agent[nearID]->param.crossTimeSafetyMargin;
     qDebug() << "  crossWaitPositionSafeyMargin = " << agent[nearID]->param.crossWaitPositionSafeyMargin;
+    qDebug() << "  pedestWaitPositionSafetyMargin = " << agent[nearID]->param.pedestWaitPositionSafetyMargin;
     qDebug() << "  safetyConfirmTime = " << agent[nearID]->param.safetyConfirmTime;
 
     qDebug() << "Debug Info:";
@@ -2416,3 +2481,12 @@ void SystemThread::ShowAgentData(float x,float y)
         qDebug() << "  " << QString(divStr[i]);
     }
 }
+
+
+void SystemThread::SetTmpStopTime(int hour,int min,int sec)
+{
+    tmpStopHour   = hour;
+    tmpStopMin    = min;
+    tmpStopSecond = sec;
+}
+

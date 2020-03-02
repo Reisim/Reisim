@@ -49,15 +49,21 @@ public:
     void SetConfFile(QString filename){ confFile = filename; }
     void LoadScenarioFile();
 
+    QList<QList<int> *> evalIDs;
+    int *pWorkingMode;
+
 signals:
     void UpdateSimulationTimeDisplay(QString);
     void SetAgentPointer(Agent**);
-    void SetTrafficSignalPointer(QList<TrafficSignal*>);
+    void SetTrafficSignalList(QList<TrafficSignal*>);
+    void SetTrafficSignalPointer(TrafficSignal*);
     void SetMaxNumberAgent(int);
     void SetNumberTrafficSignal(int);
     void RedrawRequest();
-    void SetRoadDataToCanvas(Road*);
+    void SetRoadPointer(Road*);
+    void TmpStopSimulation();
     void ExitProgram();
+
 
 
 public slots:
@@ -73,13 +79,7 @@ public slots:
     void SetLogOutputInterval(int);
     void SimulationStart();
     void SimulationStop();
-    void WrapSetVehicleParameter(int ID,int Type,
-                                 float length,
-                                 float width,
-                                 float height,
-                                 float wheelBase,
-                                 float distRR2RE,
-                                 float FRWeightRatio);
+
     void SimulationPause();
     void SimulationResume();
     void SetSpeedAdjustVal(int);
@@ -110,6 +110,8 @@ public slots:
     void ForceChangeSpeed(int,float);
 
     void ShowAgentData(float x,float y);
+    void SetTmpStopTime(int hour,int min,int sec);
+
 
 private:
     volatile bool stopped;
@@ -118,7 +120,6 @@ private:
 
     SimulationManager *simManage;
     Road *road;
-
     Agent** agent;
 
     QList<TrafficSignal*> trafficSignal;
@@ -147,6 +148,10 @@ private:
     QString logOutputFolder;
     QString logFileName;
     int logOutputInterval;
+
+    int tmpStopHour;
+    int tmpStopMin;
+    int tmpStopSecond;
 };
 
 #endif // SYSTEMTHREAD_H

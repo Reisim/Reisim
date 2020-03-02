@@ -13,11 +13,28 @@
 
 #include "agent.h"
 
+#include <QDebug>
+
+#ifdef _PERFORMANCE_CHECK_AGENT_RECOGNITION
+#include <windows.h>
+#endif
+
 
 void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
 {
 
+    if( cognitionCount != 0 ){
+        return;
+    }
+
+
     if( memory.controlMode == AGENT_CONTROL_MODE::AGENT_LOGIC ){
+
+#ifdef _PERFORMANCE_CHECK_AGENT_RECOGNITION
+        LARGE_INTEGER start4;
+        QueryPerformanceCounter(&start4);
+#endif
+
 
         for(int i=0;i<memory.perceptedObjects.size();++i){
 
@@ -25,26 +42,63 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                 continue;
             }
 
-            memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::UNDEFINED_RECOGNITION_LABEL;
-
-            if( memory.perceptedObjects[i]->objectType >= 100 ){
+            if( memory.perceptedObjects[i]->relPosEvaled == false ){
                 continue;
             }
 
+            if( memory.perceptedObjects[i]->objectType >= 100 ){
+                memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::PEDESTRIAN;
+                continue;
+            }
+            else{
+
+                if( memory.perceptedObjects[i]->myPathRecogLabelChecked == memory.currentTargetPath &&
+                        memory.perceptedObjects[i]->objPathRecogLabelChecked == memory.perceptedObjects[i]->objectPath ){
+                    continue;
+                }
+            }
+
+            memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::UNDEFINED_RECOGNITION_LABEL;
+
+            if( agentKind >= 100 ){
+                continue;
+            }
+
+
             int objPath = memory.perceptedObjects[i]->objectPath;
             bool isSameLane = false;
-            if( memory.targetPathList.indexOf( objPath ) >= 0 ){
+            int sameLaneIndex = memory.targetPathList.indexOf( objPath );
+            if( sameLaneIndex >= 0 ){
                 isSameLane = true;
             }
 
             if( isSameLane == true ){
 
-                if( memory.perceptedObjects[i]->distanceToObject > vHalfLength  ){
-                    memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::PRECEDING;
-
+                if( sameLaneIndex == memory.currentTargetPathIndexInList ){
+                    if( memory.perceptedObjects[i]->distanceToObject > vHalfLength ){
+                        memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::PRECEDING;
+                        memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                        memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                        continue;
+                    }
+                    else{
+                        memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::FOLLOWING;
+                        memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                        memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                        continue;
+                    }
                 }
-                else if( memory.perceptedObjects[i]->distanceToObject < -vHalfLength ){
+                else if( sameLaneIndex < memory.currentTargetPathIndexInList ){
+                    memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::PRECEDING;
+                    memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                    memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                    continue;
+                }
+                else if( sameLaneIndex > memory.currentTargetPathIndexInList  ){
                     memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::FOLLOWING;
+                    memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                    memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                    continue;
                 }
 
             }
@@ -62,6 +116,10 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
 
                 if( sameInDirect == true ){
 
+#ifdef _PERFORMANCE_CHECK_AGENT_RECOGNITION
+                    QueryPerformanceCounter(&start);
+#endif
+
                     // SIDE Vehicles
                     if( fabs(memory.perceptedObjects[i]->deviationFromNearestTargetPath - memory.lateralDeviationFromTargetPath) >=
                             memory.perceptedObjects[i]->effectiveHalfWidth + vHalfWidth + 0.5 ){
@@ -69,25 +127,42 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                         if( memory.perceptedObjects[i]->deviationFromNearestTargetPath > 0.0 ){
                             if( memory.perceptedObjects[i]->distanceToObject > vHalfLength + memory.perceptedObjects[i]->vHalfLength ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::LEFT_SIDE_PRECEDING;
-
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
                             }
                             else if( memory.perceptedObjects[i]->distanceToObject < -vHalfLength - memory.perceptedObjects[i]->vHalfLength ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::LEFT_SIDE_FOLLOWING;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
                             }
                             else{
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::LEFT_SIDE;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
                             }
                         }
                         else if( memory.perceptedObjects[i]->deviationFromNearestTargetPath < 0.0 ){
                             if( memory.perceptedObjects[i]->distanceToObject > vHalfLength + memory.perceptedObjects[i]->vHalfLength ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::RIGHT_SIDE_PRECEDING;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
 
                             }
                             else if( memory.perceptedObjects[i]->distanceToObject < -vHalfLength - memory.perceptedObjects[i]->vHalfLength ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::RIGHT_SIDE_FOLLOWING;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
                             }
                             else{
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::RIGHT_SIDE;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
                             }
                         }
                     }
@@ -95,12 +170,24 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
 
                         if( memory.perceptedObjects[i]->distanceToObject > vHalfLength  ){
                             memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::PRECEDING;
+                            memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                            memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                            continue;
 
                         }
                         else if( memory.perceptedObjects[i]->distanceToObject < -vHalfLength ){
                             memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::FOLLOWING;
+                            memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                            memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                            continue;
                         }
                     }
+
+#ifdef _PERFORMANCE_CHECK_AGENT_RECOGNITION
+                    QueryPerformanceCounter(&end);
+                    calTime[0] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+                    calCount[0]++;
+#endif
 
                 }
                 else{
@@ -112,37 +199,131 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                     int crossNodeObjInDir  = -1;
                     int crossNodeObjOutDir = -1;
 
-                    if( memory.currentTargetNode == pAgent[aID]->memory.currentTargetNode ){
+
+#ifdef _PERFORMANCE_CHECK_AGENT_RECOGNITION
+                    QueryPerformanceCounter(&start);
+#endif
+
+                    if( memory.currentTargetNode == pAgent[aID]->memory_reference.currentTargetNode ){
+
+//                        strForDebug += QString("[1][Recog] V=%1\n").arg( aID );
+//                        strForDebug += QString(" crossNode=%1\n").arg( memory.currentTargetNode );
+
+
                         crossNode          = memory.currentTargetNode;
                         crossNodeMyInDir   = memory.myInDirList.at( memory.currentTargetNodeIndexInNodeList );
-                        crossNodeObjInDir  = pAgent[aID]->memory.myInDirList.at( pAgent[aID]->memory.currentTargetNodeIndexInNodeList );
-                        crossNodeObjOutDir = pAgent[aID]->memory.myOutDirList.at( pAgent[aID]->memory.currentTargetNodeIndexInNodeList );
+
+                        int cTNIndex = pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList;
+
+
+//                        strForDebug += QString(" currentTargetNodeIndexInNodeList=%1\n").arg( cTNIndex );
+
+
+                        if( cTNIndex >= 0 && cTNIndex < pAgent[aID]->memory_reference.myInDirList.size() ){
+
+                            crossNodeObjInDir  = pAgent[aID]->memory_reference.myInDirList.at( cTNIndex );
+
+//                            strForDebug += QString(" crossNodeObjInDir=%1\n").arg( crossNodeObjInDir );
+
+                        }
+                        if( cTNIndex >= 0 && cTNIndex < pAgent[aID]->memory_reference.myOutDirList.size() ){
+
+                            crossNodeObjOutDir = pAgent[aID]->memory_reference.myOutDirList.at( cTNIndex );
+
+//                            strForDebug += QString(" crossNodeObjOutDir=%1\n").arg( crossNodeObjOutDir );
+                        }
+
+//                        for(int m=0;m<pAgent[aID]->memory_reference.myNodeList.size();++m){
+//                            strForDebug += QString(" I%1 - N%2 - O%3 \n").arg( pAgent[aID]->memory_reference.myInDirList.at(m) )
+//                                    .arg( pAgent[aID]->memory_reference.myNodeList.at(m) )
+//                                    .arg( pAgent[aID]->memory_reference.myOutDirList.at(m) );
+//                        }
                     }
                     else{
 
-                        int cnIdx = memory.myNodeList.indexOf( pAgent[aID]->memory.currentTargetNode );
+
+                        int cnIdx = memory.myNodeList.indexOf( pAgent[aID]->memory_reference.currentTargetNode );
                         if( cnIdx >= memory.currentTargetNodeIndexInNodeList ){
+
                             crossNode          = memory.myNodeList.at(cnIdx);
+
+//                            strForDebug += QString("[2][Recog] V=%1\n").arg( memory.perceptedObjects[i]->objectID );
+//                            strForDebug += QString(" crossNode=%1\n").arg( crossNode );
+
                             crossNodeMyInDir   = memory.myInDirList.at(cnIdx);
-                            crossNodeObjInDir  = pAgent[aID]->memory.myInDirList.at( pAgent[aID]->memory.currentTargetNodeIndexInNodeList );
-                            crossNodeObjOutDir = pAgent[aID]->memory.myOutDirList.at( pAgent[aID]->memory.currentTargetNodeIndexInNodeList );
+
+//                            strForDebug += QString(" currentTargetNodeIndexInNodeList=%1\n").arg( pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList );
+
+                            if( pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList >= 0 &&
+                                    pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList < pAgent[aID]->memory_reference.myInDirList.size() ){
+
+                                crossNodeObjInDir  = pAgent[aID]->memory_reference.myInDirList.at( pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList );
+
+//                                strForDebug += QString(" crossNodeObjInDir=%1\n").arg( crossNodeObjInDir );
+                            }
+                            if( pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList >= 0 &&
+                                    pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList < pAgent[aID]->memory_reference.myOutDirList.size() ){
+
+                                crossNodeObjOutDir = pAgent[aID]->memory_reference.myOutDirList.at( pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList );
+
+//                                strForDebug += QString(" crossNodeObjOutDir=%1\n").arg( crossNodeObjOutDir );
+                            }
                         }
                         else {
-                            for(int j=pAgent[aID]->memory.currentTargetNodeIndexInNodeList;j<pAgent[aID]->memory.myNodeList.size();++j){
-                                int cnIdx = memory.myNodeList.indexOf( pAgent[aID]->memory.myNodeList.at(j) );
-                                if( cnIdx >= memory.currentTargetNodeIndexInNodeList ){
-                                    crossNode          = memory.myNodeList.at(cnIdx);
-                                    crossNodeMyInDir   = memory.myInDirList.at(cnIdx);
-                                    crossNodeObjInDir  = pAgent[aID]->memory.myInDirList.at(j);
-                                    crossNodeObjOutDir = pAgent[aID]->memory.myOutDirList.at(j);
-                                    break;
+
+                            if( pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList >= 0 ){
+
+                                int nCheckObj = 0;
+                                for(int j=pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList;j<pAgent[aID]->memory_reference.myNodeList.size();++j){
+                                    nCheckObj++;
+                                    if( nCheckObj > 3){
+                                        break;
+                                    }
+                                    int nCheck = 0;
+                                    for(int k=memory.currentTargetNodeIndexInNodeList;k<memory.myNodeList.size();++k){
+                                        nCheck++;
+                                        if( nCheck > 3 ){
+                                            break;
+                                        }
+                                        if( pAgent[aID]->memory_reference.myNodeList.at(j) == memory.myNodeList.at(k) ){
+
+                                            crossNode          = memory.myNodeList.at(k);
+
+//                                            strForDebug += QString("[3][Recog] V=%1\n").arg( memory.perceptedObjects[i]->objectID );
+//                                            strForDebug += QString(" crossNode=%1\n").arg( crossNode );
+
+                                            crossNodeMyInDir   = memory.myInDirList.at(k);
+
+//                                            strForDebug += QString(" j=%1\n").arg( j );
+
+                                            crossNodeObjInDir  = pAgent[aID]->memory_reference.myInDirList.at(j);
+                                            crossNodeObjOutDir = pAgent[aID]->memory_reference.myOutDirList.at(j);
+
+//                                            strForDebug += QString(" crossNodeObjInDir=%1\n").arg( crossNodeObjInDir );
+//                                            strForDebug += QString(" crossNodeObjOutDir=%1\n").arg( crossNodeObjOutDir );
+
+                                            nCheckObj = 3;
+
+                                            break;
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
 
+#ifdef _PERFORMANCE_CHECK_AGENT_RECOGNITION
+                    QueryPerformanceCounter(&end);
+                    calTime[1] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+                    calCount[1]++;
+#endif
+
 
                     if( crossNode >= 0 ){
+
+#ifdef _PERFORMANCE_CHECK_AGENT_RECOGNITION
+                        QueryPerformanceCounter(&start);
+#endif
 
                         int dirLabel = DIRECTION_LABEL::STRAIGHT;
                         if( crossNodeObjOutDir >= 0 ){
@@ -150,43 +331,103 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                         }
 
                         int dir = pRoad->GetDirectionLabel( crossNode, crossNodeMyInDir, crossNodeObjInDir );
+
+//                        strForDebug += QString("[Recog] V=%1\n").arg( memory.perceptedObjects[i]->objectID );
+//                        strForDebug += QString(" crossNode=%1\n").arg( crossNode );
+//                        strForDebug += QString(" crossNodeMyInDir=%1\n").arg( crossNodeMyInDir );
+//                        strForDebug += QString(" crossNodeObjInDir=%1\n").arg( crossNodeObjInDir );
+//                        strForDebug += QString(" dir=%1\n").arg( dir );
+
                         if( dir == DIRECTION_LABEL::ONCOMING ){
                             if( dirLabel == DIRECTION_LABEL::RIGHT_CROSSING  ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::ONCOMING_RIGHT;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
                             }
                             else if( dirLabel == DIRECTION_LABEL::LEFT_CROSSING ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::ONCOMING_LEFT;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
                             }
                             else{
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::ONCOMING_STRAIGHT;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
                             }
                         }
                         else if( dir == DIRECTION_LABEL::LEFT_CROSSING ){
                             if( dirLabel == DIRECTION_LABEL::RIGHT_CROSSING  ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::LEFT_CROSSING_RIGHT;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
                             }
                             else if( dirLabel == DIRECTION_LABEL::LEFT_CROSSING ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::LEFT_CROSSING_LEFT;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
                             }
                             else{
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::LEFT_CROSSING_STRAIGHT;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
                             }
                         }
                         else if( dir == DIRECTION_LABEL::RIGHT_CROSSING ){
                             if( dirLabel == DIRECTION_LABEL::RIGHT_CROSSING  ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_RIGHT;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
                             }
                             else if( dirLabel == DIRECTION_LABEL::LEFT_CROSSING ){
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_LEFT;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
                             }
                             else{
                                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_STRAIGHT;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
                             }
                         }
+
+#ifdef _PERFORMANCE_CHECK_AGENT_RECOGNITION
+                        QueryPerformanceCounter(&end);
+                        calTime[2] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+                        calCount[2]++;
+#endif
                     }
                 }
             }
         }
+
+#ifdef _PERFORMANCE_CHECK_AGENT_RECOGNITION
+        QueryPerformanceCounter(&end);
+        calTime[4] += static_cast<double>(end.QuadPart - start4.QuadPart) * 1000.0 / freq.QuadPart;
+        calCount[4]++;
+#endif
+
+
+
+#ifdef _PERFORMANCE_CHECK_AGENT_RECOGNITION
+
+        for(int i=0;i<4;i++){
+            if( calCount[i] > 500 ){
+                calTime[i] /= calCount[i];
+                qDebug() << " [Recgnition] Mean Time[" << i << "] = " << calTime[i];
+                calCount[i] = 0;
+            }
+        }
+#endif
+
         return;
     }
 

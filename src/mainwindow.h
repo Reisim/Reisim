@@ -42,8 +42,10 @@ public:
     ~MainWindow();
 
     void LoadSettingFile(QString);
-    void CopyVehicleShapeParameter();
     GraphicCanvas *GetPointerGraphicCanvas() { return canvas; }
+
+protected:
+    void keyPressEvent(QKeyEvent *);
 
 signals:
     void SetScenraioFile(QString);
@@ -60,6 +62,7 @@ signals:
     void SetSpeedAdjustVal(int);
     void SetStopGraphicUpdate(bool);
     void SetSimulationFrequency(int);
+    void SetTmpStpoTime(int,int,int);
 
 
 public slots:

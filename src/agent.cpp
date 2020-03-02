@@ -71,6 +71,7 @@ Agent::Agent()
     param.startRelay = 1.0;
     param.crossTimeSafetyMargin = 4.0;
     param.crossWaitPositionSafeyMargin = 7.5;
+    param.pedestWaitPositionSafetyMargin = 5.0;
     param.safetyConfirmTime = 1.5;
 
 
@@ -117,19 +118,13 @@ void Agent::InitializeMemory()
     memory.currentTargetPath = -1;
     memory.currentTargetPathIndexInList = -1;
 
-//    if( memory.perceptedObjects.size() > 0 ){
-//        for(int i=0;i<memory.perceptedObjects.size();++i){
-//            delete memory.perceptedObjects[i];
-//        }
-//        memory.perceptedObjects.clear();
-//    }
+    for(int i=0;i<memory.perceptedObjects.size();++i){
+        memory.perceptedObjects[i]->isValidData = false;
+    }
 
-//    if( memory.perceptedSignals.size() > 0 ){
-//        for(int i=0;i<memory.perceptedSignals.size();++i){
-//            delete memory.perceptedSignals[i];
-//        }
-//        memory.perceptedSignals.clear();
-//    }
+    for(int i=0;i<memory.perceptedSignals.size();++i){
+        memory.perceptedSignals[i]->isValidData = false;
+    }
 
     memory.doHeadwayDistanceControl = false;
     memory.axHeadwayControl = 0.0;
@@ -163,3 +158,277 @@ void Agent::InitializeMemory()
     memory.isChaningLane = false;
 }
 
+
+void Agent::BackupMemory()
+{
+    memory_reference.flag = memory.flag;
+
+    // control output
+    memory_reference.accel = memory.accel;
+    memory_reference.brake = memory.brake;
+    memory_reference.steer = memory.steer;
+
+    memory_reference.overrideBrakeByScenario = memory.overrideBrakeByScenario;
+    memory_reference.overrideAxControl       = memory.overrideAxControl;
+
+    memory_reference.overrideSteerByScenario = memory.overrideSteerByScenario;
+    memory_reference.overrideSteerControl    = memory.overrideSteerControl;
+
+    memory_reference.additionalShiftByScenarioEvent = memory.additionalShiftByScenarioEvent;
+    memory_reference.additionalLateralShift         = memory.additionalLateralShift;
+
+    // control reference
+    memory_reference.controlMode = memory.controlMode;
+
+    memory_reference.distanceToZeroSpeed               = memory.distanceToZeroSpeed;
+    memory_reference.requiredDistToStopFromTargetSpeed = memory.requiredDistToStopFromTargetSpeed;
+
+    memory_reference.actualTargetSpeed                           = memory.actualTargetSpeed;
+    memory_reference.actualTargetHeadwayDistance                 = memory.actualTargetHeadwayDistance;
+    memory_reference.targetSpeed                                 = memory.targetSpeed;
+    memory_reference.targetHeadwayDistance                       = memory.targetHeadwayDistance;
+    memory_reference.targetSpeedByScenario                       = memory.targetSpeedByScenario;
+    memory_reference.actualTargetHeadwayDistanceByScenario       = memory.actualTargetHeadwayDistanceByScenario;
+    memory_reference.targetHeadwayDistanceByScenario             = memory.targetHeadwayDistanceByScenario;
+    memory_reference.allowableHeadwayDistDeviation               = memory.allowableHeadwayDistDeviation;
+    memory_reference.targetHeadwayTimeByScenario                 = memory.targetHeadwayTimeByScenario;
+    memory_reference.targetSpeedInsideIntersectionTurnByScenario = memory.targetSpeedInsideIntersectionTurnByScenario;
+    memory_reference.startDecel                                  = memory.startDecel;
+    memory_reference.activeBrakeInVelocityControl                = memory.activeBrakeInVelocityControl;
+
+    memory_reference.actualStopAtX           = memory.actualStopAtX;
+    memory_reference.actualStopAtY           = memory.actualStopAtY;
+    memory_reference.targetStopAtX           = memory.targetStopAtX;
+    memory_reference.targetStopAtY           = memory.targetStopAtY;
+    memory_reference.targetStopAtXByScenario = memory.targetStopAtXByScenario;
+    memory_reference.targetStopAtYByScenario = memory.targetStopAtYByScenario;
+    memory_reference.actualStopOnPathID      = memory.actualStopOnPathID;
+    memory_reference.actualStopOnPathIndex   = memory.actualStopOnPathIndex;
+    memory_reference.distToStopAtOnThePath   = memory.distToStopAtOnThePath;
+    memory_reference.distanceToStopPoint     = memory.distanceToStopPoint;
+
+    memory_reference.speedControlState      = memory.speedControlState;
+    memory_reference.distanceAdjustLowSpeed = memory.distanceAdjustLowSpeed;
+    memory_reference.axSpeedControl         = memory.axSpeedControl;
+
+    memory_reference.speedProfileCount = memory.speedProfileCount;
+
+    memory_reference.profileTime.clear();
+    for(int i=0;i<memory.profileTime.size();++i){
+        memory_reference.profileTime.append( memory.profileTime.at(i) );
+    }
+
+    memory_reference.profileSpeed.clear();
+    for(int i=0;i<memory.profileSpeed.size();++i){
+        memory_reference.profileSpeed.append( memory.profileSpeed.at(i) );
+    }
+
+    memory_reference.doHeadwayDistanceControl = memory.doHeadwayDistanceControl;
+    memory_reference.axHeadwayControl         = memory.axHeadwayControl;
+
+    memory_reference.doStopControl    = memory.doStopControl;
+    memory.causeOfStopControl         = memory.causeOfStopControl;
+    memory_reference.axStopControl    = memory.axStopControl;
+    memory_reference.releaseStopCount = memory.releaseStopCount;
+
+    memory_reference.doSteerControl                               = memory.doSteerControl;
+    memory_reference.lateralDeviationFromTargetPathAtPreviewPoint = memory.lateralDeviationFromTargetPathAtPreviewPoint;
+    memory_reference.previewPointPath                             = memory.previewPointPath;
+    memory_reference.lateralDeviationFromTargetPath               = memory.lateralDeviationFromTargetPath;
+    memory_reference.steeringControlGainMultiplier                = memory.steeringControlGainMultiplier;
+    memory_reference.lateralShiftTarget                           = memory.lateralShiftTarget;
+    memory_reference.avoidTarget                                  = memory.avoidTarget;
+
+    memory_reference.isChaningLane = memory.isChaningLane;
+
+
+    // hazard and risk valuation
+    memory_reference.precedingVehicleID           = memory.precedingVehicleID;
+    memory_reference.precedingVehicleIDByScenario = memory.precedingVehicleIDByScenario;
+    memory_reference.distanceToPrecedingVehicle   = memory.distanceToPrecedingVehicle;
+    memory_reference.speedPrecedingVehicle        = memory.speedPrecedingVehicle;
+    memory_reference.axPrecedingVehicle           = memory.axPrecedingVehicle;
+    memory_reference.precedingObstacle            = memory.precedingObstacle;
+
+    memory_reference.targetLateralShift           = memory.targetLateralShift;
+    memory_reference.targetLateralShiftByScenario = memory.targetLateralShiftByScenario;
+
+    memory_reference.distToNearOncomingCP     = memory.distToNearOncomingCP;
+    memory_reference.distToFatOncomingCP      = memory.distToFatOncomingCP;
+    memory_reference.shouldWaitOverCrossPoint = memory.shouldWaitOverCrossPoint;
+
+    memory_reference.distToNearestCP      = memory.distToNearestCP;
+    memory_reference.shouldStopAtSignalSL = memory.shouldStopAtSignalSL;
+
+    memory_reference.distToYeildStopLine  = memory.distToYeildStopLine;
+    memory_reference.shouldYeild          = memory.shouldYeild;
+    memory_reference.leftCrossIsClear     = memory.leftCrossIsClear;
+    memory_reference.rightCrossIsClear    = memory.rightCrossIsClear;
+    memory_reference.leftCrossCheckCount  = memory.leftCrossCheckCount;
+    memory_reference.rightCrossCheckCount = memory.rightCrossCheckCount;
+    memory_reference.safetyConfimed       = memory.safetyConfimed;
+    memory_reference.speedZeroCount       = memory.speedZeroCount;
+
+
+    // perception & recognition
+    int diffN = memory.perceptedObjects.size() - memory_reference.perceptedObjects.size();
+    if( diffN > 0 ){
+        for(int i=0;i<diffN;++i){
+            struct AgentPerception *ap = new struct AgentPerception;
+            memory_reference.perceptedObjects.append( ap );
+        }
+    }
+    for(int i=0;i<memory.perceptedObjects.size();++i){
+
+        memory_reference.perceptedObjects[i]->objectID    = memory.perceptedObjects[i]->objectID;
+        memory_reference.perceptedObjects[i]->objectType  = memory.perceptedObjects[i]->objectType;
+
+        memory_reference.perceptedObjects[i]->vHalfLength = memory.perceptedObjects[i]->vHalfLength;
+        memory_reference.perceptedObjects[i]->vHalfWidth  = memory.perceptedObjects[i]->vHalfWidth;
+
+        memory_reference.perceptedObjects[i]->x           = memory.perceptedObjects[i]->x;
+        memory_reference.perceptedObjects[i]->y           = memory.perceptedObjects[i]->y;
+        memory_reference.perceptedObjects[i]->yaw         = memory.perceptedObjects[i]->yaw;
+        memory_reference.perceptedObjects[i]->cos_yaw     = memory.perceptedObjects[i]->cos_yaw;
+        memory_reference.perceptedObjects[i]->sin_yaw     = memory.perceptedObjects[i]->sin_yaw;
+        memory_reference.perceptedObjects[i]->V           = memory.perceptedObjects[i]->V;
+        memory_reference.perceptedObjects[i]->Ax          = memory.perceptedObjects[i]->Ax;
+
+        memory_reference.perceptedObjects[i]->objectPath              = memory.perceptedObjects[i]->objectPath;
+        memory_reference.perceptedObjects[i]->objectTargetNode        = memory.perceptedObjects[i]->objectTargetNode;
+        memory_reference.perceptedObjects[i]->deviationFromObjectPath = memory.perceptedObjects[i]->deviationFromObjectPath;
+
+        memory_reference.perceptedObjects[i]->nearestTargetPath                = memory.perceptedObjects[i]->nearestTargetPath;
+        memory_reference.perceptedObjects[i]->deviationFromNearestTargetPath   = memory.perceptedObjects[i]->deviationFromNearestTargetPath;
+        memory_reference.perceptedObjects[i]->distanceToObject                 = memory.perceptedObjects[i]->distanceToObject;
+        memory_reference.perceptedObjects[i]->xOnTargetPath                    = memory.perceptedObjects[i]->xOnTargetPath;
+        memory_reference.perceptedObjects[i]->yOnTargetPath                    = memory.perceptedObjects[i]->yOnTargetPath;
+        memory_reference.perceptedObjects[i]->innerProductToNearestPathTangent = memory.perceptedObjects[i]->innerProductToNearestPathTangent;
+        memory_reference.perceptedObjects[i]->innerProductToNearestPathNormal  = memory.perceptedObjects[i]->innerProductToNearestPathNormal;
+        memory_reference.perceptedObjects[i]->effectiveHalfWidth               = memory.perceptedObjects[i]->effectiveHalfWidth;
+
+        memory_reference.perceptedObjects[i]->recognitionLabel = memory.perceptedObjects[i]->recognitionLabel;
+
+        memory_reference.perceptedObjects[i]->hasCollisionPoint  = memory.perceptedObjects[i]->hasCollisionPoint;
+        memory_reference.perceptedObjects[i]->xCP                = memory.perceptedObjects[i]->xCP;
+        memory_reference.perceptedObjects[i]->yCP                = memory.perceptedObjects[i]->yCP;
+        memory_reference.perceptedObjects[i]->myDistanceToCP     = memory.perceptedObjects[i]->myDistanceToCP;
+        memory_reference.perceptedObjects[i]->myTimeToCP         = memory.perceptedObjects[i]->myTimeToCP;
+        memory_reference.perceptedObjects[i]->objectDistanceToCP = memory.perceptedObjects[i]->objectDistanceToCP;
+        memory_reference.perceptedObjects[i]->objectTimeToCP     = memory.perceptedObjects[i]->objectTimeToCP;
+        memory_reference.perceptedObjects[i]->CPinNode           = memory.perceptedObjects[i]->CPinNode;
+
+        memory_reference.perceptedObjects[i]->myCPPathIndex      = memory.perceptedObjects[i]->myCPPathIndex;
+        memory_reference.perceptedObjects[i]->objCPPathIndex     = memory.perceptedObjects[i]->objCPPathIndex;
+        memory_reference.perceptedObjects[i]->objPathCPChecked   = memory.perceptedObjects[i]->objPathCPChecked;
+
+        memory_reference.perceptedObjects[i]->shouldEvalRisk = memory.perceptedObjects[i]->shouldEvalRisk;
+
+        memory_reference.perceptedObjects[i]->inView        = memory.perceptedObjects[i]->inView;
+        memory_reference.perceptedObjects[i]->noUpdateCount = memory.perceptedObjects[i]->noUpdateCount;
+        memory_reference.perceptedObjects[i]->isValidData   = memory.perceptedObjects[i]->isValidData;
+    }
+
+    diffN = memory.perceptedSignals.size() - memory_reference.perceptedSignals.size();
+    if( diffN > 0 ){
+        for(int i=0;i<diffN;++i){
+            struct TrafficSignalPerception *tsp = new struct TrafficSignalPerception;
+            memory_reference.perceptedSignals.append( tsp );
+        }
+    }
+    for(int i=0;i<memory.perceptedSignals.size();++i){
+
+        memory_reference.perceptedSignals[i]->objectID    = memory.perceptedSignals[i]->objectID;
+        memory_reference.perceptedSignals[i]->objectType  = memory.perceptedSignals[i]->objectType;
+
+        memory_reference.perceptedSignals[i]->x           = memory.perceptedSignals[i]->x;
+        memory_reference.perceptedSignals[i]->y           = memory.perceptedSignals[i]->y;
+        memory_reference.perceptedSignals[i]->yaw         = memory.perceptedSignals[i]->yaw;
+        memory_reference.perceptedSignals[i]->relatedNode = memory.perceptedSignals[i]->relatedNode;
+
+        memory_reference.perceptedSignals[i]->signalDisplay  = memory.perceptedSignals[i]->signalDisplay;
+
+        memory_reference.perceptedSignals[i]->stopLineX      = memory.perceptedSignals[i]->stopLineX;
+        memory_reference.perceptedSignals[i]->stopLineY      = memory.perceptedSignals[i]->stopLineY;
+        memory_reference.perceptedSignals[i]->distToSL       = memory.perceptedSignals[i]->distToSL;
+        memory_reference.perceptedSignals[i]->SLonPathID     = memory.perceptedSignals[i]->SLonPathID;
+        memory_reference.perceptedSignals[i]->stopPointIndex = memory.perceptedSignals[i]->stopPointIndex;
+
+        memory_reference.perceptedSignals[i]->inView        = memory.perceptedSignals[i]->inView;
+        memory_reference.perceptedSignals[i]->noUpdateCount = memory.perceptedSignals[i]->noUpdateCount;
+        memory_reference.perceptedSignals[i]->isValidData   = memory.perceptedSignals[i]->isValidData;
+    }
+
+
+    // guidance
+    memory_reference.targetPathList.clear();
+    for(int i=0;i<memory.targetPathList.size();++i){
+        memory_reference.targetPathList.append( memory.targetPathList.at(i) );
+    }
+
+    memory_reference.targetPathLength.clear();
+    for(int i=0;i<memory.targetPathLength.size();++i){
+        memory_reference.targetPathLength.append( memory.targetPathLength.at(i) );
+    }
+
+    memory_reference.targetPathListBackup.clear();
+    for(int i=0;i<memory.targetPathListBackup.size();++i){
+        memory_reference.targetPathListBackup.append( memory.targetPathListBackup.at(i) );
+    }
+
+    memory_reference.currentTargetPath                = memory.currentTargetPath;
+    memory_reference.currentTargetPathIndexInList     = memory.currentTargetPathIndexInList;
+    memory_reference.distanceFromStartWPInCurrentPath = memory.distanceFromStartWPInCurrentPath;
+
+    memory_reference.scenarioPathSelectID   = memory.scenarioPathSelectID;
+    memory_reference.distanceToTurnNodeWPIn = memory.distanceToTurnNodeWPIn;
+    memory_reference.distanceToNodeWPIn     = memory.distanceToNodeWPIn;
+
+    memory_reference.myNodeList.clear();
+    for(int i=0;i<memory.myNodeList.size();++i){
+        memory_reference.myNodeList.append( memory.myNodeList.at(i) );
+    }
+
+    memory_reference.myInDirList.clear();
+    for(int i=0;i<memory.myInDirList.size();++i){
+        memory_reference.myInDirList.append(memory.myInDirList.at(i) );
+    }
+
+    memory_reference.myOutDirList.clear();
+    for(int i=0;i<memory.myOutDirList.size();++i){
+        memory_reference.myOutDirList.append( memory.myOutDirList.at(i) );
+    }
+
+    memory_reference.myTurnDirectionList.clear();
+    for(int i=0;i<memory.myTurnDirectionList.size();++i){
+        memory_reference.myTurnDirectionList.append( memory.myTurnDirectionList.at(i) );
+    }
+
+    memory_reference.currentTargetNode                = memory.currentTargetNode;
+    memory_reference.currentTargetNodeIndexInNodeList = memory.currentTargetNodeIndexInNodeList;
+    memory_reference.nextTurnDirection                = memory.nextTurnDirection;
+    memory_reference.nextTurnNode                     = memory.nextTurnNode;
+    memory_reference.nextTurnNodeIndexInNodeList      = memory.nextTurnNodeIndexInNodeList;
+
+    memory_reference.oncomingWaitPathList.clear();
+    for(int i=0;i<memory.oncomingWaitPathList.size();++i){
+        memory_reference.oncomingWaitPathList.append( memory.oncomingWaitPathList.at(i) );
+    }
+
+    memory_reference.oncomingWaitCPList.clear();
+    for(int i=0;i<memory.oncomingWaitCPList.size();++i){
+        memory_reference.oncomingWaitCPList.append( memory.oncomingWaitCPList.at(i) );
+    }
+
+    memory_reference.nextTurnNodeOncomingDir  = memory.nextTurnNodeOncomingDir;
+    memory_reference.nearOncomingWaitPathInfo = memory.nearOncomingWaitPathInfo;
+    memory_reference.nearOncomingWaitCPInfo   = memory.nearOncomingWaitCPInfo;
+    memory_reference.farOncomingWaitPathInfo  = memory.farOncomingWaitPathInfo;
+    memory_reference.farOncomingWaitCPInfo    = memory.farOncomingWaitCPInfo;
+
+
+
+    // navigation
+    memory_reference.routeType  = memory.routeType;
+    memory_reference.routeIndex = memory.routeIndex;
+}

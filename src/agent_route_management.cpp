@@ -99,38 +99,25 @@ void Agent::CheckPathList(Road* pRoad)
             return;
         }
 
-        float dx = state.x - pRoad->pedestPaths[idx]->x1;
-        float dy = state.y - pRoad->pedestPaths[idx]->y1;
-        float S = dx * pRoad->pedestPaths[idx]->eX + dy * pRoad->pedestPaths[idx]->eY;
+        int sIdx = memory.currentTargetPathIndexInList;
 
-//        qDebug() << "x = " << state.x << " y = " << state.y;
-//        qDebug() << "x1 = " << pRoad->pedestPaths[idx]->x1 << " y1 = " << pRoad->pedestPaths[idx]->y1;
-//        qDebug() << "x1 = " << pRoad->pedestPaths[idx]->eX << " y1 = " << pRoad->pedestPaths[idx]->eY;
-//        qDebug() << "S = " << S;
+        float dx = state.x - pRoad->pedestPaths[idx]->shape[sIdx]->pos.x();
+        float dy = state.y - pRoad->pedestPaths[idx]->shape[sIdx]->pos.y();
+        float S = dx * (pRoad->pedestPaths[idx]->shape[sIdx]->cosA) + dy * (pRoad->pedestPaths[idx]->shape[sIdx]->sinA);
+
+//        qDebug() << "S = " << S << " Dist = " << pRoad->pedestPaths[idx]->shape[sIdx]->distanceToNextPos;
 
         // if arrived at near(0.5[m]) edge of the pedest-path,
-        if( (memory.currentTargetDirectionPedestPath == 1 && S < 0.5) ||
-             (memory.currentTargetDirectionPedestPath == 2 && S > pRoad->pedestPaths[idx]->Length - 0.5) ){
+        if( pRoad->pedestPaths[idx]->shape[sIdx]->distanceToNextPos - S < 1.0 ){
 
-            if( memory.targetPathList.indexOf( memory.currentTargetPath ) == 0 ){
+//            qDebug() << "Near Termination";
+
+            if( sIdx == pRoad->pedestPaths[idx]->shape.size() - 2 ){
                 // Agent reached goal
                 agentStatus = 2;
             }
             else{
-                for(int i=memory.targetPathList.size()-1;i>=1;i--){
-                    if( memory.targetPathList[i] == memory.currentTargetPath ){
-                        int lastTargetPath = memory.currentTargetPath;
-                        memory.currentTargetPath = memory.targetPathList[i-1];
-                        int dir = pRoad->GetDirectionByPedestPathLink( memory.currentTargetPath, lastTargetPath );
-                        if( dir == 1 ){
-                            memory.currentTargetDirectionPedestPath = 2;
-                        }
-                        else if( dir == 2){
-                            memory.currentTargetDirectionPedestPath = 1;
-                        }
-                    }
-                }
-
+                memory.currentTargetPathIndexInList++;
             }
         }
     }

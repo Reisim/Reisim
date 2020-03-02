@@ -54,8 +54,10 @@ void Road::ClearRoadData()
 
     if( pedestPaths.size() > 0 ){
         for(int i=0;i<pedestPaths.size();++i){
-            pedestPaths[i]->connectedPedestPath1.clear();
-            pedestPaths[i]->connectedPedestPath2.clear();
+            for(int j=0;j<pedestPaths[i]->shape.size();++j){
+                delete pedestPaths[i]->shape[j];
+            }
+            pedestPaths[i]->shape.clear();
             delete pedestPaths[i];
         }
         pedestPaths.clear();
@@ -259,6 +261,44 @@ void Road::LoadRoadData(QString filename)
                 }
             }
         }
+        else if( tag == QString("PedestCrossPoint") ){
+
+            QStringList elem = QString( divLine[1]).split(",");
+
+            int pathID = QString( elem[0] ).trimmed().toInt();
+
+            for(int i=0;i<paths.size();++i){
+                if( paths[i]->id == pathID ){
+
+                    for(int j=1;j<elem.size();++j){
+
+                        QStringList cpData = QString( elem[j] ).trimmed().split("/");
+
+                        if( cpData.size() == 8 ){
+
+                            struct PedestCrossPoint *pcp = new struct PedestCrossPoint;
+
+                            pcp->crossPathID = QString( cpData[0] ).trimmed().toInt();
+                            pcp->sectionIndex = QString( cpData[1] ).trimmed().toInt();
+                            pcp->pos.setX( QString( cpData[2] ).trimmed().toFloat() );
+                            pcp->pos.setY( QString( cpData[3] ).trimmed().toFloat() );
+                            pcp->pos.setZ( QString( cpData[4] ).trimmed().toFloat() );
+                            pcp->derivative.setX( QString( cpData[5] ).trimmed().toFloat() );
+                            pcp->derivative.setY( QString( cpData[6] ).trimmed().toFloat() );
+                            pcp->distFromStartWP = QString( cpData[7] ).trimmed().toFloat();
+
+                            paths[i]->pedestCrossPoints.append( pcp );
+                        }
+                        else{
+                            qDebug() << "Invalid Data : PedestCrossPoint of Path " << pathID << ", size of cpData = " << cpData.size();
+                            qDebug() << "  Data = " << QString( elem[j] );
+                        }
+
+                    }
+                    break;
+                }
+            }
+        }
         else if( tag == QString("StopPoint") ){
 
             QStringList elem = QString( divLine[1]).split(",");
@@ -298,34 +338,49 @@ void Road::LoadRoadData(QString filename)
                 }
             }
         }
-        else if( tag == QString("PedestPath") ){
+        else if( tag == QString("Pedest-Path") ){
 
             struct PedestPath* path = new struct PedestPath;
 
-            QStringList elem = QString( divLine[1]).split(",");
-
-            path->id = QString( elem[0] ).trimmed().toInt();
-
-            path->x1  = QString( elem[1] ).trimmed().toFloat();
-            path->y1  = QString( elem[2] ).trimmed().toFloat();
-            path->z1  = QString( elem[3] ).trimmed().toFloat();
-
-            path->x2  = QString( elem[4] ).trimmed().toFloat();
-            path->y2  = QString( elem[5] ).trimmed().toFloat();
-            path->z2  = QString( elem[6] ).trimmed().toFloat();
-
-            path->width  = QString( elem[7] ).trimmed().toFloat();
-            if( QString( elem[8] ).trimmed().toInt() == 1 ){
-                path->isCrossWalk  = true;
-            }
-            else{
-                path->isCrossWalk  = false;
-            }
-            path->roadSideDirection  = QString( elem[9] ).trimmed().toInt();
-
+            path->id = QString( divLine[1] ).trimmed().toInt();
             path->scenarioObjectID = -1;
 
             pedestPaths.append( path );
+        }
+        else if ( tag == QString("Pedest-Path Shape") ) {
+
+            struct PedestPathShapeInfo *si = new struct PedestPathShapeInfo;
+
+            QStringList elem = QString( divLine[1]).split(",");
+
+            si->pos.setX( QString( elem[0] ).trimmed().toFloat() );
+            si->pos.setY( QString( elem[1] ).trimmed().toFloat() );
+            si->pos.setZ( QString( elem[2] ).trimmed().toFloat() );
+            si->width = QString( elem[3] ).trimmed().toFloat();
+            si->distanceToNextPos = QString( elem[4] ).trimmed().toFloat();
+            si->angleToNextPos = QString( elem[5] ).trimmed().toFloat();  // [rad]
+            si->cosA = cos( si->angleToNextPos );
+            si->sinA = sin( si->angleToNextPos );
+
+            pedestPaths.last()->shape.append( si );
+        }
+        else if ( tag == QString("Pedest-Path Property") ) {
+
+            QStringList elem = QString( divLine[1]).split(",");
+
+            pedestPaths.last()->shape.last()->isCrossWalk = ( QString( elem[0] ).trimmed().toInt() == 1 ? true : false );
+            pedestPaths.last()->shape.last()->controlPedestSignalID = QString( elem[1] ).trimmed().toInt();
+            pedestPaths.last()->shape.last()->runOutProb = QString( elem[2] ).trimmed().toFloat();
+            pedestPaths.last()->shape.last()->runOutDirect = QString( elem[3] ).trimmed().toInt();
+
+        }
+        else if ( tag == QString("Pedest-Path Traffic") ) {
+
+            QStringList elem = QString( divLine[1]).split(",");
+
+            for(int i=0;i<elem.size();++i){
+                pedestPaths.last()->trafficVolume.append( QString( elem[i] ).trimmed().toInt() );
+            }
         }
         else if( tag == QString("Node") ){
 
@@ -590,6 +645,8 @@ void Road::LoadRoadData(QString filename)
 
                 struct ObjectCategoryAndSize *k = new ObjectCategoryAndSize;
 
+                k->id = vehicleKind.size();
+
                 k->category    = QString( elem[0] ).trimmed();
                 k->subcategory = QString( elem[1] ).trimmed();
 
@@ -606,6 +663,8 @@ void Road::LoadRoadData(QString filename)
             if( elem.size() == 5 ){
 
                 struct ObjectCategoryAndSize *k = new ObjectCategoryAndSize;
+
+                k->id = pedestrianKind.size();
 
                 k->category    = QString( elem[0] ).trimmed();
                 k->subcategory = QString( elem[1] ).trimmed();
@@ -692,6 +751,8 @@ void Road::LoadRoadData(QString filename)
     //  Set Extra PedestPath Data
     //
     CheckPedestPathConnection();
+
+    SetPedestPathArrivalTimes();
 
 
 
@@ -1266,7 +1327,7 @@ void Road::CreatePathsforScenarioObject(int objectID)
 //    qDebug() << "    objectID = " << objectID;
 
 
-    QVector<int> wpList;
+    QList<int> wpList;
     for(int i=0;i<wps.size();++i){
         if( wps[i]->scenarioObjectID == objectID ){
             wpList.append( i );
@@ -1334,34 +1395,84 @@ int Road::CreatePedestPathsforScenarioObject(int objectID,
     qDebug() << "[Road::CreatePedestPathsforScenarioObject]";
     qDebug() << "    objectID = " << objectID;
 
-    struct PedestPath* ppath = new struct PedestPath;
-
     int maxID = 0;
-    for(int j=0;j<pedestPaths.size();++j){
-        if( maxID <= pedestPaths[j]->id ){
-            maxID = pedestPaths[j]->id + 1;
+
+    bool createNew = true;
+    for(int i=0;i<pedestPaths.size();++i){
+        if( pedestPaths[i]->scenarioObjectID == objectID ){
+            createNew = false;
+            maxID = i;
+            break;
         }
     }
 
-    ppath->id = maxID;
+    if( createNew == true ){
 
-    ppath->x1 = x1;
-    ppath->y1 = y1;
-    ppath->z1 = z1;
+        struct PedestPath* ppath = new struct PedestPath;
+        maxID = 0;
+        for(int j=0;j<pedestPaths.size();++j){
+            if( maxID <= pedestPaths[j]->id ){
+                maxID = pedestPaths[j]->id + 1;
+            }
+        }
+        ppath->id = maxID;
+        ppath->scenarioObjectID = objectID;
 
-    ppath->x2 = x2;
-    ppath->y2 = y2;
-    ppath->z2 = z2;
+        pedestPaths.append( ppath );
+        pedestPathID2Index.append( maxID );
 
-    ppath->isCrossWalk = isCrossWalk;
-    ppath->roadSideDirection = roadSideInfo;
-    ppath->width = w;
+        struct PedestPathShapeInfo *si1 = new struct PedestPathShapeInfo;
+        si1->pos.setX( x1 );
+        si1->pos.setY( y1 );
+        si1->pos.setZ( z1 );
 
-    ppath->scenarioObjectID = objectID;
+        si1->width = w;
+        si1->isCrossWalk = isCrossWalk;
+        si1->runOutProb = 0.0;
+        si1->runOutDirect = roadSideInfo;
+        si1->angleToNextPos = 0.0;
+        si1->distanceToNextPos = 0.0;
 
-    pedestPaths.append( ppath );
+        ppath->shape.append( si1 );
 
-    pedestPathID2Index.append( maxID );
+        struct PedestPathShapeInfo *si2 = new struct PedestPathShapeInfo;
+        si2->pos.setX( x2 );
+        si2->pos.setY( y2 );
+        si2->pos.setZ( z2 );
+
+        si2->width = 0.0;
+        si2->isCrossWalk = false;
+        si2->runOutProb = 0.0;
+        si2->runOutDirect = 0;
+        si2->angleToNextPos = 0.0;
+        si2->distanceToNextPos = 0.0;
+
+        ppath->shape.append( si2 );
+
+    }
+    else{
+
+        pedestPaths[maxID]->shape.last()->width = w;
+        pedestPaths[maxID]->shape.last()->isCrossWalk = isCrossWalk;
+        pedestPaths[maxID]->shape.last()->runOutProb = 0.0;
+        pedestPaths[maxID]->shape.last()->runOutDirect = roadSideInfo;
+
+        struct PedestPathShapeInfo *si2 = new struct PedestPathShapeInfo;
+        si2->pos.setX( x2 );
+        si2->pos.setY( y2 );
+        si2->pos.setZ( z2 );
+
+        si2->width = 0.0;
+        si2->isCrossWalk = false;
+        si2->runOutProb = 0.0;
+        si2->runOutDirect = 0;
+        si2->angleToNextPos = 0.0;
+        si2->distanceToNextPos = 0.0;
+
+        pedestPaths[maxID]->shape.append( si2 );
+
+        maxID = pedestPaths[maxID]->id;
+    }
 
     return maxID;
 }
@@ -1373,93 +1484,61 @@ void Road::CheckPedestPathConnection()
     qDebug() << "    nPedestPath = " << pedestPaths.size();
 
     for(int i=0;i<pedestPaths.size();++i){
-
-        pedestPaths[i]->connectedPedestPath1.clear();
-        pedestPaths[i]->connectedPedestPath2.clear();
-
-        float eX = pedestPaths[i]->x2 - pedestPaths[i]->x1;
-        float eY = pedestPaths[i]->y2 - pedestPaths[i]->y1;
-        float L = sqrt( eX * eX + eY * eY );
-        eX /= L;
-        eY /= L;
-
-        pedestPaths[i]->eX = eX;
-        pedestPaths[i]->eY = eY;
-        pedestPaths[i]->Length = L;
-
-        float xt = pedestPaths[i]->x1;
-        float yt = pedestPaths[i]->y1;
-        for(int j=0;j<pedestPaths.size();++j){
-            if( i == j ){
-                continue;
-            }
-
-            float x = pedestPaths[j]->x1;
-            float y = pedestPaths[j]->y1;
-
-            float dx = x - xt;
-            float dy = y - yt;
-            float L = dx * dx + dy * dy;
-            if( L < 1.0 ){
-                pedestPaths[i]->connectedPedestPath1.append( pedestPaths[j]->id );
-                continue;
-            }
-
-            x = pedestPaths[j]->x2;
-            y = pedestPaths[j]->y2;
-
-            dx = x - xt;
-            dy = y - yt;
-            L = dx * dx + dy * dy;
-            if( L < 1.0 ){
-                pedestPaths[i]->connectedPedestPath1.append( pedestPaths[j]->id );
-                continue;
-            }
+        if( pedestPaths[i]->scenarioObjectID < 0 ){
+            continue;
         }
 
-        xt = pedestPaths[i]->x2;
-        yt = pedestPaths[i]->y2;
-        for(int j=0;j<pedestPaths.size();++j){
-            if( i == j ){
-                continue;
-            }
+        for(int j=0;j<pedestPaths[i]->shape.size()-1;++j){
 
-            float x = pedestPaths[j]->x1;
-            float y = pedestPaths[j]->y1;
+            float dx = pedestPaths[i]->shape[j+1]->pos.x() - pedestPaths[i]->shape[j]->pos.x();
+            float dy = pedestPaths[i]->shape[j+1]->pos.y() - pedestPaths[i]->shape[j]->pos.y();
 
-            float dx = x - xt;
-            float dy = y - yt;
-            float L = dx * dx + dy * dy;
-            if( L < 1.0 ){
-                pedestPaths[i]->connectedPedestPath2.append( pedestPaths[j]->id );
-                continue;
-            }
+            pedestPaths[i]->shape[j]->angleToNextPos = atan2( dy, dx );
+            pedestPaths[i]->shape[j]->cosA = cos( pedestPaths[i]->shape[j]->angleToNextPos );
+            pedestPaths[i]->shape[j]->sinA = sin( pedestPaths[i]->shape[j]->angleToNextPos );
 
-            x = pedestPaths[j]->x2;
-            y = pedestPaths[j]->y2;
+            pedestPaths[i]->shape[j]->distanceToNextPos = sqrt( dx * dx + dy * dy );
 
-            dx = x - xt;
-            dy = y - yt;
-            L = dx * dx + dy * dy;
-            if( L < 1.0 ){
-                pedestPaths[i]->connectedPedestPath2.append( pedestPaths[j]->id );
-                continue;
-            }
-        }
-    }
-
-    for(int i=0;i<pedestPaths.size();++i){
-        qDebug() << "PedestPath[" << pedestPaths[i]->id << "]";
-        qDebug() << "    Edge 1 : ";
-        for(int j=0;j<pedestPaths[i]->connectedPedestPath1.size();++j){
-            qDebug() << "        pp [" << pedestPaths[i]->connectedPedestPath1[j] << "]";
-        }
-        qDebug() << "    Edge 2 : ";
-        for(int j=0;j<pedestPaths[i]->connectedPedestPath2.size();++j){
-            qDebug() << "        pp [" << pedestPaths[i]->connectedPedestPath2[j] << "]";
         }
     }
 }
+
+
+void Road::SetPedestPathArrivalTimes()
+{
+    qDebug() << "[Road::SetPedestPathArrivalTimes]";
+
+    for(int i=0;i<pedestPaths.size();++i){
+        if( pedestPaths[i]->scenarioObjectID >= 0 ){
+            pedestPaths[i]->meanArrivalTime = -1.0;
+            continue;
+        }
+
+        pedestPaths[i]->totalVolume = 0;
+        for(int j=0;j<pedestPaths[i]->trafficVolume.size();++j){
+            pedestPaths[i]->totalVolume += pedestPaths[i]->trafficVolume[j];
+        }
+
+        qDebug() << "pedestPath: id=" << pedestPaths[i]->id << " totalVolume = " << pedestPaths[i]->totalVolume;
+
+        if( pedestPaths[i]->totalVolume > 0 ){
+
+            pedestPaths[i]->pedestKindSelectProbability.clear();
+            for(int j=0;j<pedestPaths[i]->trafficVolume.size();++j){
+                float p = (float)pedestPaths[i]->trafficVolume[j] / (float)pedestPaths[i]->totalVolume;
+                pedestPaths[i]->pedestKindSelectProbability.append( p );
+            }
+
+            pedestPaths[i]->meanArrivalTime = 3600.0 / pedestPaths[i]->totalVolume;
+            pedestPaths[i]->NextAppearTime = -1.0;   // This value is updated at simulationmangaer.cpp
+
+        }
+        else {
+            pedestPaths[i]->meanArrivalTime = -1.0;
+        }
+    }
+}
+
 
 
 int Road::RandomSelect(int N, float rnd)

@@ -17,7 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <QVector>
+#include <QList>
 
 #include "vehicle.h"
 #include "road.h"
@@ -65,7 +65,8 @@ enum AGENT_RECOGNITION_LABEL
     RIGHT_CROSSING_STRAIGHT,
     RIGHT_CROSSING_LEFT,
     RIGHT_CROSSING_RIGHT,
-    UNDEFINED_RECOGNITION_LABEL
+    UNDEFINED_RECOGNITION_LABEL,
+    PEDESTRIAN
 };
 
 struct AgentPerception
@@ -88,6 +89,7 @@ struct AgentPerception
     int objectTargetNode;
     float deviationFromObjectPath;
 
+    bool relPosEvaled;
     int nearestTargetPath;
     float deviationFromNearestTargetPath;
     float distanceToObject;
@@ -98,8 +100,11 @@ struct AgentPerception
     float effectiveHalfWidth;
 
     int recognitionLabel;
+    int objPathRecogLabelChecked;
+    int myPathRecogLabelChecked;
 
     bool hasCollisionPoint;
+    bool mergingAsCP;
     float xCP;
     float yCP;
     float myDistanceToCP;
@@ -107,6 +112,10 @@ struct AgentPerception
     float objectDistanceToCP;
     float objectTimeToCP;
     int CPinNode;
+
+    int myCPPathIndex;
+    int objCPPathIndex;
+    int objPathCPChecked;
 
     bool shouldEvalRisk;
 
@@ -193,8 +202,8 @@ struct AgentMemory
     float axSpeedControl;
 
     int speedProfileCount;
-    QVector<float> profileTime;
-    QVector<float> profileSpeed;
+    QList<float> profileTime;
+    QList<float> profileSpeed;
 
     bool doHeadwayDistanceControl;
     float axHeadwayControl;
@@ -250,13 +259,13 @@ struct AgentMemory
 
 
     // guidance
-    QVector<int> targetPathList;
+    QList<int> targetPathList;
     QList<float> targetPathLength;
-    QVector<int> targetPathListBackup;
+    QList<int> targetPathListBackup;
     int currentTargetPath;
     int currentTargetPathIndexInList;
     float distanceFromStartWPInCurrentPath;
-    int currentTargetDirectionPedestPath;
+
     int scenarioPathSelectID;
     float distanceToTurnNodeWPIn;
     float distanceToNodeWPIn;
@@ -302,6 +311,7 @@ struct AgentParam
     float startRelay;
     float crossTimeSafetyMargin;
     float crossWaitPositionSafeyMargin;
+    float pedestWaitPositionSafetyMargin;
     float safetyConfirmTime;
 };
 
@@ -354,13 +364,14 @@ public:
 
     float calInterval;
     void InitializeMemory();
+    void BackupMemory();
 
     void Perception( Agent**, int, Road*, QList<TrafficSignal*> trafficSignal );
     void Recognition( Agent**, int, Road* ) ;
     void HazardIdentification( Agent**, int,Road* );
     void RiskEvaluation( Agent**, int, Road* );
     void Control(Road*);
-    void UpdateState();
+    void UpdateState(Road*);
 
 
     void SpeedControl();
@@ -387,6 +398,9 @@ public:
     struct AgentParam      param;
     struct AgentState      state;
 
+    struct AgentMemory     memory_reference;
+
+
     QString strForDebug;
 
     Vehicle vehicle;
@@ -395,6 +409,15 @@ public:
 
     bool justWarped;
     bool skipSetControlInfo;
+
+    int cognitionCountMax;
+    int cognitionCount;
+
+    int decisionMakingCountMax;
+    int decisionMalingCount;
+
+    int controlCountMax;
+    int controlCount;
 
 
 #ifdef _PERFORMANCE_CHECK_AGENT

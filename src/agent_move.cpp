@@ -14,7 +14,7 @@
 #include "agent.h"
 #include <QDebug>
 
-void Agent::UpdateState()
+void Agent::UpdateState(Road* pRoad)
 {
     if( agentKind < 100 ){
 
@@ -44,6 +44,18 @@ void Agent::UpdateState()
         state.x   = vehicle.state.X;
         state.y   = vehicle.state.Y;
         state.z   = vehicle.state.Z;
+
+        if( memory.currentTargetPath >= 0 ){
+            int pIdx = pRoad->pathId2Index.indexOf( memory.currentTargetPath );
+            if( pIdx >= 0 ){
+                float z = pRoad->paths[pIdx]->pos.first()->z();
+                float dz = (pRoad->paths[pIdx]->pos.last()->z() - z) * memory.distanceFromStartWPInCurrentPath / pRoad->paths[pIdx]->pathLength;
+                z += dz;
+                state.z += z;
+            }
+        }
+
+
         state.V   = vehicle.state.vx;
         state.yaw = vehicle.state.yawAngle;
         state.pitch = 0.0;

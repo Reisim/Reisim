@@ -14,7 +14,7 @@
 #ifndef ROAD_H
 #define ROAD_H
 
-#include <QVector>
+#include <QList>
 #include <QVector2D>
 #include <QVector3D>
 #include <QString>
@@ -69,6 +69,14 @@ struct CrossPoint
     float distFromStartWP;
 };
 
+struct PedestCrossPoint
+{
+    int crossPathID;
+    int sectionIndex;
+    QVector3D pos;
+    QVector2D derivative;
+    float distFromStartWP;
+};
 
 struct StopPoint
 {
@@ -87,15 +95,15 @@ struct Path
     int id;
     int startWpId;
     int endWpId;
-    QVector<int> forwardPaths;
-    QVector<int> followingPaths;
+    QList<int> forwardPaths;
+    QList<int> followingPaths;
 
     int numDivPath;
-    QVector<QVector3D*> pos;
-    QVector<QVector2D*> derivative;
+    QList<QVector3D*> pos;
+    QList<QVector2D*> derivative;
 
-    QVector<float> curvature;
-    QVector<float> length;
+    QList<float> curvature;
+    QList<float> length;
     float pathLength;
 
     float speedInfo;   // [m/s]
@@ -107,11 +115,41 @@ struct Path
 
     int scenarioObjectID;
 
-    QVector<struct CrossPoint*> crossPoints;
-    QVector<struct StopPoint*> stopPoints;
+    QList<struct CrossPoint*> crossPoints;
+    QList<struct StopPoint*> stopPoints;
+    QList<struct PedestCrossPoint*> pedestCrossPoints;
 
     int connectingNode;
     int connectingNodeInDir;
+};
+
+
+struct PedestPathShapeInfo
+{
+    QVector3D pos;
+    float angleToNextPos;  // in [rad]
+    float cosA;
+    float sinA;
+    float width;
+    float distanceToNextPos;
+    bool isCrossWalk;
+    int controlPedestSignalID;
+    int runOutDirect;
+    float runOutProb;
+
+};
+
+struct PedestPath
+{
+    int id;
+    QList<PedestPathShapeInfo*> shape;
+    QList<int> trafficVolume;
+    int scenarioObjectID;
+
+    int totalVolume;
+    QList<float> pedestKindSelectProbability;
+    float meanArrivalTime;
+    float NextAppearTime;
 };
 
 
@@ -168,33 +206,6 @@ struct Node
 };
 
 
-struct PedestPath
-{
-    int id;
-
-    float x1;
-    float y1;
-    float z1;
-    QList<int> connectedPedestPath1;
-
-    float x2;
-    float y2;
-    float z2;
-    QList<int> connectedPedestPath2;
-
-    float eX;
-    float eY;
-    float Length;
-
-    bool isCrossWalk;
-    float width;
-    int roadSideDirection;  //  = 1 if right side of path 1->2 is road
-                            //  = 2 if left side of path 1->2 is road
-
-    int scenarioObjectID;
-};
-
-
 struct RouteElem
 {
     int inDir;
@@ -217,6 +228,7 @@ struct ODRouteData
 
 struct ObjectCategoryAndSize
 {
+    int id;
     QString category;
     QString subcategory;
     float length;
@@ -243,18 +255,17 @@ public:
 
     float GetPathLength(int pathID);
     int GetNearestPath(float xp, float yp,float yawAngle,float &dist);
-    int GetNearestPathFromList(float xp,float yp,float yawAngle,float &dist,QVector<int> &pathList);
+    int GetNearestPathFromList(float xp,float yp,float yawAngle,float &dist,QList<int> &pathList);
     int GetDeviationFromPath(int pathID,
                              float xp,float yp,float yawAngle,
                              float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP,
                              bool recursive = false, bool negrectYawAngleInfo = false );
 
-    int GetDirectionByPedestPathLink(int pedestPathID, int connectedPedestPathID);
-    int GetNearestPedestPath(float xp,float yp,float &dist,int &overEdge,int objectID=-1);
-    int GetDeviationFromPedestPath(int pedestPathID,float xp,float yp,
-                                   float &dev,float &z,
-                                   float &xdir1,float &ydir1,
-                                   float &xdir2,float &ydir2);
+    int GetNearestPedestPathSectionIndex(float xp,float yp,float &dist,int &overEdge,int objectID=-1);
+    int GetDeviationFromPedestPath(int pedestPathID,int sectIndex,float xp,float yp,
+                                   float &dev,float &z,float &xdir,float &ydir,float lateralShift = 0.0);
+    int GetDeviationFromPedestPathAllSection(int pedestPathID,float xp,float yp, float &dev);
+
 
     void CheckSideBoundaryWPs(struct Node *);
     int GetDirectionLabel(int nodeID,int inDir,int checkDir);
@@ -268,19 +279,21 @@ public:
                                             bool isCrossWalk,
                                             int roadSideInfo);
     void CheckPedestPathConnection();
+    void SetPedestPathArrivalTimes();
 
-    QVector<int> GetPathList(int routeIndex,int currentPath,bool &needLC,int &nodeUntil, RandomGenerator*);
+    QList<int> GetPathList(int routeIndex,int currentPath,bool &needLC,int &nodeUntil, RandomGenerator*);
     int RandomSelect(int N,float rnd);
 
-    QVector<int> wpId2Index;
-    QVector<int> pathId2Index;
-    QVector<int> nodeId2Index;
-    QVector<int> pedestPathID2Index;
+    QList<int> wpId2Index;
+    QList<int> pathId2Index;
+    QList<int> nodeId2Index;
+    QList<int> pedestPathID2Index;
 
-    QVector<struct WP*> wps;
-    QVector<struct Path*> paths;
-    QVector<struct Node*> nodes;
-    QVector<struct PedestPath*> pedestPaths;
+
+    QList<struct WP*> wps;
+    QList<struct Path*> paths;
+    QList<struct Node*> nodes;
+    QList<struct PedestPath*> pedestPaths;
 
     QString currentRoadFileName;
 
