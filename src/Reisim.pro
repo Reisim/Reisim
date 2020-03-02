@@ -13,6 +13,11 @@ CONFIG += console
 CONFIG += c++11
 
 DEFINES += SFMT_MEXP="19937"
+#DEFINES += _PERFORMANCE_CHECK
+#DEFINES += _PERFORMANCE_CHECK_AGENT
+#DEFINES += _PERFORMANCE_CHECK_AGENT_PERCEPTION
+#DEFINES += _PERFORMANCE_CHECK_AGENT_RECOGNITION
+#DEFINES += _PERFORMANCE_CHECK_AGENT_HAZARD
 
 
 LIBS += C:\Qt5.12\Tools\mingw730_64\x86_64-w64-mingw32\lib\libws2_32.a
@@ -49,6 +54,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 
 SOURCES += \
+    caldistributethread.cpp \
         main.cpp \
         mainwindow.cpp \
     graphiccanvas.cpp \
@@ -76,6 +82,7 @@ SOURCES += \
     trafficsignal.cpp
 
 HEADERS += \
+    caldistributethread.h \
         mainwindow.h \
     graphiccanvas.h \
     agent.h \
