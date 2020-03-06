@@ -65,7 +65,7 @@ Agent::Agent()
     param.headwayTime = 1.5;
     param.headwayControlGain = 1.2;
     param.minimumPerceptibleDecelerationOfPreceding = 0.3 * 9.81;
-    param.minimumHeadwayDistanceAtStop = 2.5;
+    param.minimumHeadwayDistanceAtStop = 4.5;
     param.minimumDistanceToStopLine = 0.0;
     param.visibleDistance = 200.0;
     param.startRelay = 1.0;

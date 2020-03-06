@@ -76,16 +76,6 @@ void CalDistributeThread::run()
 
                 int i = evalIDs->at(n);
 
-                if( agent[i]->agentStatus == 0 ){
-                    continue;
-                }
-                if( agent[i]->isSInterfaceObject == true ){
-                    continue;
-                }
-                if( agent[i]->isBehaviorEmbeded == true ){
-                    continue;
-                }
-
                 agent[i]->BackupMemory();
             }
 
@@ -102,16 +92,6 @@ void CalDistributeThread::run()
             for(int n=0;n<evalIDs->size();++n){
 
                 int i = evalIDs->at(n);
-
-                if( agent[i]->agentStatus == 0 ){
-                    continue;
-                }
-                if( agent[i]->isSInterfaceObject == true ){
-                    continue;
-                }
-                if( agent[i]->isBehaviorEmbeded == true ){
-                    continue;
-                }
 
 #ifdef _PERFORMANCE_CHECK
                 QueryPerformanceCounter(&start);
@@ -194,16 +174,6 @@ void CalDistributeThread::run()
 
                 int i = evalIDs->at(n);
 
-                if( agent[i]->agentStatus == 0 ){
-                    continue;
-                }
-                if( agent[i]->isSInterfaceObject == true ){
-                    continue;
-                }
-                if( agent[i]->isBehaviorEmbeded == true ){
-                    continue;
-                }
-
 #ifdef _PERFORMANCE_CHECK
                 QueryPerformanceCounter(&start);
 #endif
@@ -234,16 +204,6 @@ void CalDistributeThread::run()
             for(int n=0;n<evalIDs->size();++n){
 
                 int i = evalIDs->at(n);
-
-                if( agent[i]->agentStatus == 0 ){
-                    continue;
-                }
-                if( agent[i]->isSInterfaceObject == true ){
-                    continue;
-                }
-                if( agent[i]->isBehaviorEmbeded == true ){
-                    continue;
-                }
 
 #ifdef _PERFORMANCE_CHECK
                 QueryPerformanceCounter(&start);

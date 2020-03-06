@@ -671,7 +671,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
             pAgent[objID]->agentKind = 100 + selPedestModelIdx;
 
-            pAgent[objID]->vehicle.SetVehicleID( selPedestModelIdx );
+            pAgent[objID]->vehicle.SetVehicleModelID( selPedestModelIdx );
 
             pAgent[objID]->state.V = 0.0;
             pAgent[objID]->state.x = pRoad->pedestPaths[i]->shape.first()->pos.x();
