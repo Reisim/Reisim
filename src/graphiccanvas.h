@@ -156,6 +156,11 @@ private:
     float X_eye;
     float Y_eye;
     float Z_eye;
+
+    float X_trans;
+    float Y_trans;
+    float Z_trans;
+
     QVector2D mousePressPosition;
     float sx;
     float sy;

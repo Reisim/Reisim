@@ -65,6 +65,10 @@ GraphicCanvas::GraphicCanvas(QOpenGLWidget *parent) : QOpenGLWidget(parent)
     Y_eye = 0.0;
     Z_eye = -50.0;
 
+    X_trans = X_eye;
+    Y_trans = Y_eye;
+    Z_trans = Z_eye;
+
     cameraYaw   = 0.0;
     cameraPitch = 0.0;
     cameraQuat = QQuaternion(1.0,0.0,0.0,0.0);
@@ -301,7 +305,28 @@ void GraphicCanvas::paintGL()
 
     QMatrix4x4 w2c;
     w2c.setToIdentity();
-    w2c.translate( QVector3D(X_eye,Y_eye,Z_eye) );
+
+    float xE = X_eye;
+    float yE = Y_eye;
+
+    float cpc = cos( cameraPitch );
+    float cps = sin( cameraPitch );
+
+    float cyc = cos( cameraYaw );
+    float cys = sin( cameraYaw );
+
+    X_trans = xE * cyc - yE * cys;
+    Y_trans = xE * cys + yE * cyc;
+
+    yE = Y_trans;
+    Y_trans = yE * cpc;
+    Z_trans = yE * cps;
+
+    Z_trans += Z_eye;
+
+
+    w2c.translate( QVector3D(X_trans,Y_trans, Z_trans) );
+
     w2c.rotate( cameraQuat );
 
 
@@ -421,7 +446,7 @@ void GraphicCanvas::paintGL()
                                                                vehicleModels[vehicleShapeID]->distCG2FE * (0.9),   // winker
                                                                0.4) );                                             // winker
 
-                glDrawArrays(GL_QUADS, 0, vehicleModels[vehicleShapeID]->simplePoly.vehiclePolygon.size() );
+                glDrawArrays(GL_QUADS, 0, vehicleModels[vehicleShapeID]->simplePoly.vehiclePolygon.size() / 8 );
 
                 program->setUniformValue( useTex, 10 );
                 program->setUniformValue( colorPos, QVector4D(1.0, 1.0, 1.0, 1.0) );
@@ -462,7 +487,7 @@ void GraphicCanvas::paintGL()
             int offsetPos = program->uniformLocation("offsetPos");
             program->setUniformValue( offsetPos, QVector3D(0.0,0.0,0.0) );
 
-            glDrawArrays(GL_QUADS, 0, personModels[personShapeID]->personPolygon.size() );
+            glDrawArrays(GL_QUADS, 0, personModels[personShapeID]->personPolygon.size() / 8 );
 
             program->setUniformValue( useTex, 10 );
             program->setUniformValue( colorPos, QVector4D(1.0, 1.0, 1.0, 1.0) );
@@ -791,8 +816,14 @@ void GraphicCanvas::mouseMoveEvent(QMouseEvent *e)
         float xMove = diff.x() * s;
         float yMove = diff.y() * (-s);
 
-        X_eye += xMove;
-        Y_eye += yMove;
+        float cyc = cos( cameraYaw );
+        float cys = sin( cameraYaw );
+
+        float xMm = xMove * cyc + cys * yMove;
+        float yMm = -xMove * cys + cyc * yMove;
+
+        X_eye += xMm;
+        Y_eye += yMm;
     }
 
     QOpenGLWidget::update();

@@ -2330,7 +2330,10 @@ void SystemThread::ShowAgentData(float x,float y)
         return;
     }
 
-    qDebug() << "Picked Agent ID = " << agent[nearID]->ID << " : agentKind = " << agent[nearID]->agentKind;
+    qDebug() << "Picked Agent ID = " << agent[nearID]->ID
+             << " : agentKind = " << agent[nearID]->agentKind
+             << " vHalfLength = " << agent[nearID]->vHalfLength
+             << " vHalfWidth = " << agent[nearID]->vHalfWidth;
 
     qDebug() << "Vehicle State:";
     qDebug() << "  X = " << agent[nearID]->state.x;
@@ -2346,13 +2349,15 @@ void SystemThread::ShowAgentData(float x,float y)
         if( agent[nearID]->memory.perceptedObjects[i]->isValidData == false ){
             continue;
         }
-        qDebug() << "  OBJ:" << agent[nearID]->memory.perceptedObjects[i]->objectID
+        qDebug() << "  Agent:" << agent[nearID]->memory.perceptedObjects[i]->objectID
                  << " Label=" << labelStr[ agent[nearID]->memory.perceptedObjects[i]->recognitionLabel ]
                  << " Dist=" << agent[nearID]->memory.perceptedObjects[i]->distanceToObject
                  << " e = " << agent[nearID]->memory.perceptedObjects[i]->deviationFromNearestTargetPath
                  << " W = " << agent[nearID]->memory.perceptedObjects[i]->effectiveHalfWidth
                  << " Type = " << agent[nearID]->memory.perceptedObjects[i]->objectType
                  << " Evaled = " << agent[nearID]->memory.perceptedObjects[i]->relPosEvaled;
+        qDebug() << "        N = " << agent[nearID]->memory.perceptedObjects[i]->innerProductToNearestPathNormal
+                 << " T = " << agent[nearID]->memory.perceptedObjects[i]->innerProductToNearestPathTangent;
     }
 
     qDebug() << "Recognizied Traffic Signal Info:";
@@ -2360,7 +2365,7 @@ void SystemThread::ShowAgentData(float x,float y)
         if(agent[nearID]->memory.perceptedSignals[i]->isValidData == false ){
             continue;
         }
-        qDebug() << "  OBJ:" << agent[nearID]->memory.perceptedSignals[i]->objectID
+        qDebug() << "  TS:" << agent[nearID]->memory.perceptedSignals[i]->objectID
                  << " Type=" << agent[nearID]->memory.perceptedSignals[i]->objectType
                  << " Disp = " << agent[nearID]->memory.perceptedSignals[i]->signalDisplay
                  << " L = " << agent[nearID]->memory.perceptedSignals[i]->distToSL;
@@ -2455,6 +2460,8 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  nextTurnNodeIndexInNodeList = " << agent[nearID]->memory.nextTurnNodeIndexInNodeList;
     qDebug() << "  distanceToTurnNodeWPIn = " << agent[nearID]->memory.distanceToTurnNodeWPIn;
     qDebug() << "  distanceToNodeWPIn = " << agent[nearID]->memory.distanceToNodeWPIn;
+    qDebug() << "  distanceToTurnNodeWPOut = " << agent[nearID]->memory.distanceToTurnNodeWPOut;
+    qDebug() << "  distanceToNodeWPOut = " << agent[nearID]->memory.distanceToNodeWPOut;
 
     qDebug() << "Parameters:";
     qDebug() << "  accelControlGain = " << agent[nearID]->param.accelControlGain;
@@ -2476,10 +2483,21 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  safetyConfirmTime = " << agent[nearID]->param.safetyConfirmTime;
 
     qDebug() << "Debug Info:";
-    QStringList divStr = agent[nearID]->strForDebug.split("\n");
+
+    QString debugStr = agent[nearID]->strForDebug + agent[nearID]->strForDebugRiskEval;
+
+    QStringList divStr = debugStr.split("\n");
     for(int i=0;i<divStr.size();++i){
         qDebug() << "  " << QString(divStr[i]);
     }
+
+    qDebug() << "cognitionCount = " << agent[nearID]->cognitionCount;
+    qDebug() << "cognitionCountMax = " << agent[nearID]->cognitionCountMax;
+    qDebug() << "decisionMalingCount = " << agent[nearID]->decisionMalingCount;
+    qDebug() << "decisionMakingCountMax = " << agent[nearID]->decisionMakingCountMax;
+    qDebug() << "controlCount = " << agent[nearID]->controlCount;
+    qDebug() << "controlCountMax = " << agent[nearID]->controlCountMax;
+
 }
 
 

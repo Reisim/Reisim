@@ -23,6 +23,8 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
     decisionMalingCount++;
     if( decisionMalingCount >= decisionMakingCountMax ){
         decisionMalingCount = 0;
+
+        strForDebugRiskEval = QString("");
     }
     else{
         return;
@@ -58,7 +60,7 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
 
 
                 // Not evaluate far object
-                if( memory.perceptedObjects[i]->distanceToObject > 8.0 * (state.V > 5.0 ? state.V : 5.0) ){
+                if( memory.perceptedObjects[i]->distanceToObject > 100.0 ){
                     memory.perceptedObjects[i]->hasCollisionPoint = false;
                     continue;
                 }
@@ -69,25 +71,14 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                 }
 
 
-
-                bool shouldCheckCP = true;
-                // Check last data is still valid
-                if( memory.perceptedObjects[i]->objPathCPChecked == memory.perceptedObjects[i]->objectPath ){
-                    shouldCheckCP = false;
-                }
-                else{
                     memory.perceptedObjects[i]->myCPPathIndex  = -1;
                     memory.perceptedObjects[i]->objCPPathIndex = -1;
-                }
-
 
 
                 if( memory.perceptedObjects[i]->objectType >= 100 ){
 
                     int plIdx = pRoad->pedestPathID2Index.indexOf( memory.perceptedObjects[i]->objectPath );
                     if( plIdx >= 0 ){
-
-                        if( shouldCheckCP == true ){
 
                             memory.perceptedObjects[i]->hasCollisionPoint = false;
 
@@ -119,7 +110,7 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                                     break;
                                 }
                             }
-                        }
+
 
                         // Update distance to CP
                         if( memory.perceptedObjects[i]->myCPPathIndex >= 0 && memory.perceptedObjects[i]->objCPPathIndex >= 0 ){
@@ -161,8 +152,6 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                     continue;
                 }
 
-
-                if( shouldCheckCP == true ){
 
                     memory.perceptedObjects[i]->hasCollisionPoint = false;
 
@@ -256,7 +245,7 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                         }
 
                     }
-                }
+
 
                 // Update distance to CP
                 if( memory.perceptedObjects[i]->mergingAsCP == false &&

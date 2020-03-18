@@ -91,7 +91,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
 
             // memory.releaseStopCount == 0 is added to move from temporal stop, yeilding or confirmation of safety,
             // without delay
-            if( memory.releaseStopCount == 0 || memory.releaseStopCount * calInterval >=param.startRelay ){
+            if( memory.releaseStopCount == 0 || memory.releaseStopCount * calInterval * decisionMakingCountMax >=param.startRelay ){
                 memory.doStopControl = false;
                 memory.releaseStopCount = 0;
             }
@@ -106,13 +106,15 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                 bool ShouldStop = false;
                 float minDist = 0.0;
 
+                bool SignalIsBlue = false;
+
                 for(int i=0;i<memory.perceptedSignals.size();++i){
 
                     if( memory.perceptedSignals[i]->isValidData == false ){
                         continue;
                     }
 
-//                    strForDebug += QString("Check Signal %1\n").arg( memory.perceptedSignals[i]->objectID );
+//                    strForDebugRiskEval += QString("Check Signal %1\n").arg( memory.perceptedSignals[i]->objectID );
 
                     bool alreadyPassed = false;
                     for(int j=0;j<memory.currentTargetNodeIndexInNodeList;j++){
@@ -122,7 +124,18 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                         }
                     }
 
-//                    strForDebug += QString("alreadyPassed = %1\n").arg( alreadyPassed );
+                    if( (pRoad->LeftOrRight == 0 && memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING ) ||
+                         (pRoad->LeftOrRight == 1 && memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING ) ){
+
+                        if( memory.perceptedSignals[i]->distToSL < 0.0 ){
+                            // Get current signal color to be used later
+                            signalColor = memory.perceptedSignals[i]->signalDisplay;
+                            alreadyPassed = true;
+                        }
+
+                    }
+
+//                    strForDebugRiskEval += QString("alreadyPassed = %1\n").arg( alreadyPassed );
 
                     if( alreadyPassed == true ){
                         continue;
@@ -139,7 +152,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                 minDist = memory.perceptedSignals[i]->distToSL;
                                 signalColor = TRAFFICSIGNAL_YELLOW;
 
-//                                strForDebug += QString("[Y]signalColor = %1\n").arg( signalColor );
+//                                strForDebugRiskEval += QString("[Y]signalColor = %1\n").arg( signalColor );
                             }
                         }
                     }
@@ -162,9 +175,13 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                 minDist = memory.perceptedSignals[i]->distToSL;
                                 signalColor = TRAFFICSIGNAL_RED;
 
-//                                strForDebug += QString("[R]signalColor = %1\n").arg( signalColor );
+//                                strForDebugRiskEval += QString("[R]signalColor = %1\n").arg( signalColor );
                             }
                         }
+                    }
+                    else if( memory.perceptedSignals[i]->signalDisplay == TRAFFICSIGNAL_BLUE ){
+
+                        SignalIsBlue = true;
                     }
                 }
 
@@ -175,7 +192,9 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                     memory.causeOfStopControl = QString("Signal");
                 }
                 else{
-                    if( memory.doStopControl == true ){
+
+                    if( memory.doStopControl == true && SignalIsBlue == true ){
+
                         // Check remaining cross vehicles inside intersection
                         for(int i=0;i<memory.perceptedObjects.size();++i){
 
@@ -192,13 +211,214 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                 continue;
                             }
 
-                            if( memory.perceptedObjects[i]->recognitionLabel >= AGENT_RECOGNITION_LABEL::LEFT_CROSSING_STRAIGHT &&
-                                    memory.perceptedObjects[i]->recognitionLabel <= AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_RIGHT ){
+
+                            if( pRoad->LeftOrRight == 0 &&
+                                (memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::LEFT_CROSSING_RIGHT ||
+                                memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_RIGHT ) ){
+
+                                if( memory.nextTurnNode == memory.currentTargetNode && memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING ){
+                                    continue;
+                                }
+
+                                if( memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::LEFT_CROSSING_RIGHT ){
+                                    if( memory.perceptedObjects[i]->deviationFromNearestTargetPath < -1.5 - memory.perceptedObjects[i]->vHalfLength ){
+                                        continue;
+                                    }
+                                }
+                                else if( memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_RIGHT ){
+                                    if( memory.nextTurnNode == memory.currentTargetNode && memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING ){
+                                        if( memory.perceptedObjects[i]->deviationFromNearestTargetPath > 1.5 + memory.perceptedObjects[i]->vHalfLength ){
+                                            continue;
+                                        }
+                                    }
+                            else{
+                                        if( memory.perceptedObjects[i]->deviationFromNearestTargetPath > -1.5 ){
+                                            continue;
+                                        }
+                                    }
+                                }
 
                                 memory.releaseStopCount = 0;
-                                memory.causeOfStopControl = QString("Remaining Cross Vehicle: ID=%1").arg( memory.perceptedObjects[i]->objectID );
+                                memory.causeOfStopControl = QString("Remaining Cross LCR/RCR Vehicle: ID=%1").arg( memory.perceptedObjects[i]->objectID );
 
                                 ShouldStop = true;
+                                break;
+                            }
+
+                            if( pRoad->LeftOrRight == 1 &&
+                                 (memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::LEFT_CROSSING_LEFT ||
+                                  memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_LEFT ) ){
+
+                                if( memory.nextTurnNode == memory.currentTargetNode && memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING ){
+                                    continue;
+                                }
+
+                                if( memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_RIGHT ){
+                                    if( memory.perceptedObjects[i]->deviationFromNearestTargetPath > 1.5 + memory.perceptedObjects[i]->vHalfLength ){
+                                        continue;
+                                    }
+                                }
+                                else if( memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::LEFT_CROSSING_LEFT ){
+                                    if( memory.nextTurnNode == memory.currentTargetNode && memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING ){
+                                        if( memory.perceptedObjects[i]->deviationFromNearestTargetPath < -1.5 - memory.perceptedObjects[i]->vHalfLength ){
+                                            continue;
+                                        }
+                                    }
+                                    else{
+                                        if( memory.perceptedObjects[i]->deviationFromNearestTargetPath < +1.5 + memory.perceptedObjects[i]->vHalfLength ){
+                                            continue;
+                                        }
+                                    }
+                                }
+
+                                memory.releaseStopCount = 0;
+                                memory.causeOfStopControl = QString("Remaining Cross RCL/LCL Vehicle: ID=%1").arg( memory.perceptedObjects[i]->objectID );
+
+                                ShouldStop = true;
+                                break;
+                            }
+
+                            if( pRoad->LeftOrRight == 0 &&
+                                (memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::LEFT_CROSSING_STRAIGHT ||
+                                memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_STRAIGHT) ){
+
+                                if( memory.nextTurnNode == memory.currentTargetNode && memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING ){
+                                    if( memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::LEFT_CROSSING_STRAIGHT ){
+                                        continue;
+                                    }
+                                    else{
+                                        if( memory.perceptedObjects[i]->deviationFromNearestTargetPath > 1.5 + memory.perceptedObjects[i]->vHalfLength ){
+                                            continue;
+                                        }
+                                    }
+                                }
+                                else if( memory.nextTurnNode == memory.currentTargetNode && memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING ){
+                                    if( memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::LEFT_CROSSING_STRAIGHT ){
+                                        if( memory.perceptedObjects[i]->deviationFromNearestTargetPath < 0.0 ){
+                                            continue;
+                                        }
+                                    }
+                                    else{
+                                        if( memory.perceptedObjects[i]->deviationFromNearestTargetPath > 1.5 + memory.perceptedObjects[i]->vHalfLength ){
+                                            continue;
+                                        }
+                                    }
+                                }
+                                else{
+                                    if( memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::LEFT_CROSSING_STRAIGHT ){
+                                        if( memory.perceptedObjects[i]->deviationFromNearestTargetPath < -1.5 - memory.perceptedObjects[i]->vHalfLength ){
+                                            continue;
+                                        }
+                                    }
+                                    else{
+                                        if( memory.perceptedObjects[i]->deviationFromNearestTargetPath > 1.5 + memory.perceptedObjects[i]->vHalfLength ){
+                                            continue;
+                                        }
+                                    }
+                                }
+
+                                memory.releaseStopCount = 0;
+                                memory.causeOfStopControl = QString("Remaining Cross LCS/RCS Vehicle: ID=%1").arg( memory.perceptedObjects[i]->objectID );
+
+                                ShouldStop = true;
+                                break;
+                            }
+
+                            if( pRoad->LeftOrRight == 1 &&
+                                (memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::LEFT_CROSSING_STRAIGHT ||
+                                memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_STRAIGHT) ){
+
+                                if( memory.nextTurnNode == memory.currentTargetNode && memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING ){
+                                    if( memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_STRAIGHT ){
+                                        continue;
+                                    }
+                                    else{
+                                        if( memory.perceptedObjects[i]->deviationFromNearestTargetPath < -1.5 - memory.perceptedObjects[i]->vHalfLength ){
+                                            continue;
+                                        }
+                                    }
+                                }
+                                else if( memory.nextTurnNode == memory.currentTargetNode && memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING ){
+                                    if( memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_STRAIGHT ){
+                                        if( memory.perceptedObjects[i]->deviationFromNearestTargetPath > 0.0 ){
+                                            continue;
+                                        }
+                                    }
+                                    else{
+                                        if( memory.perceptedObjects[i]->deviationFromNearestTargetPath < -1.5 - memory.perceptedObjects[i]->vHalfLength ){
+                                            continue;
+                                        }
+                                    }
+                                }
+                                else{
+                                    if( memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_STRAIGHT ){
+                                        if( memory.perceptedObjects[i]->deviationFromNearestTargetPath > 1.5 + memory.perceptedObjects[i]->vHalfLength ){
+                                            continue;
+                                        }
+                                    }
+                                    else{
+                                        if( memory.perceptedObjects[i]->deviationFromNearestTargetPath < -1.5 - memory.perceptedObjects[i]->vHalfLength ){
+                                            continue;
+                                        }
+                                    }
+                                }
+
+                                memory.releaseStopCount = 0;
+                                memory.causeOfStopControl = QString("Remaining Cross LCS/RCS Vehicle: ID=%1").arg( memory.perceptedObjects[i]->objectID );
+
+                                ShouldStop = true;
+                                break;
+                            }
+
+
+                            if( pRoad->LeftOrRight == 0 &&
+                                (memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::LEFT_CROSSING_LEFT ||
+                                memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_LEFT ) ){
+
+                                if( memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_LEFT ){
+                                    continue;
+                                }
+
+                                if( memory.nextTurnNode == memory.currentTargetNode &&
+                                        ( memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING || memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING )  ){
+                                    continue;
+                                }
+                                else{
+                                    if( memory.perceptedObjects[i]->deviationFromNearestTargetPath < 1.5 + memory.perceptedObjects[i]->vHalfLength ){
+                                    continue;
+                                }
+                            }
+
+                                memory.releaseStopCount = 0;
+                                memory.causeOfStopControl = QString("Remaining Cross LCL/RCL Vehicle: ID=%1").arg( memory.perceptedObjects[i]->objectID );
+
+                                ShouldStop = true;
+                                break;
+                            }
+
+                            if( pRoad->LeftOrRight == 1 &&
+                                (memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::LEFT_CROSSING_RIGHT ||
+                                memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_RIGHT ) ){
+
+                                if( memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::LEFT_CROSSING_RIGHT ){
+                                    continue;
+                                }
+
+                                if( memory.nextTurnNode == memory.currentTargetNode &&
+                                        ( memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING  || memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING ) ){
+                                    continue;
+                                }
+                                else{
+                                    if( memory.perceptedObjects[i]->deviationFromNearestTargetPath > -1.5 - memory.perceptedObjects[i]->vHalfLength ){
+                                        continue;
+                                    }
+                                }
+
+                                memory.releaseStopCount = 0;
+                                memory.causeOfStopControl = QString("Remaining Cross LCR/RCR Vehicle: ID=%1").arg( memory.perceptedObjects[i]->objectID );
+
+                                ShouldStop = true;
+                                break;
                             }
                         }
                     }
@@ -223,7 +443,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                         currentDisplay = memory.perceptedSignals[i]->signalDisplay;
                     }
 
-//                    strForDebug += QString("sIdx = %1,  szSect = %2  , currentDisplay = %3\n").arg( sIdx ).arg( szSect ).arg( currentDisplay );
+//                    strForDebugRiskEval += QString("sIdx = %1,  szSect = %2  , currentDisplay = %3\n").arg( sIdx ).arg( szSect ).arg( currentDisplay );
 
 
                     if( sIdx + 1 < szSect ){
@@ -234,21 +454,21 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                            float dy = state.y - pRoad->pedestPaths[plIdx]->shape[sIdx]->pos.y();
                            float S = dx * (pRoad->pedestPaths[plIdx]->shape[sIdx]->cosA) + dy * (pRoad->pedestPaths[plIdx]->shape[sIdx]->sinA);
 
-//                           strForDebug += QString("S = %1\n").arg( S );
+//                           strForDebugRiskEval += QString("S = %1\n").arg( S );
 
                            if( S < 1.0 ){
                                if( currentDisplay == TRAFFICSIGNAL_RED ){
                                    memory.shouldStopAtSignalSL = true;
-//                                   strForDebug += QString("[1] shouldStopAtSignalSL = true\n");
+//                                   strForDebugRiskEval += QString("[1] shouldStopAtSignalSL = true\n");
                                }
                                else{
                                    memory.shouldStopAtSignalSL = false;
-//                                   strForDebug += QString("[2] shouldStopAtSignalSL = false\n");
+//                                   strForDebugRiskEval += QString("[2] shouldStopAtSignalSL = false\n");
                                }
                            }
                            else{
                                memory.shouldStopAtSignalSL = false;
-//                               strForDebug += QString("[3] shouldStopAtSignalSL = false\n");
+//                               strForDebugRiskEval += QString("[3] shouldStopAtSignalSL = false\n");
                            }
                         }
                         else{
@@ -260,7 +480,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                 }
                             }
 
-//                            strForDebug += QString("sigIdx = %1\n").arg( sigIdx );
+//                            strForDebugRiskEval += QString("sigIdx = %1\n").arg( sigIdx );
 
                             if( sigIdx > 0 ){
 
@@ -271,23 +491,23 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                         float dy = state.y - pRoad->pedestPaths[plIdx]->shape[i]->pos.y();
                                         float S = dx * (pRoad->pedestPaths[plIdx]->shape[i]->cosA) + dy * (pRoad->pedestPaths[plIdx]->shape[i]->sinA);
 
-//                                        strForDebug += QString("distToSig = %1\n").arg( distToSig );
-//                                        strForDebug += QString("distanceToNextPos = %1\n").arg( pRoad->pedestPaths[plIdx]->shape[i]->distanceToNextPos );
-//                                        strForDebug += QString("S = %1\n").arg( S );
+//                                        strForDebugRiskEval += QString("distToSig = %1\n").arg( distToSig );
+//                                        strForDebugRiskEval += QString("distanceToNextPos = %1\n").arg( pRoad->pedestPaths[plIdx]->shape[i]->distanceToNextPos );
+//                                        strForDebugRiskEval += QString("S = %1\n").arg( S );
 
                                         if( distToSig + pRoad->pedestPaths[plIdx]->shape[i]->distanceToNextPos - S < 2.5 ){
                                             if( currentDisplay == TRAFFICSIGNAL_RED ){
                                                 memory.shouldStopAtSignalSL = true;
-//                                                strForDebug += QString("[4] shouldStopAtSignalSL = true\n");
+//                                                strForDebugRiskEval += QString("[4] shouldStopAtSignalSL = true\n");
                                             }
                                             else{
                                                 memory.shouldStopAtSignalSL = false;
-//                                                strForDebug += QString("[5] shouldStopAtSignalSL = false\n");
+//                                                strForDebugRiskEval += QString("[5] shouldStopAtSignalSL = false\n");
                                             }
                                         }
                                         else{
                                             memory.shouldStopAtSignalSL = false;
-//                                            strForDebug += QString("[6] shouldStopAtSignalSL = false\n");
+//                                            strForDebugRiskEval += QString("[6] shouldStopAtSignalSL = false\n");
                                         }
                                     }
                                     else{
@@ -299,7 +519,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                     }
                     else{
                         memory.shouldStopAtSignalSL = false;
-//                        strForDebug += QString("[0]shouldStopAtSignalSL = false\n");
+//                        strForDebugRiskEval += QString("[0]shouldStopAtSignalSL = false\n");
                     }
                 }
             }
@@ -378,10 +598,10 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
 
                     // If a front vehicle such as cross-merging and oncoming-mergine comes into my lane, regard the vehile as preceding
                     if( fabs(memory.perceptedObjects[i]->deviationFromNearestTargetPath - memory.lateralShiftTarget) - memory.perceptedObjects[i]->effectiveHalfWidth - vHalfWidth < 0.5 &&
-                            memory.perceptedObjects[i]->distanceToObject > 0.0 ){
+                            memory.perceptedObjects[i]->distanceToObject > 0.0 && memory.perceptedObjects[i]->distanceToObject < memory.distanceToNodeWPOut + memory.distanceToZeroSpeed ){
 
                         if( memory.perceptedObjects[i]->V < 3.6 ){
-                            if( fabs(memory.perceptedObjects[i]->deviationFromNearestTargetPath) - memory.perceptedObjects[i]->effectiveHalfWidth - vHalfWidth > 0.1 ){
+                            if( fabs(memory.perceptedObjects[i]->deviationFromNearestTargetPath - memory.lateralDeviationFromTargetPath) - memory.perceptedObjects[i]->effectiveHalfWidth - vHalfWidth > 0.1 ){
                                 continue;
                             }
                         }
@@ -414,6 +634,12 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                     memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_RIGHT ){
 
                                     memory.avoidTarget = memory.perceptedObjects[i]->objectID;
+
+                                    float HalfLaneWidth = 1.5;
+                                    if( memory.distanceToNodeWPIn < 0.0 ){
+                                        HalfLaneWidth = 2.5;
+                                    }
+
                                     if( memory.perceptedObjects[i]->deviationFromNearestTargetPath > 0.0){
                                         memory.lateralShiftTarget = memory.perceptedObjects[i]->deviationFromNearestTargetPath;
                                         memory.lateralShiftTarget -= memory.perceptedObjects[i]->effectiveHalfWidth;
@@ -423,8 +649,8 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                             memory.lateralShiftTarget = 0.0;
                                             memory.avoidTarget = -1;
                                         }
-                                        else if( memory.lateralShiftTarget < -(1.5 - vHalfWidth)){
-                                            memory.lateralShiftTarget = -(1.5 - vHalfWidth);
+                                        else if( memory.lateralShiftTarget < -(HalfLaneWidth - vHalfWidth)){
+                                            memory.lateralShiftTarget = -(HalfLaneWidth - vHalfWidth);
                                         }
                                     }
                                     else if( memory.perceptedObjects[i]->deviationFromNearestTargetPath < 0.0){
@@ -436,8 +662,8 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                             memory.lateralShiftTarget = 0.0;
                                             memory.avoidTarget = -1;
                                         }
-                                        else if( memory.lateralShiftTarget > (1.5 - vHalfWidth)){
-                                            memory.lateralShiftTarget = (1.5 - vHalfWidth);
+                                        else if( memory.lateralShiftTarget > (HalfLaneWidth - vHalfWidth)){
+                                            memory.lateralShiftTarget = (HalfLaneWidth - vHalfWidth);
                                         }
                                     }
                                 }
@@ -446,13 +672,20 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
 
                             memory.precedingVehicleID = memory.perceptedObjects[i]->objectID;
                             memory.distanceToPrecedingVehicle = memory.perceptedObjects[i]->distanceToObject;
-                            memory.speedPrecedingVehicle = memory.perceptedObjects[i]->V * memory.perceptedObjects[i]->innerProductToNearestPathNormal;
+                            memory.speedPrecedingVehicle = memory.perceptedObjects[i]->V * memory.perceptedObjects[i]->innerProductToNearestPathTangent;
                             if( memory.speedPrecedingVehicle < 0.0 ){
                                 memory.speedPrecedingVehicle = 0.0;
                             }
                             memory.axPrecedingVehicle    = memory.perceptedObjects[i]->Ax;
                             vLenH = memory.perceptedObjects[i]->vHalfLength;
                             memory.precedingObstacle = 1;
+
+                            if( memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING && memory.perceptedObjects[i]->recognitionLabel == ONCOMING_LEFT ){
+                                memory.precedingObstacle = 0;
+                            }
+                            else if( memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING && memory.perceptedObjects[i]->recognitionLabel == ONCOMING_RIGHT ){
+                                memory.precedingObstacle = 0;
+                            }
                         }
                     }
                 }
@@ -463,9 +696,12 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                 memory.doHeadwayDistanceControl = true;
 
                 memory.targetHeadwayDistance = param.headwayTime * state.V;
-                if( memory.targetHeadwayDistance < param.minimumHeadwayDistanceAtStop + vLenH + vHalfLength  ){
-                    memory.targetHeadwayDistance = param.minimumHeadwayDistanceAtStop + vLenH + vHalfLength;
+                if( memory.targetHeadwayDistance < param.minimumHeadwayDistanceAtStop  ){
+                    memory.targetHeadwayDistance = param.minimumHeadwayDistanceAtStop;
                 }
+
+                memory.distanceToPrecedingVehicle -= vLenH;
+                memory.distanceToPrecedingVehicle -= vHalfLength;
             }
         }
         else if( agentKind >= 100 ){
@@ -555,15 +791,18 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                 bool shoudStop = false;
 
                 float dStop = 0.0;
-                if( memory.distToNearOncomingCP < 5.0 ){
-                    dStop = memory.distanceToZeroSpeed;
+                if( memory.distanceToNodeWPIn < 0.0 ){
+                    dStop = memory.minimumDistanceToStop;
                 }
-                if( memory.distToNearOncomingCP - dStop < vHalfLength ){
+
+                // Check if I can stop before Near Oncoming CP
+                if( memory.distToNearOncomingCP < dStop + 2.5 + vHalfLength ){
 
                     shoudStop = false;
 
                 }
                 else{
+
                     for(int i=0;i<memory.perceptedObjects.size();++i){
 
                         if( memory.perceptedObjects[i]->isValidData == false ){
@@ -581,85 +820,91 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                         if( memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_STRAIGHT &&
                                 memory.perceptedObjects[i]->hasCollisionPoint == true ){
 
-                            // Checl collision point is in turn node
+                            // Check collision point is in turn node
                             if( memory.perceptedObjects[i]->CPinNode != memory.nextTurnNode ){
                                 continue;
                             }
 
                             // If the oncoming vehicle is around collision point, do not enter
                             if( memory.perceptedObjects[i]->objectTimeToCP >= 0.0 && memory.perceptedObjects[i]->objectTimeToCP < 3.0 ){
+
+                                strForDebugRiskEval += QString("[3]Oncoming Risk by ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
+
                                 shoudStop = true;
                                 break;
                             }
 
+                            // Special Case: oncoming vehicle waiting for crossing
+                            if( signalColor == TRAFFICSIGNAL_BLUE &&
+                                    memory.perceptedObjects[i]->objectDistanceToCP >= 0.0 &&
+                                    memory.perceptedObjects[i]->objectDistanceToCP - memory.perceptedObjects[i]->vHalfLength < 10.0 &&
+                                    memory.perceptedObjects[i]->V < 0.1 ){
+
+                                if( memory.perceptedObjects[i]->myDistanceToCP - vHalfLength > 10.0 ){
+
+                                    strForDebugRiskEval += QString("[4]Oncoming Risk by ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
+
+                                    shoudStop = true;
+                                    break;
+                                }
+                                else{
+
+                                    strForDebugRiskEval += QString("Oncoming ID%1 will yeild\n").arg(  memory.perceptedObjects[i]->objectID );
+
+                                    continue;
+                                }
+                            }
+
+
                             // The oncoming vehicle has already passed collision point
-                            if( memory.perceptedObjects[i]->objectTimeToCP < 0.0 ){
+                            if( memory.perceptedObjects[i]->objectDistanceToCP + 1.5 + memory.perceptedObjects[i]->vHalfLength < 0.0  ){
+
+                                strForDebugRiskEval += QString("Oncoming ID%1 passed CP\n").arg(  memory.perceptedObjects[i]->objectID );
+
                                 continue;
                             }
 
-                            // Far oncoming vehicle is neglected
-                            if( memory.perceptedObjects[i]->objectTimeToCP > 6.0 && memory.perceptedObjects[i]->objectDistanceToCP > 30.0 ){
+                            // Far oncoming vehicle is neglected if I can reach CP before oncoming vehicle
+                            if( memory.perceptedObjects[i]->objectTimeToCP > 6.0 && memory.perceptedObjects[i]->objectDistanceToCP > 30.0 &&
+                                    memory.perceptedObjects[i]->objectTimeToCP > memory.perceptedObjects[i]->myTimeToCP + param.crossTimeSafetyMargin * 2.0 ){
+
+                                strForDebugRiskEval += QString("Oncoming ID%1 far from CP\n").arg(  memory.perceptedObjects[i]->objectID );
+
                                 continue;
                             }
 
 
                             //@I have already passed collision point
                             if( memory.perceptedObjects[i]->myTimeToCP < 0.0 ){
+
+                                strForDebugRiskEval += QString("I passed CP faster than Oncoming ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
+
                                 continue;
                             }
 
                             //@I am far from collision point
                             if( memory.perceptedObjects[i]->myTimeToCP > 6.0 && memory.perceptedObjects[i]->myDistanceToCP > 60.0 ){
+
+                                strForDebugRiskEval += QString("I am far from Oncoming ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
+
                                 continue;
                             }
 
+
                             // If the signal intersection and the color is red, check if the oncoming stop
-
-//                            strForDebug += QString("signalColor=%1\n").arg( signalColor );
-
                             if( signalColor == TRAFFICSIGNAL_YELLOW || signalColor == TRAFFICSIGNAL_RED ){
                                 int objID = memory.perceptedObjects[i]->objectID;
                                 float dSL = pAgent[objID]->memory_reference.distanceToStopPoint;
                                 float dVZ = pAgent[objID]->memory_reference.distanceToZeroSpeed - pAgent[objID]->state.V - memory.perceptedObjects[i]->vHalfLength;
 
-//                                strForDebug += QString("dSL=%1 dVZ=%2\n").arg( dSL ).arg( dVZ );
+                                strForDebugRiskEval += QString("dSL=%1 dVZ=%2\n").arg( dSL ).arg( dVZ );
 
-                                if( dSL + 5.0 > dVZ ){
-                                    continue;
-                                }
-                            }
+                                if( dSL > 0.0 && dSL + 5.0 > dVZ ){
 
-                            // Check if a vehicle exist in the same lane
-                            bool noNeedToEval = false;
-                            int objID = memory.perceptedObjects[i]->objectID;
-                            for(int j=0;j<pAgent[objID]->memory_reference.perceptedObjects.size();++j){
-                                if( pAgent[objID]->memory_reference.perceptedObjects[j]->isValidData == false ){
-                                    continue;
-                                }
-                                if( pAgent[objID]->memory_reference.perceptedObjects[j]->recognitionLabel == AGENT_RECOGNITION_LABEL::PRECEDING ){
-                                    int pID = pAgent[objID]->memory_reference.perceptedObjects[j]->objectID;
-                                    for(int k=0;k<memory.perceptedObjects.size();++k){
-                                        if( i == k ){
-                                            break;
-                                        }
-                                        if( memory.perceptedObjects[k]->isValidData == false ){
+                                    strForDebugRiskEval += QString("Oncoming ID%1 will stop\n").arg(  memory.perceptedObjects[i]->objectID );
+
                                             continue;
                                         }
-                                        if( memory.perceptedObjects[k]->objectID == pID && memory.perceptedObjects[k]->V < 0.1 ){
-                                            if( memory.perceptedObjects[k]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_STRAIGHT ||
-                                                    memory.perceptedObjects[k]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_LEFT ||
-                                                    memory.perceptedObjects[k]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_RIGHT ){
-                                                if( memory.perceptedObjects[k]->distanceToObject > 0.0 ){
-                                                    noNeedToEval = true;
-                                                }
-                                            }
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            if( noNeedToEval == true ){
-                                continue;
                             }
 
 
@@ -668,37 +913,83 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                             if( memory.perceptedObjects[i]->myTimeToCP < preTime ){
                                 preTime = memory.perceptedObjects[i]->myTimeToCP;
                             }
-                            if( memory.perceptedObjects[i]->objectDistanceToCP - memory.perceptedObjects[i]->V * preTime  < -5.0){
+                            if( memory.perceptedObjects[i]->objectDistanceToCP - memory.perceptedObjects[i]->V * preTime  < -1.5 - memory.perceptedObjects[i]->vHalfLength ){
+
+                                strForDebugRiskEval += QString("Oncoming ID%1 will pass CP when I reach CP\n").arg(  memory.perceptedObjects[i]->objectID );
+
                                 continue;
                             }
 
 
-                            float myTime = memory.perceptedObjects[i]->myDistanceToCP / 5.0;
-                            if( myTime > memory.perceptedObjects[i]->myTimeToCP ){
-                                myTime = memory.perceptedObjects[i]->myTimeToCP;
-                            }
+                            float myTime1 = memory.perceptedObjects[i]->myDistanceToCP / 5.0;
+                            float myTime2 = memory.perceptedObjects[i]->myTimeToCP;
 
-                            float crossTime = myTime - memory.perceptedObjects[i]->objectTimeToCP;
-                            if( crossTime > param.crossTimeSafetyMargin ){  // oncoming vehicle will pass faster than me
+                            float myTimeMin = (myTime1 < myTime2 ? myTime1 : myTime2 );
+                            float myTimeMax = (myTime1 > myTime2 ? myTime1 : myTime2 );
+
+
+                            float crossTimeP = myTimeMin - memory.perceptedObjects[i]->objectTimeToCP;
+                            float crossTimeM = myTimeMax - memory.perceptedObjects[i]->objectTimeToCP;
+
+                            if( crossTimeP > param.crossTimeSafetyMargin  ){  // oncoming vehicle will pass faster than me
                                 continue;
                             }
-                            else if( crossTime < (-1.0) * param.crossTimeSafetyMargin * 2.0 ){  // I can pass faster than oncoming vehicle
+                            else if( crossTimeM < (-1.0) * param.crossTimeSafetyMargin  ){  // I can pass faster than oncoming vehicle
                                 continue;
                             }
 
-//                            strForDebug += QString("[1]Oncoming Risk by ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
+                            strForDebugRiskEval += QString("[1]Oncoming Risk by ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
+                            strForDebugRiskEval += QString("  crossTimeP=%1 crossTimeM=%2\n").arg( crossTimeP ).arg( crossTimeM );
 
                             shoudStop = true;
                             break;
+                        }
+                        else if(  (pRoad->LeftOrRight == 0 && memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_RIGHT ) ||
+                                  (pRoad->LeftOrRight == 1 && memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_LEFT) ){
+
+                            if( memory.perceptedObjects[i]->winker == 0 ){
+
+                                int objID = memory.perceptedObjects[i]->objectID;
+
+                                // If the signal intersection and the color is red, check if the oncoming stop
+                                if( signalColor == TRAFFICSIGNAL_YELLOW || signalColor == TRAFFICSIGNAL_RED ){
+                                    int objID = memory.perceptedObjects[i]->objectID;
+                                    float dSL = pAgent[objID]->memory_reference.distanceToStopPoint;
+                                    float dVZ = pAgent[objID]->memory_reference.distanceToZeroSpeed - pAgent[objID]->state.V - memory.perceptedObjects[i]->vHalfLength;
+
+                                    strForDebugRiskEval += QString("dSL=%1 dVZ=%2\n").arg( dSL ).arg( dVZ );
+
+                                    if( dSL > 0.0 && dSL + 5.0 > dVZ ){
+
+                                        strForDebugRiskEval += QString("Oncoming ID%1 will stop\n").arg(  memory.perceptedObjects[i]->objectID );
+
+                                        continue;
+                                    }
+                                }
+
+                                float TTC = pAgent[objID]->memory_reference.distanceToNodeWPIn / ( memory.perceptedObjects[i]->V + 0.1 );
+                                if( TTC < 6.0 ){
+                                    shoudStop = true;
+                                    break;
+                                }
+
+                            }
                         }
                         else if( ( (pRoad->LeftOrRight == 0 && memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_LEFT ) ||
                                    (pRoad->LeftOrRight == 1 && memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::ONCOMING_RIGHT) ) &&
                                     memory.perceptedObjects[i]->hasCollisionPoint == true ){
 
-                            // Checl collision point is in turn node
+                            // Check collision point is in turn node
                             if( memory.perceptedObjects[i]->CPinNode != memory.nextTurnNode ){
                                 continue;
                             }
+
+                            // Far oncoming vehicle is neglected if I can reach CP before oncoming vehicle
+                            if( memory.perceptedObjects[i]->objectTimeToCP > 6.0 && memory.perceptedObjects[i]->objectDistanceToCP > 30.0 &&
+                                    memory.perceptedObjects[i]->objectTimeToCP > memory.perceptedObjects[i]->myTimeToCP + param.crossTimeSafetyMargin * 2.0 ){
+                                continue;
+                            }
+
 
                             // Prediction; The oncoming-merging vehicle will pass collision when I reach the point
                             float preTime = 1.0;
@@ -709,16 +1000,17 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                 continue;
                             }
 
-                            // If the oncoming-merging vehicle is around collision/merging point, do not enter
-                            if( memory.perceptedObjects[i]->objectTimeToCP >= 0.0 && memory.perceptedObjects[i]->objectTimeToCP < 3.0 ){
-                                shoudStop = true;
-                                break;
-                            }
-
                             // The oncoming vehicle has already passed collision point
                             if( memory.perceptedObjects[i]->objectTimeToCP < 0.0 ){
                                 continue;
                             }
+
+
+                            // If the mergine vehicle is assumed as preceding vehicle, ignore it
+                            if( memory.perceptedObjects[i]->objectID == memory.precedingVehicleID ){
+                                continue;
+                            }
+
 
                             // If the signal intersection and the color is red, check if the oncoming stop
                             if( signalColor == TRAFFICSIGNAL_YELLOW || signalColor == TRAFFICSIGNAL_RED ){
@@ -726,27 +1018,37 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                 float dSL = pAgent[objID]->memory_reference.distanceToStopPoint;
                                 float dVZ = pAgent[objID]->memory_reference.distanceToZeroSpeed - pAgent[objID]->state.V - memory.perceptedObjects[i]->vHalfLength;
 
-//                                strForDebug += QString("dSL=%1 dVZ=%2").arg( dSL ).arg( dVZ );
+                                strForDebugRiskEval += QString("dSL=%1 dVZ=%2").arg( dSL ).arg( dVZ );
 
-                                if( dSL + 5.0 > dVZ ){
+                                if( (dSL > 0.0 && dSL + 5.0 > dVZ)|| memory.perceptedObjects[i]->V < 3.0 ){
                                     continue;
                                 }
                             }
 
-                            float myTime = memory.perceptedObjects[i]->myDistanceToCP / 5.0;
-                            if( myTime > memory.perceptedObjects[i]->myTimeToCP ){
-                                myTime = memory.perceptedObjects[i]->myTimeToCP;
+                            // If the oncoming-merging vehicle is around collision/merging point, do not enter
+                            if( memory.perceptedObjects[i]->objectTimeToCP >= 0.0 && memory.perceptedObjects[i]->objectTimeToCP < 3.0 ){
+                                shoudStop = true;
+                                break;
                             }
 
-                            float crossTime = myTime - memory.perceptedObjects[i]->objectTimeToCP;
-                            if( crossTime > param.crossTimeSafetyMargin ){  // oncoming-merging vehicle will pass faster than me
+                            float myTime1 = memory.perceptedObjects[i]->myDistanceToCP / 5.0;
+                            float myTime2 = memory.perceptedObjects[i]->myTimeToCP;
+
+                            float myTimeMin = (myTime1 < myTime2 ? myTime1 : myTime2 );
+                            float myTimeMax = (myTime1 > myTime2 ? myTime1 : myTime2 );
+
+
+                            float crossTimeP = myTimeMin - memory.perceptedObjects[i]->objectTimeToCP;
+                            float crossTimeM = myTimeMax - memory.perceptedObjects[i]->objectTimeToCP;
+                            if( crossTimeP > param.crossTimeSafetyMargin  ){  // oncoming-merging vehicle will pass faster than me
                                 continue;
                             }
-                            else if( crossTime < (-1.0) * param.crossTimeSafetyMargin * 2.0 ){  // I can pass faster than oncoming-merging vehicle
+                            else if( crossTimeM < (-1.0) * param.crossTimeSafetyMargin  ){  // I can pass faster than oncoming-merging vehicle
                                 continue;
                             }
 
-//                            strForDebug += QString("[2]Oncoming Risk by ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
+                            strForDebugRiskEval += QString("[2]Oncoming Risk by ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
+                            strForDebugRiskEval += QString("  crossTimeP=%1 crossTimeM=%2\n").arg( crossTimeP ).arg( crossTimeM );
 
                             shoudStop = true;
                             break;
@@ -978,7 +1280,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                             }
                         }
 
-//                        strForDebug += QString("[1]checkKind=%1\n").arg(checkKind);
+//                        strForDebugRiskEval += QString("[1]checkKind=%1\n").arg(checkKind);
 
                         if( pRoad->LeftOrRight == 0 && memory.nextTurnDirection == DIRECTION_LABEL::RIGHT_CROSSING && checkKind == -1 ){
 
@@ -1009,7 +1311,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                             }
                         }
 
-//                        strForDebug += QString("[2]checkKind=%1\n").arg(checkKind);
+//                        strForDebugRiskEval += QString("[2]checkKind=%1\n").arg(checkKind);
 
                         if( checkKind == -1 ){
                             memory.safetyConfimed = true;
@@ -1072,7 +1374,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                     continue;
                                 }
 
-//                                strForDebug += QString("[1]Crossing Risk by ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
+//                                strForDebugRiskEval += QString("[1]Crossing Risk by ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
 
                                 memory.leftCrossIsClear = false;
                                 memory.leftCrossCheckCount = 0;
@@ -1136,7 +1438,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad)
                                     continue;
                                 }
 
-//                                strForDebug += QString("[2]Crossing Risk by ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
+//                                strForDebugRiskEval += QString("[2]Crossing Risk by ID%1\n").arg(  memory.perceptedObjects[i]->objectID );
 
                                 memory.rightCrossIsClear = false;
                                 memory.rightCrossCheckCount = 0;

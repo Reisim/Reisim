@@ -52,8 +52,7 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
             }
             else{
 
-                if( memory.perceptedObjects[i]->myPathRecogLabelChecked == memory.currentTargetPath &&
-                        memory.perceptedObjects[i]->objPathRecogLabelChecked == memory.perceptedObjects[i]->objectPath ){
+                if( memory.perceptedObjects[i]->V < 0.1 && state.V < 0.1 ){
                     continue;
                 }
             }
@@ -79,6 +78,7 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                         memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::PRECEDING;
                         memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
                         memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+//                        strForDebug += QString("V%1-P1\n").arg(memory.perceptedObjects[i]->objectID);
                         continue;
                     }
                     else{
@@ -92,6 +92,7 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                     memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::PRECEDING;
                     memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
                     memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+//                    strForDebug += QString("V%1-P2\n").arg(memory.perceptedObjects[i]->objectID);
                     continue;
                 }
                 else if( sameLaneIndex > memory.currentTargetPathIndexInList  ){
@@ -122,7 +123,7 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
 
                     // SIDE Vehicles
                     if( fabs(memory.perceptedObjects[i]->deviationFromNearestTargetPath - memory.lateralDeviationFromTargetPath) >=
-                            memory.perceptedObjects[i]->effectiveHalfWidth + vHalfWidth + 0.5 ){
+                            memory.perceptedObjects[i]->effectiveHalfWidth + vHalfWidth + 0.20 ){
 
                         if( memory.perceptedObjects[i]->deviationFromNearestTargetPath > 0.0 ){
                             if( memory.perceptedObjects[i]->distanceToObject > vHalfLength + memory.perceptedObjects[i]->vHalfLength ){
@@ -172,6 +173,7 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                             memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::PRECEDING;
                             memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
                             memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+//                            strForDebug += QString("V%1-P3\n").arg(memory.perceptedObjects[i]->objectID);
                             continue;
 
                         }

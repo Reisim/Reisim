@@ -102,6 +102,7 @@ struct AgentPerception
     int recognitionLabel;
     int objPathRecogLabelChecked;
     int myPathRecogLabelChecked;
+    int winker;
 
     bool hasCollisionPoint;
     bool mergingAsCP;
@@ -171,7 +172,9 @@ struct AgentMemory
     int controlMode;
 
     float distanceToZeroSpeed;
+    float timeToZeroSpeed;
     float requiredDistToStopFromTargetSpeed;
+    float minimumDistanceToStop;
 
     float actualTargetSpeed;
     float actualTargetHeadwayDistance;
@@ -269,6 +272,8 @@ struct AgentMemory
     int scenarioPathSelectID;
     float distanceToTurnNodeWPIn;
     float distanceToNodeWPIn;
+    float distanceToTurnNodeWPOut;
+    float distanceToNodeWPOut;
 
     QList<int> myNodeList;
     QList<int> myInDirList;
@@ -377,6 +382,7 @@ public:
     void SpeedControl();
     void SpeedAdjustForCurve(Road*,int,float);
     void HeadwayControl();
+    void HeadwayControlAgent();
     void StopControl();
 
 
@@ -402,6 +408,7 @@ public:
 
 
     QString strForDebug;
+    QString strForDebugRiskEval;
 
     Vehicle vehicle;
     float vHalfLength;

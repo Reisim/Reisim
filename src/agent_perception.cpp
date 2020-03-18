@@ -22,8 +22,6 @@
 
 void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<TrafficSignal*> trafficSignal )
 {
-    strForDebug = QString("");
-
 
     cognitionCount++;
     if( cognitionCount >= cognitionCountMax ){
@@ -32,6 +30,9 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
     else{
         return;
     }
+
+
+    strForDebug = QString("");
 
 
 
@@ -54,7 +55,13 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
         QueryPerformanceCounter(&start);
 #endif
 
-        float preview_dist = 3.5;
+        float D1 = state.V;
+        float D2 = memory.actualTargetSpeed;
+        float preview_dist = ( D1 < D2 ? D1: D2 );
+        if( preview_dist < vHalfLength ){
+            preview_dist = vHalfLength;
+        }
+
         float preview_x = state.x + preview_dist * state.cosYaw;
         float preview_y = state.y + preview_dist * state.sinYaw;
 
@@ -112,43 +119,60 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
         memory.distanceToTurnNodeWPIn = -1.0;
         memory.distanceToNodeWPIn     = -1.0;
 
+        memory.distanceToTurnNodeWPOut = -1.0;
+        memory.distanceToNodeWPOut     = -1.0;
+
         if( memory.nextTurnNode >= 0 ){
 
-            QList<int> destPaths;
+            QList<int> destPathsIn;
+            QList<int> destPathsOut;
+
             int inDir = memory.myInDirList.at( memory.nextTurnNodeIndexInNodeList );
+            int outDir = memory.myOutDirList.at( memory.nextTurnNodeIndexInNodeList );
+
             int tnIdx = pRoad->nodeId2Index.indexOf( memory.nextTurnNode );
             for(int i=0;i<pRoad->nodes[tnIdx]->inBoundaryWPs.size();++i){
                 if( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->relatedDirection == inDir ){
                     for(int j=0;j<pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP.size();++j){
-                        destPaths.append( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP[j] );
+                        destPathsIn.append( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP[j] );
+                    }
+                }
+            }
+            for(int i=0;i<pRoad->nodes[tnIdx]->outBoundaryWPs.size();++i){
+                if( pRoad->nodes[tnIdx]->outBoundaryWPs[i]->relatedDirection == outDir ){
+                    for(int j=0;j<pRoad->nodes[tnIdx]->outBoundaryWPs[i]->PathWithEWP.size();++j){
+                        destPathsOut.append( pRoad->nodes[tnIdx]->outBoundaryWPs[i]->PathWithEWP[j] );
                     }
                 }
             }
 
             float dist = 0.0;
-            bool foundWP = false;
+            bool foundWPIn = false;
+            bool foundWPOut = false;
             for(int i=memory.currentTargetPathIndexInList;i>=0;i--){
                 int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
                 dist += pRoad->paths[pIdx]->pathLength;
                 if( pRoad->paths[pIdx]->connectingNode == memory.nextTurnNode ){
-                    if( destPaths.indexOf(memory.targetPathList.at(i)) >= 0 ){
-                        dist -= memory.distanceFromStartWPInCurrentPath;
-                        foundWP = true;
+                    if( destPathsIn.indexOf(memory.targetPathList.at(i)) >= 0 ){
+                        foundWPIn = true;
+                        memory.distanceToTurnNodeWPIn = dist - memory.distanceFromStartWPInCurrentPath;
+                    }
+                    if( destPathsOut.indexOf(memory.targetPathList.at(i)) >= 0 ){
+                        foundWPOut = true;
+                        memory.distanceToTurnNodeWPOut = dist - memory.distanceFromStartWPInCurrentPath;
                         break;
                     }
                 }
             }
-            if( foundWP == true ){
-                memory.distanceToTurnNodeWPIn = dist;
-            }
-            else{
+
+            if( foundWPIn == false ){
                 dist = 0.0;
                 for(int i=memory.currentTargetPathIndexInList+1;i<memory.targetPathList.size();i++){
                     int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
                     if( pRoad->paths[pIdx]->connectingNode == memory.nextTurnNode ){
-                        if( destPaths.indexOf(memory.targetPathList.at(i)) >= 0 ){
+                        if( destPathsIn.indexOf(memory.targetPathList.at(i)) >= 0 ){
                             dist -= memory.distanceFromStartWPInCurrentPath;
-                            foundWP = true;
+                            foundWPIn = true;
                             break;
                         }
                         else{
@@ -156,7 +180,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
                         }
                     }
                 }
-                if( foundWP == true ){
+                if( foundWPIn == true ){
                     memory.distanceToTurnNodeWPIn = dist;
                 }
             }
@@ -177,40 +201,54 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
         if( memory.currentTargetNode != memory.nextTurnNode ){
 
-            QList<int> destPaths;
+            QList<int> destPathsIn;
+            QList<int> destPathsOut;
+
             int inDir = memory.myInDirList.at( memory.currentTargetNodeIndexInNodeList );
+            int outDir = memory.myOutDirList.at( memory.currentTargetNodeIndexInNodeList );
+
             int tnIdx = pRoad->nodeId2Index.indexOf( memory.currentTargetNode );
             for(int i=0;i<pRoad->nodes[tnIdx]->inBoundaryWPs.size();++i){
                 if( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->relatedDirection == inDir ){
                     for(int j=0;j<pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP.size();++j){
-                        destPaths.append( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP[j] );
+                        destPathsIn.append( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP[j] );
                     }
                 }
             }
+            for(int i=0;i<pRoad->nodes[tnIdx]->outBoundaryWPs.size();++i){
+                if( pRoad->nodes[tnIdx]->outBoundaryWPs[i]->relatedDirection == outDir ){
+                    for(int j=0;j<pRoad->nodes[tnIdx]->outBoundaryWPs[i]->PathWithEWP.size();++j){
+                        destPathsOut.append( pRoad->nodes[tnIdx]->outBoundaryWPs[i]->PathWithEWP[j] );
+                    }
+                }
+            }
+
             float dist = 0.0;
-            bool foundWP = false;
+            bool foundWPIn  = false;
+            bool foundWPOut = false;
             for(int i=memory.currentTargetPathIndexInList;i>=0;i--){
                 int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
                 dist += pRoad->paths[pIdx]->pathLength;
                 if( pRoad->paths[pIdx]->connectingNode == memory.currentTargetNode ){
-                    if( destPaths.indexOf(memory.targetPathList.at(i)) >= 0 ){
-                        dist -= memory.distanceFromStartWPInCurrentPath;
-                        foundWP = true;
+                    if( destPathsIn.indexOf(memory.targetPathList.at(i)) >= 0 ){
+                        memory.distanceToNodeWPIn = dist - memory.distanceFromStartWPInCurrentPath;
+                        foundWPIn = true;
+                    }
+                    if( destPathsOut.indexOf(memory.targetPathList.at(i)) >= 0 ){
+                        memory.distanceToNodeWPOut = dist - memory.distanceFromStartWPInCurrentPath;
+                        foundWPOut = true;
                         break;
                     }
                 }
             }
-            if( foundWP == true ){
-                memory.distanceToNodeWPIn = dist;
-            }
-            else{
+            if( foundWPIn == false ){
                 dist = 0.0;
                 for(int i=memory.currentTargetPathIndexInList+1;i<memory.targetPathList.size();i++){
                     int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
                     if( pRoad->paths[pIdx]->connectingNode == memory.currentTargetNode ){
-                        if( destPaths.indexOf(memory.targetPathList.at(i)) >= 0 ){
+                        if( destPathsIn.indexOf(memory.targetPathList.at(i)) >= 0 ){
                             dist -= memory.distanceFromStartWPInCurrentPath;
-                            foundWP = true;
+                            foundWPIn = true;
                             break;
                         }
                         else{
@@ -218,13 +256,14 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
                         }
                     }
                 }
-                if( foundWP == true ){
+                if( foundWPIn == true ){
                     memory.distanceToNodeWPIn = dist;
                 }
             }
         }
         else{
-            memory.distanceToNodeWPIn = memory.distanceToTurnNodeWPIn;
+            memory.distanceToNodeWPIn  = memory.distanceToTurnNodeWPIn;
+            memory.distanceToNodeWPOut = memory.distanceToTurnNodeWPOut;
         }
 
 
@@ -324,6 +363,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
             memory.perceptedObjects[alreadyPercepted]->sin_yaw = pAgent[i]->state.sinYaw;
             memory.perceptedObjects[alreadyPercepted]->V       = pAgent[i]->state.V;
             memory.perceptedObjects[alreadyPercepted]->Ax      = pAgent[i]->state.accel - pAgent[i]->state.brake;
+                memory.perceptedObjects[alreadyPercepted]->winker  = pAgent[i]->vehicle.GetWinerState();
 
             memory.perceptedObjects[alreadyPercepted]->objectPath              = pAgent[i]->memory_reference.currentTargetPath;
             memory.perceptedObjects[alreadyPercepted]->objectTargetNode        = pAgent[i]->memory_reference.currentTargetNode;
@@ -545,6 +585,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
             ap->sin_yaw = pAgent[i]->state.sinYaw;
             ap->V       = pAgent[i]->state.V;
             ap->Ax      = pAgent[i]->state.accel - pAgent[i]->state.brake;
+                ap->winker  = pAgent[i]->vehicle.GetWinerState();
 
             ap->objectPath              = pAgent[i]->memory_reference.currentTargetPath;
             ap->objectTargetNode        = pAgent[i]->memory_reference.currentTargetNode;
@@ -745,6 +786,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
             memory.perceptedObjects[j]->shouldEvalRisk    = false;
             memory.perceptedObjects[j]->objPathRecogLabelChecked = -1;
             memory.perceptedObjects[j]->myPathRecogLabelChecked  = -1;
+            memory.perceptedObjects[j]->winker                   = 0;
 
         }
     }

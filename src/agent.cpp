@@ -60,16 +60,16 @@ Agent::Agent()
     param.deadZoneSpeedControl = 5.0 / 3.6;
     param.maxDeceleration = 0.6 * 9.81;
     param.accelOffDeceleration = 0.06 * 9.81;
-    param.steeringControlGain = 1.5;
-    param.latAccelAtTurn = 0.32 * 9.81;
+    param.steeringControlGain = 2.0;
+    param.latAccelAtTurn = 0.20 * 9.81;
     param.headwayTime = 1.5;
-    param.headwayControlGain = 1.2;
+    param.headwayControlGain = 2.0;
     param.minimumPerceptibleDecelerationOfPreceding = 0.3 * 9.81;
     param.minimumHeadwayDistanceAtStop = 4.5;
-    param.minimumDistanceToStopLine = 0.0;
+    param.minimumDistanceToStopLine = 1.5;
     param.visibleDistance = 200.0;
     param.startRelay = 1.0;
-    param.crossTimeSafetyMargin = 4.0;
+    param.crossTimeSafetyMargin = 2.5;
     param.crossWaitPositionSafeyMargin = 7.5;
     param.pedestWaitPositionSafetyMargin = 5.0;
     param.safetyConfirmTime = 1.5;
@@ -149,6 +149,7 @@ void Agent::InitializeMemory()
     memory.steeringControlGainMultiplier = 1.0;
     memory.speedZeroCount = 0;
 
+    memory.shouldYeild = false;
     memory.leftCrossCheckCount = 0;
     memory.rightCrossCheckCount = 0;
 
@@ -156,6 +157,9 @@ void Agent::InitializeMemory()
     memory.avoidTarget = -1;
 
     memory.isChaningLane = false;
+
+    strForDebug         = QString("");
+    strForDebugRiskEval = QString("");
 }
 
 
@@ -181,7 +185,9 @@ void Agent::BackupMemory()
     memory_reference.controlMode = memory.controlMode;
 
     memory_reference.distanceToZeroSpeed               = memory.distanceToZeroSpeed;
+    memory_reference.timeToZeroSpeed                   = memory.timeToZeroSpeed;
     memory_reference.requiredDistToStopFromTargetSpeed = memory.requiredDistToStopFromTargetSpeed;
+    memory_reference.minimumDistanceToStop             = memory.minimumDistanceToStop;
 
     memory_reference.actualTargetSpeed                           = memory.actualTargetSpeed;
     memory_reference.actualTargetHeadwayDistance                 = memory.actualTargetHeadwayDistance;
@@ -380,9 +386,11 @@ void Agent::BackupMemory()
     memory_reference.currentTargetPathIndexInList     = memory.currentTargetPathIndexInList;
     memory_reference.distanceFromStartWPInCurrentPath = memory.distanceFromStartWPInCurrentPath;
 
-    memory_reference.scenarioPathSelectID   = memory.scenarioPathSelectID;
-    memory_reference.distanceToTurnNodeWPIn = memory.distanceToTurnNodeWPIn;
-    memory_reference.distanceToNodeWPIn     = memory.distanceToNodeWPIn;
+    memory_reference.scenarioPathSelectID    = memory.scenarioPathSelectID;
+    memory_reference.distanceToTurnNodeWPIn  = memory.distanceToTurnNodeWPIn;
+    memory_reference.distanceToNodeWPIn      = memory.distanceToNodeWPIn;
+    memory_reference.distanceToTurnNodeWPOut = memory.distanceToTurnNodeWPOut;
+    memory_reference.distanceToNodeWPOut     = memory.distanceToNodeWPOut;
 
     memory_reference.myNodeList.clear();
     for(int i=0;i<memory.myNodeList.size();++i){

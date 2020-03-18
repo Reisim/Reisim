@@ -313,8 +313,8 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             pAgent[objID]->cognitionCountMax = (int)(simHz / 10.0);
             pAgent[objID]->cognitionCount = 0;
 
-            // Hazard Identification and Risk Evaluation; 3[Hz]
-            pAgent[objID]->decisionMakingCountMax = (int)(simHz / 3.0);
+            // Hazard Identification and Risk Evaluation; 5[Hz]
+            pAgent[objID]->decisionMakingCountMax = (int)(simHz / 5.0);
             pAgent[objID]->decisionMalingCount = 0;
 
             // Control; 10[Hz]
@@ -481,39 +481,12 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             float Vi  = 0.0;
 
 
-
-            // Check the lane has enough space for new vehicle
-            bool enoughSpace = true;
-            for(int i=0;i<maxAgentNumber;++i){
-                if( pAgent[i]->agentStatus != 1 ){
-                    continue;
-                }
-                if( pAgent[i]->memory.currentTargetPath != pAgent[objID]->memory.currentTargetPath ){
-                    continue;
-                }
-                if( pAgent[i]->state.V > 5.0 ){
-                    continue;
-                }
-
-                float dx = pAgent[i]->state.x - xi;
-                float dy = pAgent[i]->state.y - yi;
-                float L = dx * cYAi + dy * sYAi;
-                if( L < 10.0 ){
-                    enoughSpace = false;
-                    break;
-                }
-            }
-            if( enoughSpace == false ){
-                continue;
-            }
-
-
-
             // set vehicle size
 //            qDebug() << "Set Vehicle Type and Size";
 
             pAgent[objID]->agentKind = 0;
 
+            int vKind = 0;
             pAgent[objID]->vehicle.SetVehicleModelID( 0 );
 
             {
@@ -523,6 +496,8 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                 for(int j=0;j<pRoad->odRoute[i]->vehicleKindSelectProbability.size();++j){
 
                     if( p <= rnd && rnd < p + pRoad->odRoute[i]->vehicleKindSelectProbability[j] ){
+
+                        vKind = j;
 
                         pAgent[objID]->vehicle.SetVehicleModelID( j );
 
@@ -541,6 +516,38 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     }
                 }
             }
+
+
+            // Check the lane has enough space for new vehicle
+            bool enoughSpace = true;
+            for(int i=0;i<maxAgentNumber;++i){
+                if( pAgent[i]->agentStatus == 0 ){
+                    continue;
+                }
+                if( pAgent[i]->memory.currentTargetPath != pAgent[objID]->memory.currentTargetPath ){
+                    continue;
+                }
+
+                float dx = pAgent[i]->state.x - xi;
+                float dy = pAgent[i]->state.y - yi;
+                float L = dx * cYAi + dy * sYAi;
+
+                L -= pAgent[i]->vHalfLength;
+                L -= pAgent[objID]->vHalfLength;
+
+                if( L < 5.0 ){
+                    enoughSpace = false;
+                    break;
+                }
+            }
+            if( enoughSpace == false ){
+                continue;
+            }
+
+
+
+
+            
 
 
             // Set initial state
