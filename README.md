@@ -20,7 +20,8 @@ For Windows 10, you can find these libraries at Win10 folders.
 ## Usage
 
 The shaders and true-type font should be placed in the same folder of Reisim.exe.
-
+Before running the simulation, data should be prepared using SEdit.
+See quick_start.pdf for more detail.
 
 ## Licence
 
