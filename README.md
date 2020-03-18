@@ -23,7 +23,7 @@ The shaders and true-type font should be placed in the same folder of Reisim.exe
 
 Before running the simulation, data should be prepared using SEdit.
 
-See quick_start.pdf for more detail.
+See [quick_start.pdf](https://github.com/Reisim/Reisim/blob/master/quick_start.pdf) for more detail.
 
 ## Licence
 
