@@ -809,11 +809,14 @@ void UDPThread::ReadUDPData()
 
 
                         //
-                        //  Send data to Apps except S-Interface
+                        //  Send data to Apps except S-Interface and FuncExtend
                         //
                         for(int i=0;i<sendSocks.size();++i){
 
                             if( sendSocks[i]->sock.objectName().contains("S-Interface") == true ){
+                                continue;
+                            }
+                            if( sendSocks[i]->sock.objectName().contains("Function Extender") == true ){
                                 continue;
                             }
 
@@ -826,6 +829,41 @@ void UDPThread::ReadUDPData()
 
                             sendSocks[i]->sock.flush();
                         }
+
+
+                        memset( sendData, 0, 65536 );
+
+                        sendData[0] = 'R';
+                        sendData[1] = 'S';
+                        sendData[2] = 'd';
+
+                        sendSize = 3;
+                        emit RequestSetSendDataForFuncExtend(sendData, sendDataMaxSize, &sendSize);
+
+
+                        //
+                        //  Send data to Function Extender
+                        //   * This is because the data send to function extender should contain s-interface object
+                        //     data to transmit lateral deviation from path to function extender.
+                        //     UE4 can not accept s-interface object data from Re:sim, cause the data is send to UE4
+                        //     from S-interface itself.
+                        //
+                        for(int i=0;i<sendSocks.size();++i){
+
+                            if( sendSocks[i]->sock.objectName().contains("Function Extender") == false ){
+                                continue;
+                            }
+
+                            //qDebug() << "send data to " << sendSocks[i]->sock.objectName();
+
+                            sendSocks[i]->sock.writeDatagram( sendData,
+                                                              sendSize,
+                                                              QHostAddress(sendSocks[i]->ipAddress),
+                                                              sendSocks[i]->to_port);
+
+                            sendSocks[i]->sock.flush();
+                        }
+
 
 
 //                        QueryPerformanceCounter(&end_time);
@@ -945,8 +983,8 @@ void UDPThread::ReadUDPData()
                     int aID = -1;
                     memcpy( &aID, &(com[index+3]), sizeof(int) );
                     if( aID >= 0 && aID < maxAgent ){
-                        qDebug() << "emit AppearAgent(" << aID << ")";
-                        emit AppearAgent( aID );
+                        //qDebug() << "emit AppearAgent(" << aID << ")";
+                        //emit AppearAgent( aID );
                     }
 
                     index += 7;

@@ -484,6 +484,7 @@ void SystemThread::SetSysFile(QString filename)
         connect( udpThread, SIGNAL(SimulationStop()), this, SLOT(SimulationStop()) );
         connect( udpThread, SIGNAL(ExitProgram()), this, SLOT(wrapExitProgram()));
         connect( udpThread, SIGNAL(RequestSetSendData(char*,int,int *)), this, SLOT(SetSendData(char*,int,int *)) );
+        connect( udpThread, SIGNAL(RequestSetSendDataForFuncExtend(char*,int,int *)), this, SLOT(SetSendDataForFuncExtend(char*,int,int *)) );
         connect( udpThread, SIGNAL(ReceiveContinueCommand()), this, SLOT(quit()) );
         connect( udpThread, SIGNAL(SetSimulationFrequency(int)), this, SLOT(SetSimulationFrequency(int)) );
         connect( udpThread, SIGNAL(ReceiveTireHeight(int,float,float,float,float)), this, SLOT(SetTireHeight(int,float,float,float,float)) );
@@ -1626,11 +1627,240 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos)
             memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 44
             at += sizeof(float);
 
-            tempFVal = 0.0;   // Ay
+            tempFVal = agent[i]->memory.lateralDeviationFromTargetPath;   // latDev
             memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 48
             at += sizeof(float);
 
-            tempFVal = 0.0;   // Vy
+            tempFVal = agent[i]->memory.lateralDeviationFromTargetPathAtPreviewPoint;   // latDev at aim point
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 52
+            at += sizeof(float);
+
+            tempCVal = 0;     // engineKeyState
+            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 56
+            at += sizeof(char);
+
+            tempCVal = 0;     // gearPosition
+            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 57
+            at += sizeof(char);
+
+            tempIVal = 0;     // Tachometer
+            memcpy(&(sendData[at]), &tempIVal, sizeof(int));   // 58
+            at += sizeof(int);
+
+            tempCVal = 0;     // lightFlag1
+            if( agent[i]->vehicle.GetBrakeLampState() == 1 ){
+                tempCVal += 0x01;
+            }
+//            int winkerState = agent[i]->vehicle.GetWinerState();
+            int winkerState = agent[i]->vehicle.GetWinkerIsBlink();
+            if( winkerState == 1 ){   // Left Winker
+                tempCVal += 0x02;
+            }
+            else if( winkerState == 2 ){  // Right Winker
+                tempCVal += 0x04;
+            }
+            else if( winkerState == 3 ){  // Hazard
+                tempCVal += 0x06;
+            }
+
+//            qDebug() << "Brake = " << agent[i]->vehicle.GetBrakeLampState() << " send = " << (int)tempCVal;
+
+            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 62
+            at += sizeof(char);
+
+            tempCVal = 0;     // lightFlag2
+            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 63
+            at += sizeof(char);
+
+            tempFVal = agent[i]->vehicle.param.Lf;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 64
+            at += sizeof(float);
+
+            tempFVal = agent[i]->vehicle.param.Lr;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 68
+            at += sizeof(float);
+
+            tempFVal = 1.8;     // Tf
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 72
+            at += sizeof(float);
+
+            tempFVal = 1.8;     // Tr
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 76
+            at += sizeof(float);
+
+            tempFVal = agent[i]->vehicle.state.tireRotAngle;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 80
+            at += sizeof(float);
+
+            tempFVal = agent[i]->vehicle.state.steer * (-57.3 / 6.0) ;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 84
+            at += sizeof(float);
+
+            tempFVal = agent[i]->vehicle.state.tireRotAngle;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 88
+            at += sizeof(float);
+
+            tempFVal = agent[i]->vehicle.state.steer * (-57.3 / 6.0);
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 92
+            at += sizeof(float);
+
+            tempFVal = agent[i]->vehicle.state.tireRotAngle;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 96
+            at += sizeof(float);
+
+            tempFVal = 0.0;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 100
+            at += sizeof(float);
+
+            tempFVal = agent[i]->vehicle.state.tireRotAngle;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 104
+            at += sizeof(float);
+
+            tempFVal = 0.0;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 108
+            at += sizeof(float);
+
+            tempFVal = agent[i]->vehicle.state.relZBody;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 112
+            at += sizeof(float);
+
+            tempFVal = agent[i]->vehicle.state.relRollBody;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 116
+            at += sizeof(float);
+
+            tempFVal = agent[i]->vehicle.state.relPitchBody;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 120
+            at += sizeof(float);
+
+            tempFVal = agent[i]->vehicle.state.relYBody;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 124
+            at += sizeof(float);
+
+            tempCVal = 0;     // optionalFlag1
+            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 128
+            at += sizeof(char);
+
+            tempCVal = 0;     // optionalFlag2
+            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 129
+            at += sizeof(char);
+
+            tempCVal = 0;     // optionalFlag3
+            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 130
+            at += sizeof(char);
+
+            tempCVal = 0;     // optionalFlag4
+            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 132
+            at += sizeof(char);
+        }
+    }
+
+    memcpy(&(sendData[at]), &numTrafficSignals, sizeof(int));
+    at += sizeof(int);
+
+    for(int i=0;i<numTrafficSignals;++i){
+
+        memcpy(&(sendData[at]), &(trafficSignal[i]->id), sizeof(int));
+        at += sizeof(int);
+
+        sendData[at] = trafficSignal[i]->type;
+        at += sizeof(char);
+
+        int display = trafficSignal[i]->GetCurrentDisplayInfo();
+        memcpy(&(sendData[at]), &display, sizeof(int));
+        at += sizeof(int);
+
+        float remainTime = trafficSignal[i]->remainingTimeToNextDisplay;
+        memcpy(&(sendData[at]), &remainTime, sizeof(float));
+        at += sizeof(float);
+    }
+
+
+    *pos = at;   // 132
+
+    //qDebug() << "data size = " << at;
+}
+
+
+void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos)
+{
+    int n = 0;
+
+    // count number of data
+    for(int i=0;i<maxAgent;++i){
+        if( agent[i]->agentStatus == 0 ){
+            continue;
+        }
+        n++;
+    }
+
+
+    int at = *pos;
+
+    memcpy(&(sendData[at]), &n, sizeof(int));   // 3
+    at += sizeof(int);
+
+    float tempFVal = 0.0;
+    int   tempIVal = 0;
+    char  tempCVal = 0;
+
+
+    for(int i=0;i<maxAgent;++i){
+
+        if( agent[i]->agentStatus == 0 ){
+            continue;
+        }
+
+        if( at + 125 < maxSize ){
+
+            tempCVal = 'a';
+            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 7
+            at += sizeof(char);
+
+            tempIVal = agent[i]->ID;
+            memcpy(&(sendData[at]), &tempIVal, sizeof(int));   // 8
+            at += sizeof(int);
+
+            tempFVal = agent[i]->state.x;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 12
+            at += sizeof(float);
+
+            tempFVal = agent[i]->state.y * (-1.0);
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 16
+            at += sizeof(float);
+
+            tempFVal = agent[i]->state.z;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 20
+            at += sizeof(float);
+
+            tempFVal = agent[i]->state.roll;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 24
+            at += sizeof(float);
+
+            tempFVal = agent[i]->state.pitch;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 28
+            at += sizeof(float);
+
+            tempFVal = agent[i]->state.yaw * (-1.0);
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 32
+            at += sizeof(float);
+
+            tempFVal = agent[i]->state.V;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 36
+            at += sizeof(float);
+
+            tempFVal = agent[i]->vehicle.state.ax;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 40
+            at += sizeof(float);
+
+            tempFVal = agent[i]->vehicle.state.yawRate;
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 44
+            at += sizeof(float);
+
+            tempFVal = agent[i]->memory.lateralDeviationFromTargetPath;   // latDev
+            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 48
+            at += sizeof(float);
+
+            tempFVal = agent[i]->memory.lateralDeviationFromTargetPathAtPreviewPoint;   // latDev at aim point
             memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 52
             at += sizeof(float);
 
@@ -1931,6 +2161,132 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
         agent[id]->vehicle.headlight = 0;
     }
 
+
+    float dist = 0.0;
+    int pathId = road->GetNearestPath( as->x, as->y, as->yaw, dist );
+
+    qDebug() << "S-Interface Object: near path = " << pathId;
+
+    if( pathId >= 0 ){
+
+        float deviation,xt,yt,xd,yd,s;
+        road->GetDeviationFromPath( pathId,
+                                    as->x, as->y, as->yaw,
+                                    deviation, xt, yt, xd, yd, s );
+
+        agent[id]->memory.currentTargetPath = pathId;
+        agent[id]->memory.lateralDeviationFromTargetPath = deviation;
+        agent[id]->memory.distanceFromStartWPInCurrentPath = s;
+
+
+        qDebug() << "deviation = " << deviation;
+
+
+        agent[id]->memory.targetPathList.clear();
+        agent[id]->memory.targetPathList.append( pathId );
+
+        int cpath = pathId;
+        int idx = road->pathId2Index[cpath];
+        float totalLen = 0.0;
+        while(1){
+            int nNp = road->paths[idx]->forwardPaths.size();
+            if( nNp == 0 ){
+                break;
+            }
+            else{
+                if( nNp == 1 ){
+                    cpath = road->paths[idx]->forwardPaths[0];
+                    idx = road->pathId2Index[cpath];
+
+                    agent[id]->memory.targetPathList.prepend( cpath );
+                }
+                else{
+
+                    cpath = road->paths[idx]->forwardPaths[0];
+                    int tidx = road->pathId2Index[cpath];
+
+                    // select path with minimum curvature
+                    int minIdx = 0;
+                    float minCurvature = 0.0;
+                    for(int i=0;road->paths[tidx]->curvature.size();++i){
+                        if( minCurvature < fabs(road->paths[tidx]->curvature[i]) ){
+                            minCurvature = fabs(road->paths[tidx]->curvature[i]);
+                        }
+                    }
+
+                    for(int j=1;j<nNp;++j){
+
+                        cpath = road->paths[idx]->forwardPaths[j];
+                        tidx = road->pathId2Index[cpath];
+
+                        float tmpCurvature = 0.0;
+                        for(int i=0;road->paths[tidx]->curvature.size();++i){
+                            if( tmpCurvature < fabs(road->paths[tidx]->curvature[i]) ){
+                                tmpCurvature = fabs(road->paths[tidx]->curvature[i]);
+                            }
+                        }
+
+                        if( minCurvature > tmpCurvature ){
+                            minIdx = j;
+                            minCurvature = tmpCurvature;
+                        }
+
+                    }
+
+                    cpath = road->paths[idx]->forwardPaths[minIdx];
+                    idx = road->pathId2Index[cpath];
+
+                    agent[id]->memory.targetPathList.prepend( cpath );
+                }
+
+                totalLen += road->paths[idx]->pathLength;
+
+                if( totalLen > 400.0 ){
+                    break;
+                }
+            }
+        }
+
+        qDebug() << "targetPathList = " << agent[id]->memory.targetPathList;
+
+
+        float preview_dist = as->V;
+        if( preview_dist < 5.0 ){
+            preview_dist = 5.0;
+        }
+
+        float preview_x = as->x + preview_dist * cos( as->yaw );
+        float preview_y = as->y + preview_dist * sin( as->yaw );
+
+
+        agent[id]->memory.lateralDeviationFromTargetPathAtPreviewPoint = 0.0;
+        agent[id]->memory.previewPointPath = -1;
+
+        for(int i=agent[id]->memory.targetPathList.size()-1;i>=0;i--){
+
+            float tdev,txt,tyt,txd,tyd,ts;
+            int chk = road->GetDeviationFromPath( agent[id]->memory.targetPathList[i],
+                                                   preview_x, preview_y, as->yaw,
+                                                   tdev, txt, tyt, txd, tyd, ts, false, true );
+
+    //        qDebug() << "i=" << i << " chk=" << chk << " dev=" << tdev;
+
+            if( chk != agent[id]->memory.targetPathList[i] ){
+                continue;
+            }
+            if( isnan(tdev) == true ){
+                agent[id]->memory.lateralDeviationFromTargetPathAtPreviewPoint = 0.0;
+                break;
+            }
+
+            agent[id]->memory.lateralDeviationFromTargetPathAtPreviewPoint = tdev;
+            agent[id]->memory.previewPointPath = agent[id]->memory.targetPathList[i];
+
+            qDebug() << "deviation at aim point = " << agent[id]->memory.lateralDeviationFromTargetPathAtPreviewPoint;
+
+            break;
+        }
+    }
 }
 
 

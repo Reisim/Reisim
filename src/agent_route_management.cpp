@@ -59,6 +59,11 @@ void Agent::CheckPathList(Road* pRoad)
             }
             else{
 
+                if( memory.currentTargetPathIndexInList <= 2 ){
+                    int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList[1] );
+                    memory.targetPathList[0] = pRoad->paths[pIdx]->forwardPaths[0];
+                }
+
                 float dist = 0;
                 int currentPath = pRoad->GetNearestPathFromList( state.x,
                                                                  state.y,
@@ -66,6 +71,7 @@ void Agent::CheckPathList(Road* pRoad)
                                                                  dist,
                                                                  memory.targetPathList );
                 if( currentPath < 0 ){
+
                     qDebug() << "[CheckPathList:Warning]----------------------------------";
                     qDebug() << " Agent ID = " << ID << " cannot determine nearest path from assigned list.";
                     qDebug() << "   currentTargetPath = " << memory.currentTargetPath;

@@ -48,6 +48,9 @@ bool allWorkerThreadFinshed = false;
 QWaitCondition *condSimMain;
 
 
+QFile sysLogOutFile;
+
+
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
@@ -56,6 +59,24 @@ int main(int argc, char *argv[])
 
     QString SysFilePath      = QString();
     QString ConfFilePath     = QString();
+
+
+    qDebug() << "Application Directory = " << QApplication::applicationDirPath();
+
+
+    sysLogOutFile.setFileName(QApplication::applicationDirPath() + QString("/resim_exe_log.txt"));
+    if( sysLogOutFile.open( QIODevice::WriteOnly | QIODevice::Text ) ){
+
+        qDebug() << "Open exe-log file: " << sysLogOutFile.fileName();
+
+        QTextStream sysLogOut(&sysLogOutFile);
+        sysLogOut << "+--- Start Re:sim" << "\n";
+        sysLogOut.flush();
+        sysLogOutFile.close();
+    }
+    else{
+        qDebug() << "Cannot open exe-log file: " << sysLogOutFile.fileName();
+    }
 
 
     // Get Network Drive Info
@@ -81,8 +102,6 @@ int main(int argc, char *argv[])
     condSimMain = new QWaitCondition();
 
 
-
-    qDebug() << "Current Directory = " << QDir::currentPath();
 
 
 #ifdef _WINDOWS_
@@ -143,6 +162,12 @@ int main(int argc, char *argv[])
     w.setMinimumSize( QSize(800,600) );
     w.show();
 
+    if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
+        QTextStream sysLogOut(&sysLogOutFile);
+        sysLogOut << "Main Windows created." << "\n";
+        sysLogOut.flush();
+        sysLogOutFile.close();
+    }
 
 
     //
@@ -174,6 +199,13 @@ int main(int argc, char *argv[])
         workerThread[i]->start();
 
         sys->evalIDs.append( workerThread[i]->evalIDs );
+    }
+
+    if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
+        QTextStream sysLogOut(&sysLogOutFile);
+        sysLogOut << "Threads created." << "\n";
+        sysLogOut.flush();
+        sysLogOutFile.close();
     }
 
 
@@ -217,6 +249,12 @@ int main(int argc, char *argv[])
         QObject::connect( sys, SIGNAL(SetTrafficSignalPointer(TrafficSignal*)), workerThread[i], SLOT(SetTrafficSignalPointer(TrafficSignal*)) );
     }
 
+    if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
+        QTextStream sysLogOut(&sysLogOutFile);
+        sysLogOut << "Connection created." << "\n";
+        sysLogOut.flush();
+        sysLogOutFile.close();
+    }
 
 
 
@@ -224,14 +262,36 @@ int main(int argc, char *argv[])
     //  Check arguments
     //
     qDebug() << "num arg = " << argc;
+    if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
+        QTextStream sysLogOut(&sysLogOutFile);
+        sysLogOut << "Number arg = " << argc << "\n";
+        sysLogOutFile.close();
+    }
+
     for(int i=0;i<argc;++i){
         qDebug() << "[" << i << "]" << argv[i];
+
+        if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
+            QTextStream sysLogOut(&sysLogOutFile);
+            sysLogOut << "[" << i << "]" << argv[i] << "\n";
+            sysLogOut.flush();
+            sysLogOutFile.close();
+        }
+
 
         QString tmpStr = QString( argv[i] );
         if( tmpStr.startsWith("-WithArg") ){
 
             QString argFileName = QApplication::applicationDirPath() + QString("/Reisim.arg.txt");
             qDebug() << "argFileName = " << argFileName;
+
+            if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
+                QTextStream sysLogOut(&sysLogOutFile);
+                sysLogOut << "argFileName = " << argFileName << "\n";
+                sysLogOut.flush();
+                sysLogOutFile.close();
+            }
+
 
             QFile argFile( CheckNetworkDrive(argFileName) );
             if( argFile.open(QIODevice::ReadOnly | QIODevice::Text) == true ){
@@ -242,32 +302,93 @@ int main(int argc, char *argv[])
                 SysFilePath = NetLine.remove("-Net=").trimmed();
 
                 qDebug() << "SysFilePath = " << SysFilePath;
+                if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
+                    QTextStream sysLogOut(&sysLogOutFile);
+                    sysLogOut << "SysFilePath = " << SysFilePath << "\n";
+                    sysLogOut.flush();
+                    sysLogOutFile.close();
+                }
+
 
                 QString ConfLine = in.readLine();
                 ConfFilePath = ConfLine.remove("-Conf=").trimmed();
 
                 qDebug() << "ConfFilePath = " << ConfFilePath;
+                if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
+                    QTextStream sysLogOut(&sysLogOutFile);
+                    sysLogOut << "ConfFilePath = " << ConfFilePath << "\n";
+                    sysLogOut.flush();
+                    sysLogOutFile.close();
+                }
+
 
                 argFile.close();
             }
             else{
                 qDebug() << "Cannot open argFile";
+
+                qDebug() << "ConfFilePath = " << ConfFilePath;
+                if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
+                    QTextStream sysLogOut(&sysLogOutFile);
+                    sysLogOut << "Cannot open argFile." << "\n";
+                    sysLogOut.flush();
+                    sysLogOutFile.close();
+                }
+
             }
         }
     }
 
     if( ConfFilePath.isNull() == false ){
         qDebug() << "Set Config File";
+
+        if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
+            QTextStream sysLogOut(&sysLogOutFile);
+            sysLogOut << "Set Config File ... ";
+            sysLogOut.flush();
+            sysLogOutFile.close();
+        }
+
         w.LoadSettingFile( ConfFilePath );
+
+        if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
+            QTextStream sysLogOut(&sysLogOutFile);
+            sysLogOut << "done." << "\n";
+            sysLogOut.flush();
+            sysLogOutFile.close();
+        }
     }
 
     if( SysFilePath.isNull() == false ){
         qDebug() << "Set Network File";
+
+        if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
+            QTextStream sysLogOut(&sysLogOutFile);
+            sysLogOut << "Set Network File ... ";
+            sysLogOut.flush();
+            sysLogOutFile.close();
+        }
+
         sys->SetSysFile( SysFilePath );
+
+        if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
+            QTextStream sysLogOut(&sysLogOutFile);
+            sysLogOut << "done." << "\n";
+            sysLogOut.flush();
+            sysLogOutFile.close();
+        }
     }
 
     qDebug() << "Enter main loop ...";
     qDebug() << "-----";
+
+    if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
+        QTextStream sysLogOut(&sysLogOutFile);
+        sysLogOut << "+--- Enter main loop" << "\n";
+        sysLogOut.flush();
+        sysLogOutFile.close();
+    }
+
 
 
     //
@@ -284,6 +405,13 @@ int main(int argc, char *argv[])
 
 
     ReleaseNetworkDriveInfo();
+
+    if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
+        QTextStream sysLogOut(&sysLogOutFile);
+        sysLogOut << "+--- End Re:sim" << "\n";
+        sysLogOut.flush();
+        sysLogOutFile.close();
+    }
 
     return ret;
 }

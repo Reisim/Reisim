@@ -122,149 +122,154 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
         memory.distanceToTurnNodeWPOut = -1.0;
         memory.distanceToNodeWPOut     = -1.0;
 
-        if( memory.nextTurnNode >= 0 ){
+        // only for agent with node list route data
+        if( memory.myNodeList.size() > 0 ){
 
-            QList<int> destPathsIn;
-            QList<int> destPathsOut;
+            if( memory.nextTurnNode >= 0 ){
 
-            int inDir = memory.myInDirList.at( memory.nextTurnNodeIndexInNodeList );
-            int outDir = memory.myOutDirList.at( memory.nextTurnNodeIndexInNodeList );
+                QList<int> destPathsIn;
+                QList<int> destPathsOut;
 
-            int tnIdx = pRoad->nodeId2Index.indexOf( memory.nextTurnNode );
-            for(int i=0;i<pRoad->nodes[tnIdx]->inBoundaryWPs.size();++i){
-                if( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->relatedDirection == inDir ){
-                    for(int j=0;j<pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP.size();++j){
-                        destPathsIn.append( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP[j] );
+                int inDir = memory.myInDirList.at( memory.nextTurnNodeIndexInNodeList );
+                int outDir = memory.myOutDirList.at( memory.nextTurnNodeIndexInNodeList );
+
+                int tnIdx = pRoad->nodeId2Index.indexOf( memory.nextTurnNode );
+                for(int i=0;i<pRoad->nodes[tnIdx]->inBoundaryWPs.size();++i){
+                    if( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->relatedDirection == inDir ){
+                        for(int j=0;j<pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP.size();++j){
+                            destPathsIn.append( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP[j] );
+                        }
                     }
                 }
-            }
-            for(int i=0;i<pRoad->nodes[tnIdx]->outBoundaryWPs.size();++i){
-                if( pRoad->nodes[tnIdx]->outBoundaryWPs[i]->relatedDirection == outDir ){
-                    for(int j=0;j<pRoad->nodes[tnIdx]->outBoundaryWPs[i]->PathWithEWP.size();++j){
-                        destPathsOut.append( pRoad->nodes[tnIdx]->outBoundaryWPs[i]->PathWithEWP[j] );
+                for(int i=0;i<pRoad->nodes[tnIdx]->outBoundaryWPs.size();++i){
+                    if( pRoad->nodes[tnIdx]->outBoundaryWPs[i]->relatedDirection == outDir ){
+                        for(int j=0;j<pRoad->nodes[tnIdx]->outBoundaryWPs[i]->PathWithEWP.size();++j){
+                            destPathsOut.append( pRoad->nodes[tnIdx]->outBoundaryWPs[i]->PathWithEWP[j] );
+                        }
                     }
                 }
-            }
 
-            float dist = 0.0;
-            bool foundWPIn = false;
-            bool foundWPOut = false;
-            for(int i=memory.currentTargetPathIndexInList;i>=0;i--){
-                int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
-                dist += pRoad->paths[pIdx]->pathLength;
-                if( pRoad->paths[pIdx]->connectingNode == memory.nextTurnNode ){
-                    if( destPathsIn.indexOf(memory.targetPathList.at(i)) >= 0 ){
-                        foundWPIn = true;
-                        memory.distanceToTurnNodeWPIn = dist - memory.distanceFromStartWPInCurrentPath;
-                    }
-                    if( destPathsOut.indexOf(memory.targetPathList.at(i)) >= 0 ){
-                        foundWPOut = true;
-                        memory.distanceToTurnNodeWPOut = dist - memory.distanceFromStartWPInCurrentPath;
-                        break;
-                    }
-                }
-            }
-
-            if( foundWPIn == false ){
-                dist = 0.0;
-                for(int i=memory.currentTargetPathIndexInList+1;i<memory.targetPathList.size();i++){
+                float dist = 0.0;
+                bool foundWPIn = false;
+                bool foundWPOut = false;
+                for(int i=memory.currentTargetPathIndexInList;i>=0;i--){
                     int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
+                    dist += pRoad->paths[pIdx]->pathLength;
                     if( pRoad->paths[pIdx]->connectingNode == memory.nextTurnNode ){
                         if( destPathsIn.indexOf(memory.targetPathList.at(i)) >= 0 ){
-                            dist -= memory.distanceFromStartWPInCurrentPath;
                             foundWPIn = true;
+                            memory.distanceToTurnNodeWPIn = dist - memory.distanceFromStartWPInCurrentPath;
+                        }
+                        if( destPathsOut.indexOf(memory.targetPathList.at(i)) >= 0 ){
+                            foundWPOut = true;
+                            memory.distanceToTurnNodeWPOut = dist - memory.distanceFromStartWPInCurrentPath;
                             break;
                         }
-                        else{
-                            dist += pRoad->paths[pIdx]->pathLength;
+                    }
+                }
+
+                if( foundWPIn == false ){
+                    dist = 0.0;
+                    for(int i=memory.currentTargetPathIndexInList+1;i<memory.targetPathList.size();i++){
+                        int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
+                        if( pRoad->paths[pIdx]->connectingNode == memory.nextTurnNode ){
+                            if( destPathsIn.indexOf(memory.targetPathList.at(i)) >= 0 ){
+                                dist -= memory.distanceFromStartWPInCurrentPath;
+                                foundWPIn = true;
+                                break;
+                            }
+                            else{
+                                dist += pRoad->paths[pIdx]->pathLength;
+                            }
+                        }
+                    }
+                    if( foundWPIn == true ){
+                        memory.distanceToTurnNodeWPIn = dist;
+                    }
+                }
+            }
+
+
+    #ifdef _PERFORMANCE_CHECK_AGENT_PERCEPTION
+            QueryPerformanceCounter(&end);
+            calTime[1] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+            calCount[1]++;
+    #endif
+
+
+
+    #ifdef _PERFORMANCE_CHECK_AGENT_PERCEPTION
+            QueryPerformanceCounter(&start);
+    #endif
+
+            if( memory.currentTargetNode != memory.nextTurnNode ){
+
+                QList<int> destPathsIn;
+                QList<int> destPathsOut;
+
+                int inDir = memory.myInDirList.at( memory.currentTargetNodeIndexInNodeList );
+                int outDir = memory.myOutDirList.at( memory.currentTargetNodeIndexInNodeList );
+
+                int tnIdx = pRoad->nodeId2Index.indexOf( memory.currentTargetNode );
+                for(int i=0;i<pRoad->nodes[tnIdx]->inBoundaryWPs.size();++i){
+                    if( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->relatedDirection == inDir ){
+                        for(int j=0;j<pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP.size();++j){
+                            destPathsIn.append( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP[j] );
                         }
                     }
                 }
-                if( foundWPIn == true ){
-                    memory.distanceToTurnNodeWPIn = dist;
-                }
-            }
-        }
-
-
-#ifdef _PERFORMANCE_CHECK_AGENT_PERCEPTION
-        QueryPerformanceCounter(&end);
-        calTime[1] += static_cast<double>(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
-        calCount[1]++;
-#endif
-
-
-
-#ifdef _PERFORMANCE_CHECK_AGENT_PERCEPTION
-        QueryPerformanceCounter(&start);
-#endif
-
-        if( memory.currentTargetNode != memory.nextTurnNode ){
-
-            QList<int> destPathsIn;
-            QList<int> destPathsOut;
-
-            int inDir = memory.myInDirList.at( memory.currentTargetNodeIndexInNodeList );
-            int outDir = memory.myOutDirList.at( memory.currentTargetNodeIndexInNodeList );
-
-            int tnIdx = pRoad->nodeId2Index.indexOf( memory.currentTargetNode );
-            for(int i=0;i<pRoad->nodes[tnIdx]->inBoundaryWPs.size();++i){
-                if( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->relatedDirection == inDir ){
-                    for(int j=0;j<pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP.size();++j){
-                        destPathsIn.append( pRoad->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP[j] );
+                for(int i=0;i<pRoad->nodes[tnIdx]->outBoundaryWPs.size();++i){
+                    if( pRoad->nodes[tnIdx]->outBoundaryWPs[i]->relatedDirection == outDir ){
+                        for(int j=0;j<pRoad->nodes[tnIdx]->outBoundaryWPs[i]->PathWithEWP.size();++j){
+                            destPathsOut.append( pRoad->nodes[tnIdx]->outBoundaryWPs[i]->PathWithEWP[j] );
+                        }
                     }
                 }
-            }
-            for(int i=0;i<pRoad->nodes[tnIdx]->outBoundaryWPs.size();++i){
-                if( pRoad->nodes[tnIdx]->outBoundaryWPs[i]->relatedDirection == outDir ){
-                    for(int j=0;j<pRoad->nodes[tnIdx]->outBoundaryWPs[i]->PathWithEWP.size();++j){
-                        destPathsOut.append( pRoad->nodes[tnIdx]->outBoundaryWPs[i]->PathWithEWP[j] );
-                    }
-                }
-            }
 
-            float dist = 0.0;
-            bool foundWPIn  = false;
-            bool foundWPOut = false;
-            for(int i=memory.currentTargetPathIndexInList;i>=0;i--){
-                int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
-                dist += pRoad->paths[pIdx]->pathLength;
-                if( pRoad->paths[pIdx]->connectingNode == memory.currentTargetNode ){
-                    if( destPathsIn.indexOf(memory.targetPathList.at(i)) >= 0 ){
-                        memory.distanceToNodeWPIn = dist - memory.distanceFromStartWPInCurrentPath;
-                        foundWPIn = true;
-                    }
-                    if( destPathsOut.indexOf(memory.targetPathList.at(i)) >= 0 ){
-                        memory.distanceToNodeWPOut = dist - memory.distanceFromStartWPInCurrentPath;
-                        foundWPOut = true;
-                        break;
-                    }
-                }
-            }
-            if( foundWPIn == false ){
-                dist = 0.0;
-                for(int i=memory.currentTargetPathIndexInList+1;i<memory.targetPathList.size();i++){
+                float dist = 0.0;
+                bool foundWPIn  = false;
+                bool foundWPOut = false;
+                for(int i=memory.currentTargetPathIndexInList;i>=0;i--){
                     int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
+                    dist += pRoad->paths[pIdx]->pathLength;
                     if( pRoad->paths[pIdx]->connectingNode == memory.currentTargetNode ){
                         if( destPathsIn.indexOf(memory.targetPathList.at(i)) >= 0 ){
-                            dist -= memory.distanceFromStartWPInCurrentPath;
+                            memory.distanceToNodeWPIn = dist - memory.distanceFromStartWPInCurrentPath;
                             foundWPIn = true;
-                            break;
                         }
-                        else{
-                            dist += pRoad->paths[pIdx]->pathLength;
+                        if( destPathsOut.indexOf(memory.targetPathList.at(i)) >= 0 ){
+                            memory.distanceToNodeWPOut = dist - memory.distanceFromStartWPInCurrentPath;
+                            foundWPOut = true;
+                            break;
                         }
                     }
                 }
-                if( foundWPIn == true ){
-                    memory.distanceToNodeWPIn = dist;
+                if( foundWPIn == false ){
+                    dist = 0.0;
+                    for(int i=memory.currentTargetPathIndexInList+1;i<memory.targetPathList.size();i++){
+                        int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
+                        if( pRoad->paths[pIdx]->connectingNode == memory.currentTargetNode ){
+                            if( destPathsIn.indexOf(memory.targetPathList.at(i)) >= 0 ){
+                                dist -= memory.distanceFromStartWPInCurrentPath;
+                                foundWPIn = true;
+                                break;
+                            }
+                            else{
+                                dist += pRoad->paths[pIdx]->pathLength;
+                            }
+                        }
+                    }
+                    if( foundWPIn == true ){
+                        memory.distanceToNodeWPIn = dist;
+                    }
                 }
             }
+            else{
+                memory.distanceToNodeWPIn  = memory.distanceToTurnNodeWPIn;
+                memory.distanceToNodeWPOut = memory.distanceToTurnNodeWPOut;
+            }
         }
-        else{
-            memory.distanceToNodeWPIn  = memory.distanceToTurnNodeWPIn;
-            memory.distanceToNodeWPOut = memory.distanceToTurnNodeWPOut;
-        }
+
 
 
 #ifdef _PERFORMANCE_CHECK_AGENT_PERCEPTION

@@ -28,7 +28,7 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
     }
 
 
-    if( memory.controlMode == AGENT_CONTROL_MODE::AGENT_LOGIC ){
+    if( memory.controlMode == AGENT_CONTROL_MODE::AGENT_LOGIC && memory.myNodeList.size() > 0 ){
 
 #ifdef _PERFORMANCE_CHECK_AGENT_RECOGNITION
         LARGE_INTEGER start4;

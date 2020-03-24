@@ -172,7 +172,7 @@ int Road::GetDeviationFromPath(int pathID,
 
         if( negrectYawAngleInfo == false ){
             float ip2 = cya * dx + sya * dy;
-            if( ip2 < 0.0 ){
+            if( ip2 < 0.5 ){
                 continue;
             }
         }
@@ -458,6 +458,8 @@ QList<int> Road::GetPathList(int routeIndex, int currentPath, bool &needLC, int 
                 nodes[dnIdx]->pathLists[i]->inDirect == destNodeInDir ){
 
             int Nlist = nodes[dnIdx]->pathLists[i]->pathList.size();
+//            qDebug() << "Nlist = " << Nlist;
+
             if( Nlist < 1 ){
                 qDebug() << "[Fatal] Road::GetPathList, routeIdx = " << routeIndex << ", Node " << destNode << " does not have any path-list for inDir = "
                          << destNodeInDir << " and outDir = " << destNodeOutDir;
@@ -625,8 +627,6 @@ QList<int> Road::GetPathList(int routeIndex, int currentPath, bool &needLC, int 
 
 
     }
-
-
 
     return ret;
 }

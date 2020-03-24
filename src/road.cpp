@@ -473,6 +473,10 @@ void Road::LoadRoadData(QString filename)
         }
         else if( tag == QString("In-boundary WPs") ){
 
+            if( QString( divLine[1] ).contains(",") == false ){
+                continue;
+            }
+
             QStringList elem = QString( divLine[1] ).split(",");
 
             int id = QString( elem[0] ).trimmed().toInt();
@@ -504,6 +508,10 @@ void Road::LoadRoadData(QString filename)
             }
         }
         else if( tag == QString("Out-boundary WPs") ){
+
+            if( QString( divLine[1] ).contains(",") == false ){
+                continue;
+            }
 
             QStringList elem = QString( divLine[1] ).split(",");
 
@@ -680,6 +688,23 @@ void Road::LoadRoadData(QString filename)
     }
 
     file.close();
+
+
+    // Set Dummy Vehicle Size Data if no data supplied
+    if( vehicleKind.size() == 0 ){
+        struct ObjectCategoryAndSize *k = new ObjectCategoryAndSize;
+
+        k->id = vehicleKind.size();
+
+        k->category    = QString( "Dummy Vehicle" );
+        k->subcategory = QString( "Normal Sedan" );
+
+        k->length = 4.7;
+        k->width  = 1.72;
+        k->height = 1.5;
+
+        vehicleKind.append( k );
+    }
 
 
     qDebug() << "size of wps ; " << wps.size();
@@ -1207,7 +1232,7 @@ void Road::CheckSideBoundaryWPs(struct Node *n)
                             if( n->outBoundaryWPs[tIndex[k]]->laneNo == laneNo + 1 ){
                                 n->outBoundaryWPs[tIndex[j]]->rightWpId = n->outBoundaryWPs[tIndex[k]]->wpId;
                             }
-                            else if( n->inBoundaryWPs[tIndex[k]]->laneNo == laneNo - 1 ){
+                            else if( n->outBoundaryWPs[tIndex[k]]->laneNo == laneNo - 1 ){
                                 n->outBoundaryWPs[tIndex[j]]->leftWpId = n->outBoundaryWPs[tIndex[k]]->wpId;
                             }
                         }

@@ -85,6 +85,7 @@ public slots:
     void SetSpeedAdjustVal(int);
     void wrapExitProgram();
     void SetSendData(char *,int,int *);
+    void SetSendDataForFuncExtend(char *,int,int *);
     void SetSimulationFrequency(int);
     void SetTireHeight(int,float,float,float,float);
 
