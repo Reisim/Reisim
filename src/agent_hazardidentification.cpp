@@ -24,7 +24,7 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
     if( decisionMalingCount >= decisionMakingCountMax ){
         decisionMalingCount = 0;
 
-        strForDebugRiskEval = QString("");
+        strForDebugRiskEval = QString("-----\n");
     }
     else{
         return;

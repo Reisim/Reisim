@@ -49,6 +49,8 @@ public:
     void SetConfFile(QString filename){ confFile = filename; }
     void LoadScenarioFile();
 
+
+
     QList<QList<int> *> evalIDs;
     int *pWorkingMode;
 
@@ -113,6 +115,9 @@ public slots:
     void ShowAgentData(float x,float y);
     void SetTmpStopTime(int hour,int min,int sec);
 
+    void OutputRestartData(QString filename);
+    void SetRestartFile(QString filename){ restartFile = filename; }
+    void SetRestartData();
 
 private:
     volatile bool stopped;
@@ -153,6 +158,9 @@ private:
     int tmpStopHour;
     int tmpStopMin;
     int tmpStopSecond;
+
+    QString restartFile;
+
 };
 
 #endif // SYSTEMTHREAD_H

@@ -51,7 +51,7 @@ void Agent::UpdateState(Road* pRoad)
                 float z = pRoad->paths[pIdx]->pos.first()->z();
                 float dz = (pRoad->paths[pIdx]->pos.last()->z() - z) * memory.distanceFromStartWPInCurrentPath / pRoad->paths[pIdx]->pathLength;
                 z += dz;
-                state.z += z;
+                state.z = z;
             }
         }
 

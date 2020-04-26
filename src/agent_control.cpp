@@ -23,9 +23,15 @@ void Agent::Control(Road* pRoad)
 
     if( agentKind < 100 ){
 
-        memory.timeToZeroSpeed = state.V / param.accelControlGain + 1.0;
-        memory.distanceToZeroSpeed = state.V * state.V * 0.5f / param.accelControlGain + state.V + vHalfLength;
-        memory.requiredDistToStopFromTargetSpeed = memory.targetSpeed * memory.targetSpeed * 0.5f / param.accelControlGain + memory.targetSpeed + vHalfLength;
+        memory.timeToZeroSpeed = state.V / param.accelControlGain;
+        memory.distanceToZeroSpeed = state.V * state.V * 0.5f / param.accelControlGain + vHalfLength;
+        memory.requiredDistToStopFromTargetSpeed = memory.targetSpeed * memory.targetSpeed * 0.5f / param.accelControlGain + vHalfLength;
+        if( state.accel > 0.0 ){
+            memory.distanceToZeroSpeed += state.V;
+            memory.timeToZeroSpeed += 1.0;
+            memory.requiredDistToStopFromTargetSpeed += memory.targetSpeed;
+        }
+
         memory.minimumDistanceToStop = state.V * state.V * 0.5f / param.maxDeceleration;
 
 
@@ -47,17 +53,23 @@ void Agent::Control(Road* pRoad)
             memory.accel = 0.0;
             memory.brake = 0.0;
 
-
             memory.actualTargetSpeed = memory.targetSpeed;
+
             memory.distanceAdjustLowSpeed = 0.0;
-
-            float ax_com = 0.0;
-
             SpeedAdjustForCurve( pRoad, cIdx, memory.targetSpeed );
+
+
+            if( memory.doHeadwayDistanceControl == true ){
+                if( memory.distanceToPrecedingVehicle < 3.0 * state.V ){
+                    if( memory.speedPrecedingVehicle < memory.actualTargetSpeed ){
+                        memory.actualTargetSpeed = memory.speedPrecedingVehicle;
+                    }
+                }
+            }
 
             SpeedControl();
 
-            ax_com = memory.axSpeedControl;
+            float ax_com = memory.axSpeedControl;
 
             //qDebug() << "[ID=" << ID << "] ax_com = " << ax_com << " - V";
 
@@ -328,7 +340,7 @@ void Agent::Control(Road* pRoad)
                     int chk = pRoad->GetDeviationFromPath( memory.targetPathList[k],
                                                            memory.actualStopAtX, memory.actualStopAtY, 0.0,
                                                            tdev, txt, tyt, txd, tyd, ts,
-                                                           false, true );
+                                                           true );
                     if( chk != memory.targetPathList[k] ){
                         continue;
                     }
@@ -429,7 +441,7 @@ void Agent::Control(Road* pRoad)
                 if( (D < 30.0 || D < state.V * 3.0) && vehicle.GetWinerState() == 0 ){
 
                     int curvePath = memory.targetPathList[1];
-                    int cpidx = pRoad->pathId2Index[curvePath];
+                    int cpidx = pRoad->pathId2Index.indexOf(curvePath);
                     float c1 = pRoad->paths[cpidx]->derivative.first()->x();
                     float s1 = pRoad->paths[cpidx]->derivative.first()->y();
                     float c2 = pRoad->paths[cpidx]->derivative.last()->x();
@@ -687,7 +699,8 @@ void Agent::HeadwayControlAgent()
 
     float distStopPreceding = 0.5 * memory.speedPrecedingVehicle * memory.speedPrecedingVehicle / param.accelControlGain;
 
-    if( distStopPreceding + memory.distanceToPrecedingVehicle - memory.distanceToZeroSpeed  < param.minimumHeadwayDistanceAtStop ){
+    if( distStopPreceding + memory.distanceToPrecedingVehicle - (memory.distanceToZeroSpeed - state.V)  < param.minimumHeadwayDistanceAtStop
+            && relV < -1.0 ){
 
         float L = distStopPreceding + memory.distanceToPrecedingVehicle - param.minimumHeadwayDistanceAtStop;
         if( L < 0.1 ){
@@ -706,6 +719,7 @@ void Agent::HeadwayControlAgent()
 
     if( memory.actualTargetHeadwayDistance > memory.distanceToPrecedingVehicle ){
         memory.axHeadwayControl = accelOffDecel * (-1.0);
+        return;
     }
 
     memory.axHeadwayControl = 0.0f;
@@ -758,10 +772,10 @@ void Agent::HeadwayControl()
 
     float addMargin = 0.0;
     if( relV < 0.0 ){
-        addMargin = relV * 1.0;
+        addMargin = relV * 1.5;
     }
 
-    if( fabs(memory.distanceToPrecedingVehicle) - addMargin < param.minimumHeadwayDistanceAtStop ){
+    if( fabs(memory.distanceToPrecedingVehicle) + addMargin < param.minimumHeadwayDistanceAtStop ){
         if( isFollowing > 0.0f ){
             memory.axHeadwayControl = maxDecel * (-1.0f);
         }
@@ -910,3 +924,13 @@ void Agent::SpeedAdjustForCurve(Road *pRoad,int cIdx,float targetSpeed)
 //             << " distanceAdjustLowSpeed = " << memory.distanceAdjustLowSpeed;
 }
 
+
+void Agent::SetTargetSpeedIndividual(float vTarget)
+{
+    float vMean = 0.7692 * vTarget;  // Actual Speed = 65[km/h] when vMean = 50[km/h]
+    float vStd  = vTarget - vMean;   // Actual Speed is assumed to be about 1-sigma for Normal Distribution
+
+    float vDev = vStd * param.speedVariationFactor;
+
+    memory.targetSpeed = vTarget + vDev;
+}

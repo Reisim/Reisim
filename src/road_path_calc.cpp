@@ -112,7 +112,6 @@ int Road::GetDeviationFromPath(int pathID,
                                float &xderiv,
                                float &yderiv,
                                float &distFromStartWP,
-                               bool recursive,
                                bool negrectYawAngleInfo )
 {
     int index = pathId2Index.indexOf(pathID);
@@ -127,6 +126,7 @@ int Road::GetDeviationFromPath(int pathID,
 
     distFromStartWP = 0.0;
 
+    int nDiv = paths[index]->pos.size();
 
     // Check
     {
@@ -142,147 +142,52 @@ int Road::GetDeviationFromPath(int pathID,
         float dy2 = paths[index]->derivative.last()->y();
         float ip2 = rx2 * dx2 + ry2 * dy2;
 
+        if( negrectYawAngleInfo == false ){
+            float dxm = (dx1 + dx2) * 0.5;
+            float dym = (dy1 + dy2) * 0.5;
+
+            float ip = cya * dxm + sya * dym;
+            if( ip < 0.0 ){
+                return ret;
+            }
+        }
+
         if( ip1 * ip2 > 0.0 ){
             return ret;
         }
     }
 
+    for(int i=1;i<nDiv;++i){
 
-    for(int i=0;i<paths[index]->pos.size()-1;++i){
+        float x = paths[index]->pos[i]->x();
+        float y = paths[index]->pos[i]->y();
 
-        float rx = xp - paths[index]->pos[i]->x();
-        float ry = yp - paths[index]->pos[i]->y();
+        float rx = xp - x;
+        float ry = yp - y;
         float dx = paths[index]->derivative[i]->x();
         float dy = paths[index]->derivative[i]->y();
 
         float ip = rx * dx + ry * dy;
-        if( ip < -0.08 ){
+        if( ip > 0.0 ){
             continue;
         }
-
-        float nrx = xp - paths[index]->pos[i+1]->x();
-        float nry = yp - paths[index]->pos[i+1]->y();
-        float ndx = paths[index]->derivative[i+1]->x();
-        float ndy = paths[index]->derivative[i+1]->y();
-
-        float nip = nrx * ndx + nry * ndy;
-        if( nip > + 0.08 ){
-            continue;
-        }
-
-        if( negrectYawAngleInfo == false ){
-            float ip2 = cya * dx + sya * dy;
-            if( ip2 < 0.5 ){
-                continue;
-            }
-        }
-
 
         float cp = rx * (-dy) + ry * dx;
-        float r = ip / paths[index]->length[i+1];
-        if( r > 1.0){
-            r = 1.0;
-        }
-        else if( r < 0.0 ){
-            r = 0.0;
-        }
 
-        if( ret < 0 ){
-            ret = pathID;
-            deviation = cp;
-            xt = paths[index]->pos[i]->x() + ip * dx;
-            yt = paths[index]->pos[i]->y() + ip * dy;
-            xderiv = dx + (ndx - dx) * r;
-            yderiv = dy + (ndy - dy) * r;
-            distFromStartWP = paths[index]->length[i] + ip;
-        }
-        else{
-            if( fabs(deviation) > fabs(cp) ){
-                deviation = cp;
-                xt = paths[index]->pos[i]->x() + ip * dx;
-                yt = paths[index]->pos[i]->y() + ip * dy;
-                xderiv = dx + (ndx - dx) * r;
-                yderiv = dy + (ndy - dy) * r;
-                distFromStartWP = paths[index]->length[i] + ip;
-            }
-        }
+        ret = pathID;
+        deviation = cp;
+
+        xt = x + ip * dx;
+        yt = y + ip * dy;
+
+        xderiv = dx;
+        yderiv = dy;
+
+        distFromStartWP = paths[index]->length[i] + ip;
+
+        break;
     }
 
-    if( ret < 0 && recursive == true ){
-
-        float rx1 = xp - paths[index]->pos.first()->x();
-        float ry1 = yp - paths[index]->pos.first()->y();
-        float L1 = rx1 * rx1 + ry1 * ry1;
-
-        float rx2 = xp - paths[index]->pos.last()->x();
-        float ry2 = yp - paths[index]->pos.last()->y();
-        float L2 = rx2 * rx2 + ry2 * ry2;
-
-        if( L1 < L2 ){
-            for(int i=0;i<paths[index]->followingPaths.size();++i){
-
-                float tdev,txt,tyt,txd,tyd,ts;
-                int chk = GetDeviationFromPath( paths[index]->followingPaths[i],
-                                                xp, yp, yawAngle,
-                                                tdev, txt, tyt, txd, tyd, ts );
-
-                if( chk == paths[index]->followingPaths[i] ){
-                    if( ret < 0 ){
-                        ret = chk;
-                        deviation = tdev;
-                        xt = txt;
-                        yt = tyt;
-                        xderiv = txd;
-                        yderiv = tyd;
-                        distFromStartWP = ts;
-                    }
-                    else{
-                        if( fabs(deviation) > fabs(tdev) ){
-                            ret = chk;
-                            deviation = tdev;
-                            xt = txt;
-                            yt = tyt;
-                            xderiv = txd;
-                            yderiv = tyd;
-                            distFromStartWP = ts;
-                        }
-                    }
-                }
-            }
-        }
-        else{
-            for(int i=0;i<paths[index]->forwardPaths.size();++i){
-
-                float tdev,txt,tyt,txd,tyd,ts;
-                int chk = GetDeviationFromPath( paths[index]->forwardPaths[i],
-                                                xp, yp, yawAngle,
-                                                tdev, txt, tyt, txd, tyd, ts );
-
-                if( chk == paths[index]->forwardPaths[i] ){
-                    if( ret < 0 ){
-                        ret = chk;
-                        deviation = tdev;
-                        xt = txt;
-                        yt = tyt;
-                        xderiv = txd;
-                        yderiv = tyd;
-                        distFromStartWP = ts;
-                    }
-                    else{
-                        if( fabs(deviation) > fabs(tdev) ){
-                            ret = chk;
-                            deviation = tdev;
-                            xt = txt;
-                            yt = tyt;
-                            xderiv = txd;
-                            yderiv = tyd;
-                            distFromStartWP = ts;
-                        }
-                    }
-                }
-            }
-        }
-    }
     return ret;
 }
 

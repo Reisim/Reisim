@@ -231,6 +231,8 @@ int main(int argc, char *argv[])
     QObject::connect( w.GetPointerGraphicCanvas(), SIGNAL(ShowAgentData(float,float)),sys, SLOT(ShowAgentData(float,float)) );
 
     QObject::connect( &w, SIGNAL(SetTmpStpoTime(int,int,int)), sys, SLOT(SetTmpStopTime(int,int,int)) );
+    QObject::connect( &w, SIGNAL(OutputRestartData(QString)), sys, SLOT(OutputRestartData(QString)) );
+    QObject::connect( &w, SIGNAL(SetRestartFile(QString)), sys, SLOT(SetRestartFile(QString)) );
 
     QObject::connect( sys, SIGNAL(UpdateSimulationTimeDisplay(QString)), &w, SLOT(UpdateSimulationTimeDisplay(QString)) );
     QObject::connect( sys, SIGNAL(SetAgentPointer(Agent**)), &w, SLOT(SetAgentPointerToCanvas(Agent**)) );

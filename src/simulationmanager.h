@@ -214,6 +214,9 @@ public:
     void ResetSimulationTime();
     QString GetSimulationTimeStr();
     float GetSimulationTimeInSec();
+    void SetSimulationTime(int day,int hour,int minit,float sec);
+    int GetSimulationTimeSecondAsInt();
+
     void UpdateSimulationTime();
     void SetFrequency(int);
     void SetDSMode() { DSMode = true; }

@@ -106,7 +106,8 @@ struct Path
     QList<float> length;
     float pathLength;
 
-    float speedInfo;   // [m/s]
+    float speedInfo;   // Speed Limit[m/s]
+    float speed85pt;    // Actual Speed, 85th-percentile[m/s]
 
     float xmin;
     float ymin;
@@ -203,6 +204,8 @@ struct Node
     QList<struct LanePathList*> pathLists;
     QList<struct DirectionMap*> directionMap;
     bool hasTS;
+    QList<int> relatedVTSIndex;
+    QList<int> relatedPTSIndex;
 };
 
 
@@ -218,6 +221,7 @@ struct ODRouteData
     int originNode;
     int destinationNode;
     QList<struct RouteElem*> routeToDestination;
+    QList<QList<int>> laneListsToDestination;
     QList<int> trafficVolumne;
     int totalVolumne;
     QList<float> vehicleKindSelectProbability;
@@ -259,7 +263,7 @@ public:
     int GetDeviationFromPath(int pathID,
                              float xp,float yp,float yawAngle,
                              float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP,
-                             bool recursive = false, bool negrectYawAngleInfo = false );
+                             bool negrectYawAngleInfo = false );
 
     int GetNearestPedestPathSectionIndex(float xp,float yp,float &dist,int &overEdge,int objectID=-1);
     int GetDeviationFromPedestPath(int pedestPathID,int sectIndex,float xp,float yp,

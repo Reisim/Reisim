@@ -29,6 +29,7 @@
 #include <QFileDialog>
 #include <QSize>
 #include <QMessageBox>
+#include <QDoubleSpinBox>
 
 
 class ConfigWindow : public QWidget
@@ -48,6 +49,8 @@ public slots:
     void SelectScenario();
     void SelectLogOutputFolder();
     void SelectLogFileName();
+    void SelectRestartFile();
+
 
 private:
     QToolBar *settingToolBar;
@@ -64,6 +67,9 @@ private:
     QLabel *logSaveFolder;
     QLabel *logFileName;
     QLabel *scenarioFilename;
+
+    QLabel *restartFilename;
+    QDoubleSpinBox *calTimeStep;
 
 
     QString currentConfigFilename;

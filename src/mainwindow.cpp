@@ -31,7 +31,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 
     //--------
-    QHBoxLayout *controlLayout = new QHBoxLayout();
+    QVBoxLayout *controlLayout = new QVBoxLayout();
 
     startBtn = new QPushButton();
     startBtn->setIcon(QIcon(":/images/Play.png"));
@@ -96,20 +96,36 @@ MainWindow::MainWindow(QWidget *parent)
     fontScaler->setFixedWidth(100);
     connect(fontScaler,SIGNAL(valueChanged(int)),this,SLOT(SetFontScale(int)));
 
+    snapshotBtn = new QPushButton("Snapshot");
+    snapshotBtn->setIcon(QIcon(":/images/Pin.png"));
+    snapshotBtn->setFixedSize( snapshotBtn->sizeHint() );
+    connect(snapshotBtn,SIGNAL(clicked(bool)),this,SLOT(OutputRestartData()));
 
-    controlLayout->addWidget( startBtn );
-    controlLayout->addWidget( pauseBtn );
-    controlLayout->addWidget( resumeBtn );
-    controlLayout->addWidget( stopBtn );
-    controlLayout->addWidget( animeSpeedAdjusterByValue );
-    controlLayout->addWidget( animeSpeedAdjuster );
-    controlLayout->addWidget( resetSpeedAdjuster );
-    controlLayout->addWidget( cbShowVID );
-    controlLayout->addWidget( cbShowPathID );
-    controlLayout->addWidget( cbShowTSID );
-    controlLayout->addWidget( cbStopGraphicUpdate );
-    controlLayout->addWidget( fontScaler );
-    controlLayout->addStretch();
+    QHBoxLayout *controlLayout1 = new QHBoxLayout();
+    QHBoxLayout *controlLayout2 = new QHBoxLayout();
+
+    controlLayout1->addWidget( startBtn );
+    controlLayout1->addWidget( pauseBtn );
+    controlLayout1->addWidget( resumeBtn );
+    controlLayout1->addWidget( stopBtn );
+    controlLayout1->addWidget( new QLabel("Simulation Speed Weight:"));
+    controlLayout1->addWidget( animeSpeedAdjusterByValue );
+    controlLayout1->addWidget( animeSpeedAdjuster );
+    controlLayout1->addWidget( resetSpeedAdjuster );
+    controlLayout1->addWidget( snapshotBtn );
+    controlLayout1->addStretch();
+
+    controlLayout2->addWidget( cbShowVID );
+    controlLayout2->addWidget( cbShowPathID );
+    controlLayout2->addWidget( cbShowTSID );
+    controlLayout2->addWidget( cbStopGraphicUpdate );
+    controlLayout2->addWidget( new QLabel("Font Scaler:"));
+    controlLayout2->addWidget( fontScaler );
+    controlLayout2->addStretch();
+
+
+    controlLayout->addLayout( controlLayout1 );
+    controlLayout->addLayout( controlLayout2 );
 
     //--------
     simulationTimeDisplay = new QLabel();
@@ -150,6 +166,8 @@ MainWindow::MainWindow(QWidget *parent)
     actionToolBar->addAction(openSimSetting);
     actionToolBar->addAction(editConfig);
 
+    DSMode = false;
+    simState = 0;
 }
 
 MainWindow::~MainWindow()
@@ -229,6 +247,8 @@ void MainWindow::LoadSettingFile(QString filename)
                 emit SetDSMode();
                 cbStopGraphicUpdate->setChecked(true);
                 emit SetStopGraphicUpdate(true);
+
+                DSMode = true;
             }
             else{
                 qDebug() << "Simulation Mode";
@@ -302,6 +322,10 @@ void MainWindow::LoadSettingFile(QString filename)
             int interval = QString(divLine[1]).trimmed().toInt();
             emit SetLogOutputInterval(interval);
         }
+        else if( tag.contains("Restart File") ){
+            QString restartFilename = QString(divLine[1]).trimmed();
+            emit SetRestartFile( restartFilename );
+        }
 
     }
     file.close();
@@ -331,6 +355,7 @@ void MainWindow::StartSimulation()
 {
     qDebug() << "[MainWindow::StartSimulation]";
     emit SimulationStart();
+    simState = 1;
 }
 
 
@@ -338,6 +363,7 @@ void MainWindow::StopSimulation()
 {
     qDebug() << "[MainWindow::StopSimulation]";
     emit SimulationStop();
+    simState = 3;
 }
 
 
@@ -345,6 +371,7 @@ void MainWindow::PauseSimulation()
 {
     qDebug() << "[MainWindow::PauseSimulation]";
     emit SimulationPause();
+    simState = 2;
 }
 
 
@@ -352,6 +379,7 @@ void MainWindow::ResumeSimulation()
 {
     qDebug() << "[MainWindow::ResumeSimulation]";
     emit SimulationResume();
+    simState = 1;
 }
 
 
@@ -493,4 +521,36 @@ void MainWindow::keyPressEvent(QKeyEvent *e)
         }
     }
 }
+
+
+void MainWindow::OutputRestartData()
+{
+    if( DSMode == true ){
+        return;
+    }
+    if( simState == 0 ){
+        return;
+    }
+
+    SimulationPause();
+
+    QString fileName = QFileDialog::getSaveFileName(this,
+                                                    tr("Output Restart Data"),
+                                                    ".",
+                                                    tr("re:sim snapshot file(*.ss.txt)"));
+
+    if( fileName.isNull() == false ){
+
+        if( fileName.endsWith(".ss.txt") == false ){
+            fileName += QString(".ss.txt");
+        }
+
+        qDebug() << "[MainWindow::OutputRestartData] fileName = " << fileName;
+
+        emit OutputRestartData( fileName );
+    }
+
+    SimulationResume();
+}
+
 

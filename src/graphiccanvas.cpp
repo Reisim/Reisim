@@ -1185,25 +1185,25 @@ void GraphicCanvas::SetTSData()
             float xe2 = xe1 + 2.0 * R;
             float yt = 0.25 * hs + R * 0.2;
             float yb = 0.25 * hs - R * 0.2;
-            tsp->TSPolygons << xe1 << yt << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe1 << yb << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe2 << yb << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe2 << yt << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe1 << yt << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe1 << yb << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe2 << yb << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe2 << yt << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
 
             xe2 = xe1 + R / 2.0;
             yb = yt;
             yt = 0.5 * hs;
-            tsp->TSPolygons << xe2           << yt << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe1           << yb << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe1 + R * 0.2 << yb << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe2 + R * 0.2 << yt << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe2           << yt << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe1           << yb << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe1 + R * 0.2 << yb << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe2 + R * 0.2 << yt << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
 
             yb = 0;
             yt = 0.25 * hs - R * 0.2;
-            tsp->TSPolygons << xe1           << yt << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe2           << yb << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe2 + R * 0.2 << yb << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe1 + R * 0.2 << yt << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe1           << yt << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe2           << yb << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe2 + R * 0.2 << yb << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe1 + R * 0.2 << yt << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
 
             // Straight Arrow
             xe1 = R * (-0.2);
@@ -1235,25 +1235,25 @@ void GraphicCanvas::SetTSData()
             xe1 = xe2 - 2.0 * R;
             yt = 0.25 * hs + R * 0.2;
             yb = 0.25 * hs - R * 0.2;
-            tsp->TSPolygons << xe1 << yt << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe1 << yb << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe2 << yb << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe2 << yt << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe1 << yt << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe1 << yb << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe2 << yb << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe2 << yt << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
 
             xe1 = xe2 - R / 2.0;
             yb = yt;
             yt = 0.5 * hs;
-            tsp->TSPolygons << xe1           << yt << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe1 - R * 0.2 << yt << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe2 - R * 0.2 << yb << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe2           << yb << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe1           << yt << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe1 - R * 0.2 << yt << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe2 - R * 0.2 << yb << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe2           << yb << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
 
             yb = 0;
             yt = 0.25 * hs - R * 0.2;
-            tsp->TSPolygons << xe1           << yb << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe2           << yt << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe2 - R * 0.2 << yt << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
-            tsp->TSPolygons << xe1 - R * 0.2 << yb << 0.05 << 0.6f << 0.6f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe1           << yb << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe2           << yt << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe2 - R * 0.2 << yt << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
+            tsp->TSPolygons << xe1 - R * 0.2 << yb << 0.05 << 0.4f << 0.4f << 0.443137f << 1.0f << 0.729412f;
 
 
             // blue
@@ -1811,8 +1811,27 @@ int GraphicCanvas::Get3DPhysCoordFromPickPoint(int xp,int yp, float &x,float &y)
     float A12 = q12 - Kx * q32;
     float A21 = q21 - Ky * q31;
     float A22 = q22 - Ky * q32;
-    float B11 = Kx * Z_eye - X_eye;
-    float B21 = Ky * Z_eye - Y_eye;
+
+    float xE = X_eye;
+    float yE = Y_eye;
+
+    float cpc = cos( cameraPitch );
+    float cps = sin( cameraPitch );
+
+    float cyc = cos( cameraYaw );
+    float cys = sin( cameraYaw );
+
+    X_trans = xE * cyc - yE * cys;
+    Y_trans = xE * cys + yE * cyc;
+
+    yE = Y_trans;
+    Y_trans = yE * cpc;
+    Z_trans = yE * cps;
+
+    Z_trans += Z_eye;
+
+    float B11 = Kx * Z_trans - X_trans;
+    float B21 = Ky * Z_trans - Y_trans;
 
     float det = A11 * A22 - A12 * A21;
     if( fabs(det) > 1.0e-5 ){

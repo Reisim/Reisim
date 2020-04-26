@@ -16,8 +16,11 @@ DEFINES += SFMT_MEXP="19937"
 #DEFINES += _PERFORMANCE_CHECK
 #DEFINES += _PERFORMANCE_CHECK_AGENT
 #DEFINES += _PERFORMANCE_CHECK_AGENT_PERCEPTION
+#DEFINES += _PERFORMANCE_CHECK_AGENT_PERCEPTION_CORE
 #DEFINES += _PERFORMANCE_CHECK_AGENT_RECOGNITION
 #DEFINES += _PERFORMANCE_CHECK_AGENT_HAZARD
+
+DEFINES += _SHOW_AGENT_NUM_APPEAR
 
 
 LIBS += C:\Qt5.12\Tools\mingw730_64\x86_64-w64-mingw32\lib\libws2_32.a
@@ -60,6 +63,7 @@ SOURCES += \
     graphiccanvas.cpp \
     networkdrivecheck.cpp \
     road.cpp \
+    system_snapshot.cpp \
     systemthread.cpp \
     udpthread.cpp \
     simulationmanager.cpp \

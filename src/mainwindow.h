@@ -63,6 +63,8 @@ signals:
     void SetStopGraphicUpdate(bool);
     void SetSimulationFrequency(int);
     void SetTmpStpoTime(int,int,int);
+    void OutputRestartData(QString);
+    void SetRestartFile(QString);
 
 
 public slots:
@@ -87,6 +89,7 @@ public slots:
     void ExitProgram();
     void StopGraphicUpdateChanged(bool);
     void SetFontScale(int);
+    void OutputRestartData();
 
 
 private:
@@ -112,8 +115,12 @@ private:
     QCheckBox *cbShowTSID;
     QCheckBox *cbStopGraphicUpdate;
     QSlider *fontScaler;
+    QPushButton *snapshotBtn;
 
     ConfigWindow *confWin;
+
+    bool DSMode;
+    int simState;
 };
 
 #endif // MAINWINDOW_H

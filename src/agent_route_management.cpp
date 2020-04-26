@@ -85,6 +85,9 @@ void Agent::CheckPathList(Road* pRoad)
 
                 memory.currentTargetPath = currentPath;
 
+                int pIdx = pRoad->pathId2Index.indexOf( currentPath );
+                SetTargetSpeedIndividual( pRoad->paths[pIdx]->speed85pt );
+
                 SetTargetNodeListByTargetPaths( pRoad );
             }
 
@@ -142,7 +145,7 @@ void Agent::SetTargetNodeListByTargetPaths(Road* pRoad)
         int tpIdx   = pRoad->pathId2Index.indexOf( memory.targetPathList[i] );
         int tNode   = pRoad->paths[tpIdx]->connectingNode;
         int tInDirt = pRoad->paths[tpIdx]->connectingNodeInDir;
-        if( memory.myNodeList.indexOf( tNode ) < 0 ){
+        if( memory.myNodeList.indexOf( tNode ) < 0 || (memory.myNodeList.size() > 0 && memory.myNodeList.last() != tNode) ){
             memory.myNodeList.append( tNode );
             memory.myInDirList.append( tInDirt );
         }
@@ -152,7 +155,8 @@ void Agent::SetTargetNodeListByTargetPaths(Road* pRoad)
     for(int i=0;i<memory.myNodeList.size()-1;++i){
         int nnIdx = pRoad->nodeId2Index.indexOf( memory.myNodeList.at(i+1) );
         for(int j=0;j<pRoad->nodes[nnIdx]->nodeConnectInfo.size();++j){
-            if( pRoad->nodes[nnIdx]->nodeConnectInfo[j]->connectedNode == memory.myNodeList.at(i) ){
+            if( pRoad->nodes[nnIdx]->nodeConnectInfo[j]->connectedNode == memory.myNodeList.at(i) &&
+                  j == memory.myInDirList.at(i+1)  ){
                 memory.myOutDirList.append( pRoad->nodes[nnIdx]->nodeConnectInfo[j]->outDirectionID );
                 break;
             }
@@ -175,6 +179,8 @@ void Agent::SetTargetNodeListByTargetPaths(Road* pRoad)
 
     memory.currentTargetNode = pRoad->paths[pIdx]->connectingNode;
 
+    int cNdInDir = pRoad->paths[pIdx]->connectingNodeInDir;
+
     memory.currentTargetNodeIndexInNodeList = -1;
     memory.nextTurnNode = -1;
     memory.nextTurnDirection = -1;
@@ -185,7 +191,7 @@ void Agent::SetTargetNodeListByTargetPaths(Road* pRoad)
     memory.nextTurnNodeOncomingDir = -1;
 
     for(int i=0;i<memory.myNodeList.size();++i){
-        if( memory.myNodeList[i] == memory.currentTargetNode ){
+        if( memory.myNodeList[i] == memory.currentTargetNode && memory.myInDirList[i] == cNdInDir ){
             memory.currentTargetNodeIndexInNodeList = i;
         }
         if( memory.currentTargetNodeIndexInNodeList >= 0 ){

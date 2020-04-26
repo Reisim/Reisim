@@ -152,8 +152,6 @@ struct TrafficSignalPerception
 
 struct AgentMemory
 {
-    int flag;
-
     // control output
     float accel;
     float brake;
@@ -297,6 +295,7 @@ struct AgentMemory
     // navigation
     int routeType;
     int routeIndex;
+    int routeLaneIndex;
 };
 
 struct AgentParam
@@ -318,6 +317,7 @@ struct AgentParam
     float crossWaitPositionSafeyMargin;
     float pedestWaitPositionSafetyMargin;
     float safetyConfirmTime;
+    float speedVariationFactor;
 };
 
 struct AgentState
@@ -384,6 +384,7 @@ public:
     void HeadwayControl();
     void HeadwayControlAgent();
     void StopControl();
+    void SetTargetSpeedIndividual(float vTarget);
 
 
     void CheckPathList(Road*);
@@ -419,6 +420,7 @@ public:
 
     int cognitionCountMax;
     int cognitionCount;
+    int cognitionSubCount;
 
     int decisionMakingCountMax;
     int decisionMalingCount;

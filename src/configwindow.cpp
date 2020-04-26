@@ -53,6 +53,9 @@ ConfigWindow::ConfigWindow(QWidget *parent) : QWidget(parent)
     gridLay->addWidget( new QLabel("    Log Output Folder"), 2, 0, 1, 1 );
     gridLay->addWidget( new QLabel("    Log File Name"), 3, 0, 1, 1 );
     gridLay->addWidget( new QLabel("Work with Driving Simulator"), 4, 0, 1, 1 );
+    gridLay->addWidget( new QLabel("Restart File"), 5, 0, 1, 1 );
+    gridLay->addWidget( new QLabel("Calculation Time Step"), 6, 0, 1, 1 );
+
 
     QPushButton *selectScenario = new QPushButton("Select");
     selectScenario->setIcon( QIcon(":/images/select.png") );
@@ -78,17 +81,39 @@ ConfigWindow::ConfigWindow(QWidget *parent) : QWidget(parent)
     cbDSMode = new QCheckBox();
     gridLay->addWidget( cbDSMode, 4, 1, 1, 1 );
 
+    QPushButton *selectRestartFile = new QPushButton("Select");
+    selectRestartFile->setIcon( QIcon(":/images/select.png") );
+    selectRestartFile->setFixedWidth(60);
+    connect(selectRestartFile,SIGNAL(clicked(bool)),this,SLOT(SelectRestartFile()));
+    gridLay->addWidget( selectRestartFile, 5, 1, 1, 1 );
+
     scenarioFilename = new QLabel("Not selected.");
     scenarioFilename->setFixedWidth( 600 );
+    scenarioFilename->setWordWrap(true);
     gridLay->addWidget( scenarioFilename, 0, 2, 1, 1 );
 
     logSaveFolder = new QLabel("Not selected.");
     logSaveFolder->setFixedWidth( 600 );
+    logSaveFolder->setWordWrap(true);
     gridLay->addWidget( logSaveFolder, 2, 2, 1, 1 );
 
     logFileName = new QLabel("Not selected.");
     logFileName->setFixedWidth( 600 );
+    logFileName->setWordWrap(true);
     gridLay->addWidget( logFileName, 3, 2, 1, 1 );
+
+    restartFilename = new QLabel("Not selected.");
+    restartFilename->setFixedWidth( 600 );
+    restartFilename->setWordWrap(true);
+    gridLay->addWidget( restartFilename, 5, 2, 1, 1 );
+
+    calTimeStep = new QDoubleSpinBox();
+    calTimeStep->setMinimum( 0.001 );
+    calTimeStep->setMaximum( 0.1 );
+    calTimeStep->setValue( 0.02 );
+    calTimeStep->setSuffix("[s]");
+    gridLay->addWidget( calTimeStep, 6, 2, 1, 1, Qt::AlignLeft );
+
 
 
     //----------------------
@@ -120,9 +145,12 @@ void ConfigWindow::NewConfig()
     scenarioFilename->setText( "Not selected." );
     logSaveFolder->setText( "Not selected." );
     logFileName->setText( "Not selected." );
+    restartFilename->setText( "Not selected." );
 
     cbOutputLogFile->setCheckState( Qt::Unchecked );
     cbDSMode->setCheckState( Qt::Unchecked );
+
+    calTimeStep->setValue( 0.02 );
 
     currentConfigFilename = QString();
 
@@ -219,6 +247,15 @@ void ConfigWindow::OpenConfig()
                 logFileName->setText( QString(divLine[1]).trimmed() );
 
             }
+            else if( tag == QString("Restart File") ){
+
+                restartFilename->setText( QString(divLine[1]).trimmed() );
+
+            }
+            else if( tag == QString("Calculation Time Step") ){
+
+                calTimeStep->setValue( QString(divLine[1]).trimmed().toDouble() );
+            }
         }
 
         file.close();
@@ -229,6 +266,9 @@ void ConfigWindow::OpenConfig()
     else{
         qDebug() << "   filename is null";
     }
+
+    setFixedSize( sizeHint() );
+    update();
 }
 
 
@@ -284,6 +324,7 @@ void ConfigWindow::SaveConfig()
         }
         out << "\n";
         out << "Scenario File ; " << scenarioFilename->text() << "\n";
+        out << "Calculation Time Step ; " << calTimeStep->value() << "\n";
         out << "\n";
         out << "Output Log File ; ";
         if( cbOutputLogFile->isChecked() ){
@@ -294,6 +335,7 @@ void ConfigWindow::SaveConfig()
         }
         out << "Log Output Folder ; " << logSaveFolder->text() << "\n";
         out << "CSV Output File ; " << logFileName->text() << "\n";
+        out << "Restart File ; " << restartFilename->text() << "\n";
 
         file.close();
 
@@ -323,6 +365,8 @@ void ConfigWindow::SelectScenario()
     else{
         qDebug() << "   filename is null";
     }
+
+    setFixedSize( sizeHint() );
 }
 
 
@@ -342,6 +386,8 @@ void ConfigWindow::SelectLogOutputFolder()
     else{
         qDebug() << "   dirName is null";
     }
+
+    setFixedSize( sizeHint() );
 }
 
 
@@ -370,8 +416,29 @@ void ConfigWindow::SelectLogFileName()
     else{
         qDebug() << "   logFileName is null";
     }
+
+    setFixedSize( sizeHint() );
 }
 
 
+void ConfigWindow::SelectRestartFile()
+{
+    qDebug() << "[SelectRestartFile]";
 
+    QString fileName = QFileDialog::getOpenFileName(this,
+                                                    tr("Choose Restart File"),
+                                                    ".",
+                                                    tr("re:sim snapshot file(*.ss.txt)"));
+
+    if( fileName.isNull() == false ){
+        qDebug() << "   filename = " << fileName;
+        restartFilename->setText( fileName );
+        setWindowModified(true);
+    }
+    else{
+        qDebug() << "   filename is null";
+    }
+
+    setFixedSize( sizeHint() );
+}
 

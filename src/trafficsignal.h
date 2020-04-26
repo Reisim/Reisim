@@ -19,17 +19,17 @@
 //
 //  displayInfo
 //  Bit:     8          7            6           5             4       3     2    1
-//       red-flush yellow-flush left-arrow straight-arrow right-arrow red yellow blue
+//       red-flush yellow-flush right-arrow straight-arrow left-arrow red yellow blue
 //
 
 #define  TRAFFICSIGNAL_BLUE                 1
 #define  TRAFFICSIGNAL_YELLOW               2
 #define  TRAFFICSIGNAL_RED                  4
-#define  TRAFFICSIGNAL_RIGHT_RED            12
+#define  TRAFFICSIGNAL_LEFT_RED             12
 #define  TRAFFICSIGNAL_STRAIGHT_RED         20
-#define  TRAFFICSIGNAL_STRAIGHT_RIGHT_RED   28
-#define  TRAFFICSIGNAL_LEFT_RED             36
-#define  TRAFFICSIGNAL_STRAIGHT_LEFT_RED    52
+#define  TRAFFICSIGNAL_STRAIGHT_LEFT_RED    28
+#define  TRAFFICSIGNAL_RIGHT_RED            36
+#define  TRAFFICSIGNAL_STRAIGHT_RIGHT_RED   52
 #define  TRAFFICSIGNAL_YELLOWFLUSH          64
 #define  TRAFFICSIGNAL_REDFLUSH             128
 

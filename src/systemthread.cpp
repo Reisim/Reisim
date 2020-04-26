@@ -91,6 +91,8 @@ SystemThread::SystemThread(QObject *parent) :
     tmpStopHour   = -1;
     tmpStopMin    = -1;
     tmpStopSecond = -1;
+
+    restartFile = QString();
 }
 
 void SystemThread::Stop()
@@ -142,6 +144,16 @@ void SystemThread::run()
     for(int i=0;i<trafficSignal.size();++i){
         trafficSignal[i]->SetSignalStartTime( trafficSignal[i]->startOffset );
     }
+
+
+    if( restartFile != QString() ){
+
+        qDebug() << "----- Restart File supplied: ";
+        qDebug() << "[File]" << restartFile;
+
+        SetRestartData();
+    }
+
 
     g_DSTimingFlag = 0;
 
@@ -202,6 +214,20 @@ void SystemThread::run()
         // Get current time to display
         QString simTime = simManage->GetSimulationTimeStr();
         float simTimeFVal = simManage->GetSimulationTimeInSec();
+
+
+#ifdef _SHOW_AGENT_NUM_APPEAR
+        if( simManage->GetSimulationTimeSecondAsInt() % 10 == 0 ){
+            int nAppear = 0;
+            for(int i=0;i<maxAgent;++i){
+                if( agent[i]->agentStatus == 0 ){
+                    continue;
+                }
+                nAppear++;
+            }
+            qDebug() << "Number of Agent = " << nAppear;
+        }
+#endif
 
 
         if( tmpStopHour >= 0 && tmpStopMin >= 0 && tmpStopSecond >= 0 ){
@@ -1196,8 +1222,21 @@ void SystemThread::LoadScenarioFile()
             qDebug() << "emit SetTrafficSignalPointer";
 
             emit SetTrafficSignalList(trafficSignal);
+
             for(int i=0;i<trafficSignal.size();++i){
+
                 emit SetTrafficSignalPointer( trafficSignal.at(i) );
+
+                int ndID = trafficSignal[i]->relatedNode;
+                int ndIdx = road->nodeId2Index.indexOf( ndID );
+                if( ndIdx >= 0 ){
+                    if( trafficSignal[i]->type == 'v' ){
+                        road->nodes[ndIdx]->relatedVTSIndex.append( i );
+                    }
+                    else if( trafficSignal[i]->type == 'p' ){
+                        road->nodes[ndIdx]->relatedPTSIndex.append( i );
+                    }
+                }
             }
         }
 
@@ -2165,7 +2204,7 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
     float dist = 0.0;
     int pathId = road->GetNearestPath( as->x, as->y, as->yaw, dist );
 
-    qDebug() << "S-Interface Object: near path = " << pathId;
+//    qDebug() << "S-Interface Object: near path = " << pathId;
 
     if( pathId >= 0 ){
 
@@ -2179,14 +2218,20 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
         agent[id]->memory.distanceFromStartWPInCurrentPath = s;
 
 
-        qDebug() << "deviation = " << deviation;
+//        qDebug() << "deviation = " << deviation;
 
 
         agent[id]->memory.targetPathList.clear();
         agent[id]->memory.targetPathList.append( pathId );
 
         int cpath = pathId;
-        int idx = road->pathId2Index[cpath];
+        int idx = road->pathId2Index.indexOf(cpath);
+
+        agent[id]->memory.currentTargetNode = road->paths[idx]->connectingNode;
+
+        agent[id]->memory.currentTargetNodeIndexInNodeList = -1;
+
+
         float totalLen = 0.0;
         while(1){
             int nNp = road->paths[idx]->forwardPaths.size();
@@ -2196,37 +2241,27 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
             else{
                 if( nNp == 1 ){
                     cpath = road->paths[idx]->forwardPaths[0];
-                    idx = road->pathId2Index[cpath];
-
                     agent[id]->memory.targetPathList.prepend( cpath );
                 }
                 else{
 
-                    cpath = road->paths[idx]->forwardPaths[0];
-                    int tidx = road->pathId2Index[cpath];
-
                     // select path with minimum curvature
-                    int minIdx = 0;
+                    int minIdx = -1;
                     float minCurvature = 0.0;
-                    for(int i=0;road->paths[tidx]->curvature.size();++i){
-                        if( minCurvature < fabs(road->paths[tidx]->curvature[i]) ){
-                            minCurvature = fabs(road->paths[tidx]->curvature[i]);
-                        }
-                    }
 
-                    for(int j=1;j<nNp;++j){
+                    for(int j=0;j<nNp;++j){
 
-                        cpath = road->paths[idx]->forwardPaths[j];
-                        tidx = road->pathId2Index[cpath];
+                        int tpath = road->paths[idx]->forwardPaths[j];
+                        int tidx = road->pathId2Index.indexOf(tpath);
 
                         float tmpCurvature = 0.0;
-                        for(int i=0;road->paths[tidx]->curvature.size();++i){
+                        for(int i=0;i<road->paths[tidx]->curvature.size();++i){
                             if( tmpCurvature < fabs(road->paths[tidx]->curvature[i]) ){
                                 tmpCurvature = fabs(road->paths[tidx]->curvature[i]);
                             }
                         }
 
-                        if( minCurvature > tmpCurvature ){
+                        if( minIdx < 0 || minCurvature > tmpCurvature ){
                             minIdx = j;
                             minCurvature = tmpCurvature;
                         }
@@ -2234,8 +2269,6 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
                     }
 
                     cpath = road->paths[idx]->forwardPaths[minIdx];
-                    idx = road->pathId2Index[cpath];
-
                     agent[id]->memory.targetPathList.prepend( cpath );
                 }
 
@@ -2244,10 +2277,12 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
                 if( totalLen > 400.0 ){
                     break;
                 }
+
+                idx = road->pathId2Index.indexOf(cpath);
             }
         }
 
-        qDebug() << "targetPathList = " << agent[id]->memory.targetPathList;
+//        qDebug() << "targetPathList = " << agent[id]->memory.targetPathList;
 
 
         float preview_dist = as->V;
@@ -2267,7 +2302,7 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
             float tdev,txt,tyt,txd,tyd,ts;
             int chk = road->GetDeviationFromPath( agent[id]->memory.targetPathList[i],
                                                    preview_x, preview_y, as->yaw,
-                                                   tdev, txt, tyt, txd, tyd, ts, false, true );
+                                                   tdev, txt, tyt, txd, tyd, ts, true );
 
     //        qDebug() << "i=" << i << " chk=" << chk << " dev=" << tdev;
 
@@ -2282,10 +2317,15 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
             agent[id]->memory.lateralDeviationFromTargetPathAtPreviewPoint = tdev;
             agent[id]->memory.previewPointPath = agent[id]->memory.targetPathList[i];
 
-            qDebug() << "deviation at aim point = " << agent[id]->memory.lateralDeviationFromTargetPathAtPreviewPoint;
+//            qDebug() << "deviation at aim point = " << agent[id]->memory.lateralDeviationFromTargetPathAtPreviewPoint;
 
             break;
         }
+
+        agent[id]->memory.currentTargetPathIndexInList = agent[id]->memory.targetPathList.indexOf( agent[id]->memory.currentTargetPath );
+
+
+        agent[id]->BackupMemory();
     }
 }
 
@@ -2466,7 +2506,7 @@ void SystemThread::CopyPathData(int fromAID, int toAID)
                 qDebug() << "           Path " << agent[toAID]->memory.targetPathList[j];
 
                 int pid = agent[toAID]->memory.targetPathList[j];
-                int pdx = road->pathId2Index[pid];
+                int pdx = road->pathId2Index.indexOf(pid);
                 qDebug() << "ps=" << road->paths[pdx]->pos.first()->x() << "," << road->paths[pdx]->pos.first()->y();
                 qDebug() << "pe=" << road->paths[pdx]->pos.last()->x() << "," << road->paths[pdx]->pos.last()->y();
             }
@@ -2724,7 +2764,8 @@ void SystemThread::ShowAgentData(float x,float y)
         qDebug() << "  TS:" << agent[nearID]->memory.perceptedSignals[i]->objectID
                  << " Type=" << agent[nearID]->memory.perceptedSignals[i]->objectType
                  << " Disp = " << agent[nearID]->memory.perceptedSignals[i]->signalDisplay
-                 << " L = " << agent[nearID]->memory.perceptedSignals[i]->distToSL;
+                 << " SL = " << agent[nearID]->memory.perceptedSignals[i]->SLonPathID
+                 << " Dist = " << agent[nearID]->memory.perceptedSignals[i]->distToSL;
     }
 
     qDebug() << "Collision/Merging Point Info:";
@@ -2793,6 +2834,7 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  distanceToZeroSpeed = " << agent[nearID]->memory.distanceToZeroSpeed;
     qDebug() << "  requiredDistToStopFromTargetSpeed = " << agent[nearID]->memory.requiredDistToStopFromTargetSpeed;
 
+    qDebug() << "  distanceFromStartWPInCurrentPath = " << agent[nearID]->memory.distanceFromStartWPInCurrentPath;
     qDebug() << "  lateralDeviationFromTargetPath = " << agent[nearID]->memory.lateralDeviationFromTargetPath;
     qDebug() << "  lateralDeviationFromTargetPathAtPreviewPoint = " << agent[nearID]->memory.lateralDeviationFromTargetPathAtPreviewPoint;
     qDebug() << "  lateralShiftTarget = " << agent[nearID]->memory.lateralShiftTarget;

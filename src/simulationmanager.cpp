@@ -49,6 +49,20 @@ void SimulationManager::ResetSimulationTime()
 }
 
 
+void SimulationManager::SetSimulationTime(int day,int hour,int minit,float sec)
+{
+    simTime.day = day;
+    simTime.hour = hour;
+    simTime.min = minit;
+
+    int isec = (int)sec;
+
+    simTime.sec = isec;
+    simTime.msec = sec - (float)isec;
+    simTime.msec_count = simTime.msec * simTime.exe_freq;
+}
+
+
 void SimulationManager::SetFrequency(int hz)
 {
     simTime.exe_freq = hz;
@@ -93,6 +107,12 @@ float SimulationManager::GetSimulationTimeInSec()
 {
     float ret = simTime.sec + simTime.msec + simTime.min * 60.0 + simTime.hour * 3600.0 + simTime.day * 86400.0;
     return ret;
+}
+
+
+int SimulationManager::GetSimulationTimeSecondAsInt()
+{
+    return simTime.sec;
 }
 
 
@@ -325,7 +345,8 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
             // Perception and Recognition; 10[Hz]
             pAgent[objID]->cognitionCountMax = (int)(simHz / 10.0);
-            pAgent[objID]->cognitionCount = 0;
+            pAgent[objID]->cognitionCount    = 0;
+            pAgent[objID]->cognitionSubCount = 0;
 
             // Hazard Identification and Risk Evaluation; 5[Hz]
             pAgent[objID]->decisionMakingCountMax = (int)(simHz / 5.0);
@@ -338,136 +359,147 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
 //            qDebug() << "Try to generate : objID = " << objID;
 
+
             //
             // Set targetPathList
             //
-            int onIdx = pRoad->nodeId2Index.indexOf( pRoad->odRoute[i]->originNode );
-            int dnIdx = pRoad->nodeId2Index.indexOf( pRoad->odRoute[i]->destinationNode );
+            pAgent[objID]->memory.routeLaneIndex = -1;
 
-            QList<QList<int>> targetPathLists;
-            QList<bool> needLCs;
-            QList<int> nodeUntils;
+            if( pRoad->odRoute[i]->laneListsToDestination.size() > 0 ){
 
-
-//            qDebug() << "originNode = " << pRoad->odRoute[i]->originNode << " onIdx = " << onIdx;
-//            qDebug() << "destinationNode = " << pRoad->odRoute[i]->destinationNode << " dnIdx = " << dnIdx;
-
-
-            //
-            // List up All possible path list            
-            for(int j=0;j<pRoad->nodes[onIdx]->outBoundaryWPs.size();++j){
-
-//                qDebug() << "outBoundaryWPs = " << pRoad->nodes[onIdx]->outBoundaryWPs[j]->wpId;
-
-                for(int k=0;k<pRoad->nodes[onIdx]->outBoundaryWPs[j]->PathWithSWP.size();++k){
-
-//                    qDebug() << "Path = " << pRoad->nodes[onIdx]->outBoundaryWPs[j]->PathWithSWP[k];
-
-                    int tmpCurPath = pRoad->nodes[onIdx]->outBoundaryWPs[j]->PathWithSWP[k];
-
-//                    qDebug() << "Now Call Road::GetPathList";
-
-                    bool needLC = false;
-                    int nodeUntil = -1;
-                    QList<int> tmpTargetPathList = pRoad->GetPathList( i, tmpCurPath, needLC, nodeUntil, &(this->rndGen) );
-
-
-//                    qDebug() << "GetPathList Result for outBoundart-WP = " << pRoad->nodes[onIdx]->outBoundaryWPs[j]->wpId
-//                             << " and Path = " << tmpCurPath;
-//                    qDebug() << "  tmpTargetPathList.size = " << tmpTargetPathList.size();
-//                    qDebug() << "  tmpTargetPathList = " << tmpTargetPathList;
-//                    qDebug() << "  needLC = " << needLC << " nodeUntil = " << nodeUntil;
-
-                    targetPathLists.append( tmpTargetPathList );
-                    needLCs.append( needLC );
-                    nodeUntils.append( nodeUntil );
-
-                }
-            }
-
-
-            if( targetPathLists.size() == 0 ){
-                qDebug() << "-------";
-                qDebug() << "Trying to generate agent ID = " << objID << ": from Node "
-                         << pRoad->odRoute[i]->originNode << " to "
-                         << pRoad->odRoute[i]->destinationNode;
-                qDebug() << "No Path List extracted to reach destination.";
-                qDebug() << "Check Road Data.";
-                qDebug() << "-------";
-                continue;
-            }
-
-
-            int numNoNeedLCPaths = 0;
-            for(int k=0;k<needLCs.size();++k){
-                if( needLCs[k] == false ){
-                    numNoNeedLCPaths++;
-                }
-            }
-
-//            qDebug() << "numNoNeedLCPaths = " << numNoNeedLCPaths;
-
-            if( numNoNeedLCPaths > 0 ){
+                int numLaneLists = pRoad->odRoute[i]->laneListsToDestination.size();
 
                 int selIdx = 0;
-                if( numNoNeedLCPaths > 1 ){
-                    float rnd = rndGen.GenUniform();
-                    float H = 1.0 / (float)numNoNeedLCPaths;
-                    for(int k=0;k<numNoNeedLCPaths;++k){
-                        if( rnd >= k * H && rnd < (k+1) * H ){
-                            selIdx = k;
-                            break;
-                        }
-                    }
-                }
 
-                numNoNeedLCPaths = 0;
-                for(int k=0;k<needLCs.size();++k){
-                    if( needLCs[k] == false ){
-
-                        if( numNoNeedLCPaths == selIdx ){
-                            pAgent[objID]->memory.targetPathList = targetPathLists[k];
-                            pAgent[objID]->memory.currentTargetPath = targetPathLists[k].last();
-
-//                            qDebug() << "targetPathList = " << pAgent[objID]->memory.targetPathList;
-//                            qDebug() << "currentTargetPath = " << pAgent[objID]->memory.currentTargetPath;
-
-                            break;
-                        }
-                        else{
-                            numNoNeedLCPaths++;
-                        }
-
-                    }
-                }
-
-            }
-            else{
-
-                // random select
-                int selIdx = 0;
                 float rnd = rndGen.GenUniform();
-                float H = 1.0 / (float)targetPathLists.size();
-                for(int k=0;k<targetPathLists.size();++k){
+                float H = 1.0 / (float)numLaneLists;
+                for(int k=0;k<numLaneLists;++k){
                     if( rnd >= k * H && rnd < (k+1) * H ){
                         selIdx = k;
                         break;
                     }
                 }
 
-                pAgent[objID]->memory.targetPathList = targetPathLists[selIdx];
-                pAgent[objID]->memory.currentTargetPath = targetPathLists[selIdx].last();
+                pAgent[objID]->memory.routeLaneIndex = selIdx;
+                pAgent[objID]->memory.targetPathList = pRoad->odRoute[i]->laneListsToDestination[selIdx];
+                pAgent[objID]->memory.currentTargetPath = pAgent[objID]->memory.targetPathList.last();
+
+            }
+            else{
+
+                qDebug() << "laneListsToDestination.size = 0: route[" << i << "] : from "
+                         << pRoad->odRoute[i]->originNode << " to " << pRoad->odRoute[i]->destinationNode;
+
+
+                int onIdx = pRoad->nodeId2Index.indexOf( pRoad->odRoute[i]->originNode );
+
+
+                // This is for no route lanes data supplied
+                QList<QList<int>> targetPathLists;
+                QList<bool> needLCs;
+                QList<int> nodeUntils;
+
+                //
+                // List up All possible path list
+                for(int j=0;j<pRoad->nodes[onIdx]->outBoundaryWPs.size();++j){
+
+                    for(int k=0;k<pRoad->nodes[onIdx]->outBoundaryWPs[j]->PathWithSWP.size();++k){
+
+                        int tmpCurPath = pRoad->nodes[onIdx]->outBoundaryWPs[j]->PathWithSWP[k];
+
+                        bool needLC = false;
+                        int nodeUntil = -1;
+                        QList<int> tmpTargetPathList = pRoad->GetPathList( i, tmpCurPath, needLC, nodeUntil, &(this->rndGen) );
+
+
+                        targetPathLists.append( tmpTargetPathList );
+                        needLCs.append( needLC );
+                        nodeUntils.append( nodeUntil );
+
+                    }
+                }
+
+
+                if( targetPathLists.size() == 0 ){
+                    qDebug() << "-------";
+                    qDebug() << "Trying to generate agent ID = " << objID << ": from Node "
+                             << pRoad->odRoute[i]->originNode << " to "
+                             << pRoad->odRoute[i]->destinationNode;
+                    qDebug() << "No Path List extracted to reach destination.";
+                    qDebug() << "Check Road Data.";
+                    qDebug() << "-------";
+                    continue;
+                }
+
+
+                int numNoNeedLCPaths = 0;
+                for(int k=0;k<needLCs.size();++k){
+                    if( needLCs[k] == false ){
+                        numNoNeedLCPaths++;
+                    }
+                }
+
+
+                if( numNoNeedLCPaths > 0 ){
+
+                    int selIdx = 0;
+                    if( numNoNeedLCPaths > 1 ){
+                        float rnd = rndGen.GenUniform();
+                        float H = 1.0 / (float)numNoNeedLCPaths;
+                        for(int k=0;k<numNoNeedLCPaths;++k){
+                            if( rnd >= k * H && rnd < (k+1) * H ){
+                                selIdx = k;
+                                break;
+                            }
+                        }
+                    }
+
+                    numNoNeedLCPaths = 0;
+                    for(int k=0;k<needLCs.size();++k){
+                        if( needLCs[k] == false ){
+
+                            if( numNoNeedLCPaths == selIdx ){
+                                pAgent[objID]->memory.targetPathList = targetPathLists[k];
+                                pAgent[objID]->memory.currentTargetPath = targetPathLists[k].last();
+                                break;
+                            }
+                            else{
+                                numNoNeedLCPaths++;
+                            }
+
+                        }
+                    }
+
+                }
+                else{
+
+                    // random select
+                    int selIdx = 0;
+                    float rnd = rndGen.GenUniform();
+                    float H = 1.0 / (float)targetPathLists.size();
+                    for(int k=0;k<targetPathLists.size();++k){
+                        if( rnd >= k * H && rnd < (k+1) * H ){
+                            selIdx = k;
+                            break;
+                        }
+                    }
+
+                    pAgent[objID]->memory.targetPathList = targetPathLists[selIdx];
+                    pAgent[objID]->memory.currentTargetPath = targetPathLists[selIdx].last();
+                }
+
+                for(int j=0;j<targetPathLists.size();++j){
+                    targetPathLists[j].clear();
+                }
+                targetPathLists.clear();
+                needLCs.clear();
+                nodeUntils.clear();
             }
 
-            for(int j=0;j<targetPathLists.size();++j){
-                targetPathLists[j].clear();
-            }
-            targetPathLists.clear();
-            needLCs.clear();
-            nodeUntils.clear();
 
 
-            if(  pAgent[objID]->memory.currentTargetPath < 0 ){
+
+            if(  pAgent[objID]->memory.currentTargetPath < 0 || pAgent[objID]->memory.targetPathList.size() < 2 ){
                 qDebug() << "-------";
                 qDebug() << "Trying to generate agent ID = " << objID << ": from Node "
                          << pRoad->odRoute[i]->originNode << " to "
@@ -565,8 +597,6 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                 continue;
             }
 
-            
-
 
             // Set initial state
 //            qDebug() << "Set Vehicle Initial State";
@@ -587,7 +617,20 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
             // Set Control Information
             pAgent[objID]->memory.controlMode = AGENT_CONTROL_MODE::AGENT_LOGIC;
-            pAgent[objID]->memory.targetSpeed = pRoad->paths[tpIdx]->speedInfo;
+
+
+            pAgent[objID]->param.speedVariationFactor = rndGen.GetNormalDist(0.0,1.0);
+            if( pAgent[objID]->param.speedVariationFactor > 2.0 ){
+                pAgent[objID]->param.speedVariationFactor = 2.0;
+            }
+            else if( pAgent[objID]->param.speedVariationFactor < -1.0 ){
+                pAgent[objID]->param.speedVariationFactor = -1.0;
+            }
+
+            pAgent[objID]->param.latAccelAtTurn = ( 0.20 + pAgent[objID]->param.speedVariationFactor * 0.07) * 9.81;
+
+            pAgent[objID]->SetTargetSpeedIndividual( pRoad->paths[tpIdx]->speed85pt );
+
 
             pAgent[objID]->agentStatus = 1;
             pAgent[objID]->isScenarioObject = false;

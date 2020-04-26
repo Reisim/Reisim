@@ -218,8 +218,9 @@ void Road::LoadRoadData(QString filename)
             path->id = QString( elem[0] ).trimmed().toInt();
             path->startWpId  = QString( elem[1] ).trimmed().toInt();
             path->endWpId    = QString( elem[2] ).trimmed().toInt();
-            path->numDivPath = QString( elem[3] ).trimmed().toInt();
+            path->numDivPath = QString( elem[3] ).trimmed().toInt() - 1;
             path->speedInfo  = QString( elem[4] ).trimmed().toFloat() / 3.6;
+            path->speed85pt  = QString( elem[5] ).trimmed().toFloat() / 3.6;
 
             path->scenarioObjectID = -1;
 
@@ -646,6 +647,54 @@ void Road::LoadRoadData(QString filename)
 
             odRoute.append( odr );
         }
+        else if( tag == QString("Route Lanes") ){
+
+            QStringList elem = QString( divLine[1] ).split("|");
+
+            QStringList nodeList = QString( elem[0] ).trimmed().split(",");
+
+            qDebug() << "Route Lanes: nodeList = " << nodeList;
+
+            for(int i=0;i<odRoute.size();++i){
+
+                if( nodeList.size() != odRoute[i]->routeToDestination.size() ){
+                    continue;
+                }
+
+                bool matched = true;
+                for(int j=0;j<odRoute[i]->routeToDestination.size();++j){
+                    if( odRoute[i]->routeToDestination[j]->node != QString(nodeList[j]).trimmed().toInt() ){
+                        matched = false;
+                        break;
+                    }
+                }
+                if( matched == false ){
+                    continue;
+                }
+
+                QStringList laneLists = QString( elem[1] ).trimmed().split("/");
+                for(int j=0;j<laneLists.size();++j){
+
+                    QList<int> laneList;
+                    QStringList lanes = QString(laneLists[j]).trimmed().split(",");
+                    for(int k=0;k<lanes.size();++k){
+                        laneList.append( QString(lanes[k]).trimmed().toInt() );
+                    }
+
+                    odRoute[i]->laneListsToDestination.append( laneList );
+
+                }
+
+
+                qDebug() << "Route Lanes: " << odRoute[i]->originNode << " -> " << odRoute[i]->destinationNode;
+                for(int j=0;j<odRoute[i]->laneListsToDestination.size();++j){
+                    qDebug() << "[" <<  j << "] : " << odRoute[i]->laneListsToDestination[j];
+                }
+
+                break;
+            }
+
+        }
         else if( tag == QString("Vehicle Kind") ){
 
             QStringList elem = QString( divLine[1] ).split(",");
@@ -828,7 +877,7 @@ void Road::CalculatePathShape(struct Path *p)
     if( L < 1.0 ){
         L = 1.0;
     }
-    float D = 1.0 + 0.6 * ( L - 1.0 );
+    float D = 1.0 + 0.707 * ( L - 1.0 );
 
     float px[4],py[4];
     px[0] = -(eCt) * D;
@@ -1071,6 +1120,16 @@ void Road::SetPathShape(int id)
     }
 
     CalculatePathShape( paths[index] );
+
+    if( paths[index]->id == 31 ){
+        for(int i=0;i<paths[index]->pos.size();++i){
+            qDebug() << QString("[%1]Pos=(%2,%3) Deriv=(%4,%5)").arg(i)
+                        .arg( paths[index]->pos[i]->x() )
+                        .arg( paths[index]->pos[i]->y() )
+                        .arg( paths[index]->derivative[i]->x() )
+                        .arg( paths[index]->derivative[i]->y() );
+        }
+    }
 }
 
 
@@ -1124,6 +1183,8 @@ void Road::CheckSideBoundaryWPs(struct Node *n)
         qDebug() << "[Road::CheckSideBoundaryWPs] pointer n is null.";
         return;
     }
+
+    //qDebug() << "[Road::CheckSideBoundaryWPs]";
 
     for(int i=0;i<n->nCross;++i){
 
@@ -1184,6 +1245,8 @@ void Road::CheckSideBoundaryWPs(struct Node *n)
         }
     }
 
+    //qDebug() << "inBoundaryWPs set.";
+
     for(int i=0;i<n->nCross;++i){
 
         QList<int> checkWPs;
@@ -1243,6 +1306,8 @@ void Road::CheckSideBoundaryWPs(struct Node *n)
         }
     }
 
+    //qDebug() << "outBoundaryWPs set.";
+
     for(int i=0;i<n->inBoundaryWPs.size();++i){
 
         int wpId = n->inBoundaryWPs[i]->wpId;
@@ -1278,6 +1343,8 @@ void Road::CheckSideBoundaryWPs(struct Node *n)
         wps[wpIdx]->relatedNode = n->id;
         wps[wpIdx]->relatedNodeLeg = n->outBoundaryWPs[i]->relatedDirection;
     }
+
+    //qDebug() << "related data set.";
 }
 
 
@@ -1392,8 +1459,9 @@ void Road::CreatePathsforScenarioObject(int objectID)
         path->id = maxID;
         path->startWpId  = wps[sWP]->id;
         path->endWpId    = wps[eWP]->id;
-        path->numDivPath = 10;
+        path->numDivPath = 9;
         path->speedInfo  = (wps[sWP]->speedInfo + wps[eWP]->speedInfo) * 0.5;
+        path->speed85pt  = path->speedInfo;
 
         path->scenarioObjectID = objectID;
 

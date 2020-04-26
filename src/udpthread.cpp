@@ -983,8 +983,8 @@ void UDPThread::ReadUDPData()
                     int aID = -1;
                     memcpy( &aID, &(com[index+3]), sizeof(int) );
                     if( aID >= 0 && aID < maxAgent ){
-                        //qDebug() << "emit AppearAgent(" << aID << ")";
-                        //emit AppearAgent( aID );
+                        qDebug() << "emit AppearAgent(" << aID << ")";
+                        emit AppearAgent( aID );
                     }
 
                     index += 7;
