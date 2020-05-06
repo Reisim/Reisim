@@ -92,9 +92,10 @@ MainWindow::MainWindow(QWidget *parent)
     fontScaler = new QSlider( Qt::Horizontal );
     fontScaler->setMinimum(1);
     fontScaler->setMaximum(200);
-    fontScaler->setValue(1);
+    fontScaler->setValue(14);
     fontScaler->setFixedWidth(100);
     connect(fontScaler,SIGNAL(valueChanged(int)),this,SLOT(SetFontScale(int)));
+    connect(canvas,SIGNAL(ChangeFontScale(int)),fontScaler,SLOT(setValue(int)));
 
     snapshotBtn = new QPushButton("Snapshot");
     snapshotBtn->setIcon(QIcon(":/images/Pin.png"));
@@ -200,6 +201,16 @@ void MainWindow::LoadSettingFile(QString filename)
         return;
     }
 
+    QString tmpfilename = filename;
+
+    QStringList divFileName = tmpfilename.replace("\\","/").split("/");
+    QString pureFileName = QString(divFileName.last());
+    QString settingFolder = tmpfilename.remove( pureFileName );
+
+    qDebug() << "pureFileName = " << pureFileName;
+    qDebug() << "settingFolder = " << settingFolder;
+
+
     QFile file( CheckNetworkDrive(filename) );
     if( !file.open(QIODevice::ReadOnly | QIODevice::Text) ){
         QMessageBox::warning(this,"Error","Cannot open file: " + filename);
@@ -233,8 +244,17 @@ void MainWindow::LoadSettingFile(QString filename)
         if( tag.contains("Scenario File") ){
             QString scenarioFile = QString(divLine[1]).trimmed();
 
-            emit SetScenraioFile( scenarioFile );
+            QString reconstFilename = scenarioFile;
 
+            // Check if the path is absolute or relative
+            if( scenarioFile.contains(":") == false ){
+
+                reconstFilename = settingFolder + scenarioFile;
+
+                qDebug() << "Reconstructed scenario filename = " << reconstFilename;
+            }
+
+            emit SetScenraioFile( reconstFilename );
         }
         else if( tag.contains("Supplement File") ){
             QString supplementFile = QString(divLine[1]).trimmed();

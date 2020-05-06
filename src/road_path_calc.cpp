@@ -14,7 +14,7 @@
 #include "road.h"
 #include <QDebug>
 
-int Road::GetNearestPathFromList(float xp, float yp, float yawAngle, float &dist, QList<int> &pathList)
+int Road::GetNearestPathFromList(QList<int> &pathList,float xp, float yp, float yawAngle, float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP)
 {
     int ret = -1;
 
@@ -33,20 +33,30 @@ int Road::GetNearestPathFromList(float xp, float yp, float yawAngle, float &dist
             continue;
         }
 
-        float deviation,xt,yt,xd,yd,s;
+        float dev,txt,tyt,txd,tyd,ts;
         int id = GetDeviationFromPath( paths[i]->id,
                                        xp, yp, yawAngle,
-                                       deviation, xt, yt, xd, yd, s );
+                                       dev, txt, tyt, txd, tyd, ts );
 
         if( id == paths[i]->id ){
             if( ret < 0 ){
                 ret = id;
-                dist = deviation;
+                deviation = dev;
+                xt = txt;
+                yt = tyt;
+                xderiv = txd;
+                yderiv = tyd;
+                distFromStartWP = ts;
             }
             else{
-                if( fabs(deviation) < dist ){
+                if( fabs(dev) < deviation ){
                     ret = id;
-                    dist = deviation;
+                    deviation = dev;
+                    xt = txt;
+                    yt = tyt;
+                    xderiv = txd;
+                    yderiv = tyd;
+                    distFromStartWP = ts;
                 }
             }
         }

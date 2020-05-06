@@ -104,7 +104,9 @@ struct Path
 
     QList<float> curvature;
     QList<float> length;
+
     float pathLength;
+    float meanPathCurvature;
 
     float speedInfo;   // Speed Limit[m/s]
     float speed85pt;    // Actual Speed, 85th-percentile[m/s]
@@ -206,6 +208,7 @@ struct Node
     bool hasTS;
     QList<int> relatedVTSIndex;
     QList<int> relatedPTSIndex;
+    bool isMergeNode;
 };
 
 
@@ -216,17 +219,34 @@ struct RouteElem
     int outDir;
 };
 
+
+struct RouteLaneData
+{
+    int startNode;
+    int goalNode;
+    int sIndexInNodeList;
+    int gIndexInNodeList;
+    QList<QList<int>> laneList;
+    int LCDirect;
+};
+
+
 struct ODRouteData
 {
     int originNode;
     int destinationNode;
     QList<struct RouteElem*> routeToDestination;
+
     QList<QList<int>> laneListsToDestination;
+
+    QList<struct RouteLaneData*> LCSupportLaneLists;
+
     QList<int> trafficVolumne;
     int totalVolumne;
     QList<float> vehicleKindSelectProbability;
     float meanArrivalTime;
     float NextAppearTime;
+    QList<QList<QPoint>> mergeLanesInfo;
 };
 
 
@@ -259,7 +279,8 @@ public:
 
     float GetPathLength(int pathID);
     int GetNearestPath(float xp, float yp,float yawAngle,float &dist);
-    int GetNearestPathFromList(float xp,float yp,float yawAngle,float &dist,QList<int> &pathList);
+    int GetNearestPathFromList(QList<int> &pathList,float xp,float yp,float yawAngle,
+                               float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP);
     int GetDeviationFromPath(int pathID,
                              float xp,float yp,float yawAngle,
                              float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP,

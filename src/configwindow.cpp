@@ -49,12 +49,13 @@ ConfigWindow::ConfigWindow(QWidget *parent) : QWidget(parent)
     QGridLayout *gridLay = new QGridLayout();
 
     gridLay->addWidget( new QLabel("Scenario File"), 0, 0, 1, 1 );
-    gridLay->addWidget( new QLabel("Output Log File"), 1, 0, 1, 1 );
-    gridLay->addWidget( new QLabel("    Log Output Folder"), 2, 0, 1, 1 );
-    gridLay->addWidget( new QLabel("    Log File Name"), 3, 0, 1, 1 );
-    gridLay->addWidget( new QLabel("Work with Driving Simulator"), 4, 0, 1, 1 );
-    gridLay->addWidget( new QLabel("Restart File"), 5, 0, 1, 1 );
-    gridLay->addWidget( new QLabel("Calculation Time Step"), 6, 0, 1, 1 );
+    gridLay->addWidget( new QLabel("Only Filename"), 1, 0, 1, 1 );
+    gridLay->addWidget( new QLabel("Output Log File"), 2, 0, 1, 1 );
+    gridLay->addWidget( new QLabel("    Log Output Folder"), 3, 0, 1, 1 );
+    gridLay->addWidget( new QLabel("    Log File Name"), 4, 0, 1, 1 );
+    gridLay->addWidget( new QLabel("Work with Driving Simulator"), 5, 0, 1, 1 );
+    gridLay->addWidget( new QLabel("Restart File"), 6, 0, 1, 1 );
+    gridLay->addWidget( new QLabel("Calculation Time Step"), 7, 0, 1, 1 );
 
 
     QPushButton *selectScenario = new QPushButton("Select");
@@ -63,29 +64,32 @@ ConfigWindow::ConfigWindow(QWidget *parent) : QWidget(parent)
     connect(selectScenario,SIGNAL(clicked(bool)),this,SLOT(SelectScenario()));
     gridLay->addWidget( selectScenario, 0, 1, 1, 1 );
 
+    cbOnlyFilename = new QCheckBox();
+    gridLay->addWidget( cbOnlyFilename, 1, 1, 1, 1 );
+
     cbOutputLogFile = new QCheckBox();
-    gridLay->addWidget( cbOutputLogFile, 1, 1, 1, 1 );
+    gridLay->addWidget( cbOutputLogFile, 2, 1, 1, 1 );
 
     QPushButton *selectLogOutputFolder = new QPushButton("Select");
     selectLogOutputFolder->setIcon( QIcon(":/images/select.png") );
     selectLogOutputFolder->setFixedWidth(60);
     connect(selectLogOutputFolder,SIGNAL(clicked(bool)),this,SLOT(SelectLogOutputFolder()));
-    gridLay->addWidget( selectLogOutputFolder, 2, 1, 1, 1 );
+    gridLay->addWidget( selectLogOutputFolder, 3, 1, 1, 1 );
 
     QPushButton *selectLogFileName = new QPushButton("Select");
     selectLogFileName->setIcon( QIcon(":/images/select.png") );
     selectLogFileName->setFixedWidth(60);
     connect(selectLogFileName,SIGNAL(clicked(bool)),this,SLOT(SelectLogFileName()));
-    gridLay->addWidget( selectLogFileName, 3, 1, 1, 1 );
+    gridLay->addWidget( selectLogFileName, 4, 1, 1, 1 );
 
     cbDSMode = new QCheckBox();
-    gridLay->addWidget( cbDSMode, 4, 1, 1, 1 );
+    gridLay->addWidget( cbDSMode, 5, 1, 1, 1 );
 
     QPushButton *selectRestartFile = new QPushButton("Select");
     selectRestartFile->setIcon( QIcon(":/images/select.png") );
     selectRestartFile->setFixedWidth(60);
     connect(selectRestartFile,SIGNAL(clicked(bool)),this,SLOT(SelectRestartFile()));
-    gridLay->addWidget( selectRestartFile, 5, 1, 1, 1 );
+    gridLay->addWidget( selectRestartFile, 6, 1, 1, 1 );
 
     scenarioFilename = new QLabel("Not selected.");
     scenarioFilename->setFixedWidth( 600 );
@@ -95,24 +99,25 @@ ConfigWindow::ConfigWindow(QWidget *parent) : QWidget(parent)
     logSaveFolder = new QLabel("Not selected.");
     logSaveFolder->setFixedWidth( 600 );
     logSaveFolder->setWordWrap(true);
-    gridLay->addWidget( logSaveFolder, 2, 2, 1, 1 );
+    gridLay->addWidget( logSaveFolder, 3, 2, 1, 1 );
 
     logFileName = new QLabel("Not selected.");
     logFileName->setFixedWidth( 600 );
     logFileName->setWordWrap(true);
-    gridLay->addWidget( logFileName, 3, 2, 1, 1 );
+    gridLay->addWidget( logFileName, 4, 2, 1, 1 );
 
     restartFilename = new QLabel("Not selected.");
     restartFilename->setFixedWidth( 600 );
     restartFilename->setWordWrap(true);
-    gridLay->addWidget( restartFilename, 5, 2, 1, 1 );
+    gridLay->addWidget( restartFilename, 6, 2, 1, 1 );
 
     calTimeStep = new QDoubleSpinBox();
     calTimeStep->setMinimum( 0.001 );
     calTimeStep->setMaximum( 0.1 );
     calTimeStep->setValue( 0.02 );
+    calTimeStep->setSingleStep(0.02);
     calTimeStep->setSuffix("[s]");
-    gridLay->addWidget( calTimeStep, 6, 2, 1, 1, Qt::AlignLeft );
+    gridLay->addWidget( calTimeStep, 7, 1, 1, 1, Qt::AlignLeft );
 
 
 
@@ -323,7 +328,16 @@ void ConfigWindow::SaveConfig()
             out << "no\n";
         }
         out << "\n";
-        out << "Scenario File ; " << scenarioFilename->text() << "\n";
+
+        if( cbOnlyFilename->isChecked() == true ){
+            QString tmpStr = scenarioFilename->text();
+            QStringList tmpStrDiv = tmpStr.replace("\\","/").split("/");
+            out << "Scenario File ; " <<  QString(tmpStrDiv.last()) << "\n";
+        }
+        else{
+            out << "Scenario File ; " << scenarioFilename->text() << "\n";
+        }
+
         out << "Calculation Time Step ; " << calTimeStep->value() << "\n";
         out << "\n";
         out << "Output Log File ; ";
@@ -436,7 +450,9 @@ void ConfigWindow::SelectRestartFile()
         setWindowModified(true);
     }
     else{
-        qDebug() << "   filename is null";
+        qDebug() << "   filename is null; clear restart file";
+        restartFilename->clear();
+        setWindowModified(true);
     }
 
     setFixedSize( sizeHint() );

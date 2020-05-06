@@ -599,6 +599,18 @@ void SystemThread::LoadScenarioFile()
         return;
     }
 
+
+    QString tmpfilename = scenarioFile;
+
+    QStringList divFileName = tmpfilename.replace("\\","/").split("/");
+    QString pureFileName = QString(divFileName.last());
+    QString scenarioFolder = tmpfilename.remove( pureFileName );
+
+    qDebug() << "pureFileName = " << pureFileName;
+    qDebug() << "scenarioFolder = " << scenarioFolder;
+
+
+
     QString line;
     QStringList divLine;
 
@@ -647,9 +659,34 @@ void SystemThread::LoadScenarioFile()
         QString tag = QString( divLine[0] ).trimmed();
         if( tag == QString("Road Data File") ){
             roadDataFile = QString( divLine[1] ).trimmed();
+
+            QString reconstFilename = roadDataFile;
+
+            // Check if the path is absolute or relative
+            if( roadDataFile.contains(":") == false ){
+
+                reconstFilename = scenarioFolder + roadDataFile;
+
+                qDebug() << "Reconstructed road filename = " << reconstFilename;
+            }
+
+            roadDataFile = reconstFilename;
+
         }
         else if( tag == QString("Signal Data File") ){
             signalDataFile = QString( divLine[1] ).trimmed();
+
+            QString reconstFilename = signalDataFile;
+
+            // Check if the path is absolute or relative
+            if( signalDataFile.contains(":") == false ){
+
+                reconstFilename = scenarioFolder + signalDataFile;
+
+                qDebug() << "Reconstructed signal filename = " << reconstFilename;
+            }
+
+            signalDataFile = reconstFilename;
         }
         else if( tag == QString("Max Number of Agent") ){
             maxAgent = QString( divLine[1] ).trimmed().toInt();
@@ -2254,12 +2291,7 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
                         int tpath = road->paths[idx]->forwardPaths[j];
                         int tidx = road->pathId2Index.indexOf(tpath);
 
-                        float tmpCurvature = 0.0;
-                        for(int i=0;i<road->paths[tidx]->curvature.size();++i){
-                            if( tmpCurvature < fabs(road->paths[tidx]->curvature[i]) ){
-                                tmpCurvature = fabs(road->paths[tidx]->curvature[i]);
-                            }
-                        }
+                        float tmpCurvature = fabs(road->paths[tidx]->meanPathCurvature);
 
                         if( minIdx < 0 || minCurvature > tmpCurvature ){
                             minIdx = j;
@@ -2493,11 +2525,13 @@ void SystemThread::CopyPathData(int fromAID, int toAID)
             agent[toAID]->memory.targetPathList.append( agent[fromAID]->memory.targetPathList[i] );
         }
 
-        float dist = 0;
+        float tdev,txt,tyt,txd,tyd,ts;
         float xi = agent[toAID]->state.x;
         float yi = agent[toAID]->state.y;
         float YAi = agent[toAID]->state.yaw;
-        int currentPath = road->GetNearestPathFromList( xi, yi, YAi, dist, agent[toAID]->memory.targetPathList );
+        int currentPath = road->GetNearestPathFromList( agent[toAID]->memory.targetPathList,
+                                                        xi, yi, YAi,
+                                                        tdev,txt,tyt,txd,tyd,ts );
         if( currentPath < 0 ){
             qDebug() << "[Warning]----------------------------------";
             qDebug() << " Scenario Vehicle ID = " << toAID << " cannot determin nearest path from assigned list.";
@@ -2753,7 +2787,16 @@ void SystemThread::ShowAgentData(float x,float y)
                  << " Type = " << agent[nearID]->memory.perceptedObjects[i]->objectType
                  << " Evaled = " << agent[nearID]->memory.perceptedObjects[i]->relPosEvaled;
         qDebug() << "        N = " << agent[nearID]->memory.perceptedObjects[i]->innerProductToNearestPathNormal
-                 << " T = " << agent[nearID]->memory.perceptedObjects[i]->innerProductToNearestPathTangent;
+                 << " T = " << agent[nearID]->memory.perceptedObjects[i]->innerProductToNearestPathTangent
+                 << " nupc = " << agent[nearID]->memory.perceptedObjects[i]->noUpdateCount
+                 << " nearPath = " << agent[nearID]->memory.perceptedObjects[i]->nearestTargetPath
+                 << " t = " << agent[nearID]->memory.perceptedObjects[i]->objDistFromSWPOfNearTargetPath;
+
+        if( agent[nearID]->memory.checkSideVehicleForLC == true ){
+            qDebug() << "        LCpath = " << agent[nearID]->memory.perceptedObjects[i]->objPathInLCTargetPathList
+                     << " e = " << agent[nearID]->memory.perceptedObjects[i]->latDevObjInLCTargetPathList
+                     << " D = " << agent[nearID]->memory.perceptedObjects[i]->distToObjInLCTargetPathList;
+        }
     }
 
     qDebug() << "Recognizied Traffic Signal Info:";
@@ -2774,8 +2817,9 @@ void SystemThread::ShowAgentData(float x,float y)
             continue;
         }
         qDebug() << "  OBJ:" << agent[nearID]->memory.perceptedObjects[i]->objectID
-                 << " hasCP = " << agent[nearID]->memory.perceptedObjects[i]->hasCollisionPoint;
-        if( agent[nearID]->memory.perceptedObjects[i]->hasCollisionPoint == true ){
+                 << " hasCP = " << agent[nearID]->memory.perceptedObjects[i]->hasCollisionPoint
+                 << " merge = " << agent[nearID]->memory.perceptedObjects[i]->mergingAsCP;
+        if( agent[nearID]->memory.perceptedObjects[i]->hasCollisionPoint == true || agent[nearID]->memory.perceptedObjects[i]->mergingAsCP == true ){
             qDebug() << "    xCP = " << agent[nearID]->memory.perceptedObjects[i]->xCP
                      << " yCP = " << agent[nearID]->memory.perceptedObjects[i]->yCP;
             qDebug() << "    myDist = " << agent[nearID]->memory.perceptedObjects[i]->myDistanceToCP
@@ -2797,6 +2841,7 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  distToFatOncomingCP = " << agent[nearID]->memory.distToFatOncomingCP;
     qDebug() << "  shouldWaitOverCrossPoint = " << agent[nearID]->memory.shouldWaitOverCrossPoint;
     qDebug() << "  distToNearestCP = " << agent[nearID]->memory.distToNearestCP;
+    qDebug() << "  nearCPInNode = " << agent[nearID]->memory.nearCPInNode;
     qDebug() << "  shouldStopAtSignalSL = " << agent[nearID]->memory.shouldStopAtSignalSL;
     qDebug() << "  shouldYeild = " << agent[nearID]->memory.shouldYeild;
     qDebug() << "  distToYeildStopLine = " << agent[nearID]->memory.distToYeildStopLine;
@@ -2805,6 +2850,15 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  rightCrossIsClear = " << agent[nearID]->memory.rightCrossIsClear;
     qDebug() << "  rightCrossCheckCount = " << agent[nearID]->memory.rightCrossCheckCount;
     qDebug() << "  safetyConfimed = " << agent[nearID]->memory.safetyConfimed;
+
+    qDebug() << "Lane-Change:";
+    qDebug() << "  checkSideVehicleForLC = " << agent[nearID]->memory.checkSideVehicleForLC;
+    qDebug() << "  LCDirection = " << agent[nearID]->memory.LCDirection;
+    qDebug() << "  LCCheckState = " << agent[nearID]->memory.LCCheckState;
+    qDebug() << "  LCInfoGetCount = " << agent[nearID]->memory.LCInfoGetCount;
+    qDebug() << "  currentPathInLCTargetPathList = " << agent[nearID]->memory.currentPathInLCTargetPathList;
+    qDebug() << "  latDeviFromLCTargetPathList = " << agent[nearID]->memory.latDeviFromLCTargetPathList;
+    qDebug() << "  distFromSWPLCTargetPathList = " << agent[nearID]->memory.distFromSWPLCTargetPathList;
 
 
     qDebug() << "Control Info:";
@@ -2832,6 +2886,7 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  axStopControl = " << agent[nearID]->memory.axStopControl;
     qDebug() << "  distanceToStopPoint = " << agent[nearID]->memory.distanceToStopPoint;
     qDebug() << "  distanceToZeroSpeed = " << agent[nearID]->memory.distanceToZeroSpeed;
+    qDebug() << "  distanceToZeroSpeedByMaxBrake = " << agent[nearID]->memory.distanceToZeroSpeedByMaxBrake;
     qDebug() << "  requiredDistToStopFromTargetSpeed = " << agent[nearID]->memory.requiredDistToStopFromTargetSpeed;
 
     qDebug() << "  distanceFromStartWPInCurrentPath = " << agent[nearID]->memory.distanceFromStartWPInCurrentPath;
@@ -2861,6 +2916,12 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  distanceToTurnNodeWPOut = " << agent[nearID]->memory.distanceToTurnNodeWPOut;
     qDebug() << "  distanceToNodeWPOut = " << agent[nearID]->memory.distanceToNodeWPOut;
 
+    qDebug() << "  routeIndex = " << agent[nearID]->memory.routeIndex;
+    qDebug() << "  routeLaneIndex = " << agent[nearID]->memory.routeLaneIndex;
+    qDebug() << "  LCStartRouteIndex = " << agent[nearID]->memory.LCStartRouteIndex;
+    qDebug() << "  LCSupportRouteLaneIndex = " << agent[nearID]->memory.LCSupportRouteLaneIndex;
+
+
     qDebug() << "Parameters:";
     qDebug() << "  accelControlGain = " << agent[nearID]->param.accelControlGain;
     qDebug() << "  deadZoneSpeedControl = " << agent[nearID]->param.deadZoneSpeedControl;
@@ -2879,6 +2940,9 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  crossWaitPositionSafeyMargin = " << agent[nearID]->param.crossWaitPositionSafeyMargin;
     qDebug() << "  pedestWaitPositionSafetyMargin = " << agent[nearID]->param.pedestWaitPositionSafetyMargin;
     qDebug() << "  safetyConfirmTime = " << agent[nearID]->param.safetyConfirmTime;
+    qDebug() << "  LCInfoGetTime = " << agent[nearID]->param.LCInfoGetTime;
+    qDebug() << "  LCCutInAllowTTC = " << agent[nearID]->param.LCCutInAllowTTC;
+
 
     qDebug() << "Debug Info:";
 

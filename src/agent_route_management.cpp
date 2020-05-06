@@ -64,12 +64,12 @@ void Agent::CheckPathList(Road* pRoad)
                     memory.targetPathList[0] = pRoad->paths[pIdx]->forwardPaths[0];
                 }
 
-                float dist = 0;
-                int currentPath = pRoad->GetNearestPathFromList( state.x,
+                float tdev,txt,tyt,txd,tyd,ts;
+                int currentPath = pRoad->GetNearestPathFromList( memory.targetPathList ,
+                                                                 state.x,
                                                                  state.y,
                                                                  state.yaw,
-                                                                 dist,
-                                                                 memory.targetPathList );
+                                                                 tdev,txt,tyt,txd,tyd,ts );
                 if( currentPath < 0 ){
 
                     qDebug() << "[CheckPathList:Warning]----------------------------------";
@@ -88,7 +88,81 @@ void Agent::CheckPathList(Road* pRoad)
                 int pIdx = pRoad->pathId2Index.indexOf( currentPath );
                 SetTargetSpeedIndividual( pRoad->paths[pIdx]->speed85pt );
 
+                int tmpCurrentTargetNode = memory.currentTargetNode;
+
                 SetTargetNodeListByTargetPaths( pRoad );
+
+                if( tmpCurrentTargetNode != memory.currentTargetNode &&
+                        memory.LCStartRouteIndex >= 0 &&
+                        memory.currentTargetNode == pRoad->odRoute[memory.routeIndex]->routeToDestination[memory.LCStartRouteIndex]->node &&
+                        memory.checkSideVehicleForLC == false ){
+
+
+                    memory.laneChangeTargetPathList.clear();
+
+                    int i = memory.routeIndex;
+                    int j = memory.LCSupportRouteLaneIndex - 1;
+
+                    int numLaneLists = pRoad->odRoute[i]->LCSupportLaneLists[j]->laneList.size();
+
+                    int selIdx = 0;
+                    if( numLaneLists > 1 ){
+                        float rnd = rndGen.GenUniform();
+                        float H = 1.0 / (float)numLaneLists;
+                        for(int k=0;k<numLaneLists;++k){
+                            if( rnd >= k * H && rnd < (k+1) * H ){
+                                selIdx = k;
+                                break;
+                            }
+                        }
+                    }
+
+                    if( j > 0 ){
+                        memory.LCStartRouteIndex = pRoad->odRoute[i]->LCSupportLaneLists[j]->gIndexInNodeList;
+                    }
+                    else{
+                        memory.LCStartRouteIndex = -1;
+                    }
+
+
+                    memory.routeLaneIndex = selIdx;
+                    memory.laneChangeTargetPathList = pRoad->odRoute[i]->LCSupportLaneLists[j]->laneList[selIdx];
+
+//                    qDebug() << "laneChangeTargetPathList = " << memory.laneChangeTargetPathList;
+
+
+                    memory.laneChangePathLength.clear();
+                    for(int k=0;k<memory.laneChangeTargetPathList.size();++k){
+                        float len = pRoad->GetPathLength( memory.laneChangeTargetPathList[k] );
+                        memory.laneChangePathLength.append( len );
+                    }
+
+
+                    memory.checkSideVehicleForLC = true;
+                    memory.LCCheckState          = 1;
+                    memory.LCInfoGetCount        = 0;
+
+                    // Determine LC Direction
+                    if( memory.LCSupportRouteLaneIndex >= 0 && memory.LCSupportRouteLaneIndex < pRoad->odRoute[memory.routeIndex]->LCSupportLaneLists.size() ){
+                        memory.LCDirection = pRoad->odRoute[memory.routeIndex]->LCSupportLaneLists[memory.LCSupportRouteLaneIndex]->LCDirect;
+                    }
+
+                    if( vehicle.GetWinerState() == 0 ){
+                        if( memory.LCDirection == DIRECTION_LABEL::LEFT_CROSSING ){
+                            vehicle.SetWinker( 1 );
+                        }
+                        else if( memory.LCDirection == DIRECTION_LABEL::RIGHT_CROSSING ){
+                            vehicle.SetWinker( 2 );
+                        }
+                    }
+
+                    memory.LCSupportRouteLaneIndex--;
+
+
+//                    qDebug() << "Agent[" << ID << "]: Set Lane-Change Flag: Direction = " << (memory.LCDirection == DIRECTION_LABEL::RIGHT_CROSSING ? "RIGHT" : (memory.LCDirection == DIRECTION_LABEL::LEFT_CROSSING ? "LEFT" : "STRAIGHT") );
+//                    qDebug() << "  currentTargetNode = " << memory.currentTargetNode << " tmpCurrentTargetNode = " << tmpCurrentTargetNode;
+//                    qDebug() << "  LCStartRouteIndex = " << memory.LCStartRouteIndex;
+                }
             }
 
         }

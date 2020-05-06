@@ -25,6 +25,7 @@ void Agent::Control(Road* pRoad)
 
         memory.timeToZeroSpeed = state.V / param.accelControlGain;
         memory.distanceToZeroSpeed = state.V * state.V * 0.5f / param.accelControlGain + vHalfLength;
+        memory.distanceToZeroSpeedByMaxBrake = state.V * state.V * 0.5f / param.maxDeceleration + state.V + vHalfLength;
         memory.requiredDistToStopFromTargetSpeed = memory.targetSpeed * memory.targetSpeed * 0.5f / param.accelControlGain + vHalfLength;
         if( state.accel > 0.0 ){
             memory.distanceToZeroSpeed += state.V;
@@ -93,6 +94,14 @@ void Agent::Control(Road* pRoad)
                     //qDebug() << "[ID=" << ID << "] ax_com = " << ax_com << " - S";
                 }
 
+            }
+
+            // Deceleration for Lane-Change
+            if( memory.checkSideVehicleForLC == true && memory.LCCheckState == 2 && memory.sideVehicleRiskClear == false &&
+                    state.V > memory.targetSpeed * 0.25 ){
+                if( ax_com > param.accelControlGain * (-1.0) ){
+                    ax_com = param.accelControlGain * (-1.0);
+                }
             }
 
             if( ax_com >= 0.0f ){
@@ -516,11 +525,21 @@ void Agent::Control(Road* pRoad)
         float Y = memory.lateralDeviationFromTargetPathAtPreviewPoint - memory.lateralShiftTarget;
         memory.steer = (-1.0) * Y * param.steeringControlGain * lowSpeedAdjustGain;
 
-        if( memory.steer > 4.2 ){
-            memory.steer = 4.2;
+
+        float maxSteer = 4.2;
+        if( memory.LCCheckState == 4 ){
+            if( memory.LCSteerMax < 0.75 ){
+                memory.LCSteerMax += 0.05;
             }
-        else if( memory.steer < -4.2 ){
-            memory.steer = -4.2;
+            maxSteer = memory.LCSteerMax;
+        }
+
+
+        if( memory.steer > maxSteer ){
+            memory.steer = maxSteer;
+            }
+        else if( memory.steer < -maxSteer ){
+            memory.steer = -maxSteer;
         }
 
         // Do not steer at stop
@@ -535,7 +554,8 @@ void Agent::Control(Road* pRoad)
 
         // Winker Operation
         if( memory.controlMode == AGENT_CONTROL_MODE::AGENT_LOGIC ){
-            if( memory.distanceToTurnNodeWPIn >= 0 && vehicle.GetWinerState() == 0 ){
+            if( memory.nextTurnNode == memory.currentTargetNode &&
+                    memory.distanceToTurnNodeWPIn >= 0 && vehicle.GetWinerState() == 0 ){
                 if( memory.distanceToTurnNodeWPIn <= 30.0 || memory.distanceToTurnNodeWPIn < 3.0 * state.V ){
                     if( memory.nextTurnDirection == DIRECTION_LABEL::LEFT_CROSSING ){
                         vehicle.SetWinker( 1 );
@@ -544,6 +564,11 @@ void Agent::Control(Road* pRoad)
                         vehicle.SetWinker( 2 );
                     }
                 }
+            }
+
+            if( memory.LCCheckState == 4 && vehicle.GetWinerState() > 0 && fabs(memory.lateralDeviationFromTargetPath) < 0.5 ){
+                vehicle.SetWinker( 0 );
+                memory.LCCheckState = 0;
             }
         }
 
@@ -677,38 +702,86 @@ void Agent::HeadwayControlAgent()
     float accelOffDecel = param.accelOffDeceleration;
 
     float relV = (memory.speedPrecedingVehicle - state.V);
-    if( relV > 0.5f ){
-        memory.axHeadwayControl = 0.0f;
+
+    strForDebug += QString("relV=%1\n").arg(relV);
+
+
+    // This will happen when merging
+    if( memory.precedingVehicleIndex >= 0 &&
+            fabs( memory.perceptedObjects[memory.precedingVehicleIndex]->deviationFromNearestTargetPath ) < 1.5 &&
+            fabs(memory.distanceToPrecedingVehicle) < vHalfLength + memory.halfLenPrecedingVehicle ){
+        if( state.V > 3.3 ){
+            memory.axHeadwayControl = param.accelControlGain * (-1.0);
+            return;
+        }
+    }
+
+
+    if( state.V < 0.5 && memory.speedPrecedingVehicle < 0.5 && memory.distanceToPrecedingVehicle < memory.targetHeadwayDistance + 5.0 ){
+        memory.axHeadwayControl = param.accelControlGain * (-1.0);
         return;
     }
 
+
     float addMargin = 0.0;
     if( relV < 0.0 ){
-        addMargin = relV * 1.0;
+        addMargin = relV * (-1.0) - param.minimumHeadwayDistanceAtStop;
     }
+
+    strForDebug += QString("addMargin=%1\n").arg(addMargin);
 
     if( memory.precedingObstacle == 1 ){
-        addMargin += 10.0;
+        addMargin = 10.0;
     }
 
-    if( memory.distanceToPrecedingVehicle - addMargin < param.minimumHeadwayDistanceAtStop ){
-        memory.axHeadwayControl = maxDecel * (-1.0f);
+    if( state.V > 0.1 && state.V < 1.0 ){
+        addMargin = 3.0;
+    }
+    else if( state.V <= 0.1 ){
+        addMargin = 0.35;
+    }
+
+    if( memory.distanceToPrecedingVehicle < param.minimumHeadwayDistanceAtStop + addMargin  ){
+        if( memory.precedingVehicleIndex >= 0 ){
+            if( fabs( memory.perceptedObjects[memory.precedingVehicleIndex]->deviationFromNearestTargetPath ) < 3.0 ){
+                memory.axHeadwayControl = param.accelControlGain * (-1.0);
+                return;
+            }
+        }
+        else{
+            memory.axHeadwayControl = param.accelControlGain * (-1.0);
+            return;
+        }
+    }
+
+
+    if( relV > 0.5f ){
+        memory.axHeadwayControl = 0.0f;
         return;
     }
 
 
     float distStopPreceding = 0.5 * memory.speedPrecedingVehicle * memory.speedPrecedingVehicle / param.accelControlGain;
 
-    if( distStopPreceding + memory.distanceToPrecedingVehicle - (memory.distanceToZeroSpeed - state.V)  < param.minimumHeadwayDistanceAtStop
-            && relV < -1.0 ){
+    strForDebug += QString("distStopPreceding=%1\n").arg(distStopPreceding);
+
+    if( distStopPreceding + memory.distanceToPrecedingVehicle - (memory.distanceToZeroSpeed + state.V)  < param.minimumHeadwayDistanceAtStop
+            && relV < -0.5 ){
 
         float L = distStopPreceding + memory.distanceToPrecedingVehicle - param.minimumHeadwayDistanceAtStop;
         if( L < 0.1 ){
             L = 0.1;
         }
-        float ax = (-0.5) * state.V * state.V / L;
 
-        memory.axHeadwayControl = ax;
+        strForDebug += QString("L=%1\n").arg(L);
+
+        float ax = (-0.5) * state.V * state.V / L;
+        if( ax < param.accelControlGain * (-0.5f) ){
+            memory.axHeadwayControl = ax;
+        }
+        else{
+            memory.axHeadwayControl = accelOffDecel * (-1.0);
+        }
 
         if( memory.axHeadwayControl < maxDecel * (-1.0f) ){
             memory.axHeadwayControl = maxDecel * (-1.0f);
@@ -719,6 +792,15 @@ void Agent::HeadwayControlAgent()
 
     if( memory.actualTargetHeadwayDistance > memory.distanceToPrecedingVehicle ){
         memory.axHeadwayControl = accelOffDecel * (-1.0);
+        if( memory.distanceToPrecedingVehicle < 0.0 ){
+            if( memory.precedingVehicleIndex >= 0 ){
+                if( fabs( memory.perceptedObjects[memory.precedingVehicleIndex]->deviationFromNearestTargetPath ) > 3.0 ){
+                    memory.axHeadwayControl = 0.0f;
+                    return;
+                }
+            }
+            memory.axHeadwayControl = param.accelControlGain * (-1.0);
+        }
         return;
     }
 
@@ -746,6 +828,7 @@ void Agent::HeadwayControl()
 //    qDebug() << "V = " << state.V;
 //    qDebug() << "relV = " << relV;
 
+    strForDebug += QString("HDerr=%1 relV=%2\n").arg(HDerr).arg(relV);
 
     if( relV > 0.5f ){
 
@@ -775,6 +858,8 @@ void Agent::HeadwayControl()
         addMargin = relV * 1.5;
     }
 
+    strForDebug += QString("addMargin=%1\n").arg(addMargin);
+
     if( fabs(memory.distanceToPrecedingVehicle) + addMargin < param.minimumHeadwayDistanceAtStop ){
         if( isFollowing > 0.0f ){
             memory.axHeadwayControl = maxDecel * (-1.0f);
@@ -788,6 +873,8 @@ void Agent::HeadwayControl()
     float S = HDerr - relV * param.headwayControlGain;
 //    qDebug() << "S = " << S;
 
+    strForDebug += QString("S=%1\n").arg(S);
+
     if( S <= 0.0f ){
         if( isFollowing > 0.0f ){
             memory.axHeadwayControl = param.accelControlGain;
@@ -798,6 +885,7 @@ void Agent::HeadwayControl()
         return;
     }
     else if( S > 0.0f ){
+
         float aReq = (-2.0f) * S / (param.headwayControlGain * param.headwayControlGain);
 
         //qDebug() << "aReq = " << aReq;
@@ -874,11 +962,18 @@ void Agent::SpeedAdjustForCurve(Road *pRoad,int cIdx,float targetSpeed)
 
         int pidx = pRoad->pathId2Index.indexOf( memory.targetPathList[i] );
 
+        if( fabs(pRoad->paths[pidx]->meanPathCurvature) < 0.0040 ){  // over R250, not adjust speed
+            distToLowSpeed += pRoad->paths[pidx]->pathLength;
+            continue;
+        }
+
         for(int j=0;j<pRoad->paths[pidx]->curvature.size();++j){
-            if( fabs(pRoad->paths[pidx]->curvature[j]) < 0.0025 ){  // over R400 is assumed as Straight
+            if( fabs(pRoad->paths[pidx]->curvature[j]) < 0.0040 ){  // over R250, not adjust speed
+                distToLowSpeed += pRoad->paths[pidx]->length[j];
                 continue;
             }
             if( i == cIdx && pRoad->paths[pidx]->length[j] < memory.distanceFromStartWPInCurrentPath + vHalfLength ){
+                distToLowSpeed += pRoad->paths[pidx]->length[j];
                 continue;
             }
             float distToThatPoint = distToLowSpeed -  memory.distanceFromStartWPInCurrentPath + pRoad->paths[pidx]->length[j];
@@ -910,6 +1005,7 @@ void Agent::SpeedAdjustForCurve(Road *pRoad,int cIdx,float targetSpeed)
 
             }
         }
+
         if( foundLowSpeed == false ){
             distToLowSpeed += pRoad->paths[pidx]->pathLength;
         }

@@ -188,11 +188,12 @@ void SimulationManager::RaiseEvent(Agent** pAgent,int maxAgentNumber, Road *pRoa
                     // get current path
                     if( pAgent[targetObjectID]->memory.routeType == ROUTE_TYPE::PATH_LIST_TYPE ){
 
-                        float dist = 0;
-                        int currentPath = pRoad->GetNearestPathFromList( pAgent[targetObjectID]->state.x,
+                        float tdev,txt,tyt,txd,tyd,ts;
+                        int currentPath = pRoad->GetNearestPathFromList( pAgent[targetObjectID]->memory.targetPathList,
+                                                                         pAgent[targetObjectID]->state.x,
                                                                          pAgent[targetObjectID]->state.y,
-                                                                         yawAngle, dist,
-                                                                         pAgent[targetObjectID]->memory.targetPathList );
+                                                                         yawAngle,
+                                                                         tdev,txt,tyt,txd,tyd,ts );
                         if( currentPath < 0 ){
                             qDebug() << "[Warning]----------------------------------";
                             qDebug() << " Scenario Vehicle ID = " << targetObjectID << " cannot determin nearest path from assigned list.";

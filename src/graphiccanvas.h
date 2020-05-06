@@ -130,6 +130,11 @@ public:
 
     void LocateAtAgent(int id);
 
+    float GetXeye(){ return X_eye; }
+    float GetYeye(){ return Y_eye; }
+    float GetZeye(){ return Z_eye; }
+
+
     Agent **agent;
     int maxAgent;
 
@@ -140,6 +145,7 @@ public:
 
 signals:
     void ShowAgentData(float x,float Y);
+    void ChangeFontScale(int);
 
 
 protected:

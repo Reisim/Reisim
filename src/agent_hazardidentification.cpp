@@ -41,6 +41,10 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                 return;
             }
 
+            if( onlyCheckPreceding == true ){
+                return;
+            }
+
 
 #ifdef _PERFORMANCE_CHECK_AGENT_HAZARD
             QueryPerformanceCounter(&start);
@@ -388,6 +392,7 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                         }
                         memory.distToNearestCP += dist;
                         memory.distToNearestCP -= memory.distanceFromStartWPInCurrentPath;
+                        memory.nearCPInNode = pRoad->paths[pIdx]->connectingNode;
                         break;
                     }
                 }

@@ -35,7 +35,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
     //
     //  Calculation of position on path
     //
-    if( agentKind < 100 ){
+    if( agentKind < 100 && state.V > 0.1 ){
 
 #ifdef _PERFORMANCE_CHECK_AGENT_PERCEPTION
         QueryPerformanceCounter(&start);
@@ -148,7 +148,6 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
                 float dist = 0.0;
                 bool foundWPIn = false;
-                bool foundWPOut = false;
                 for(int i=memory.currentTargetPathIndexInList;i>=0;i--){
                     int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
                     dist += pRoad->paths[pIdx]->pathLength;
@@ -158,7 +157,6 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
                             memory.distanceToTurnNodeWPIn = dist - memory.distanceFromStartWPInCurrentPath;
                         }
                         if( destPathsOut.indexOf(memory.targetPathList.at(i)) >= 0 ){
-                            foundWPOut = true;
                             memory.distanceToTurnNodeWPOut = dist - memory.distanceFromStartWPInCurrentPath;
                             break;
                         }
@@ -225,7 +223,6 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
                 float dist = 0.0;
                 bool foundWPIn  = false;
-                bool foundWPOut = false;
                 for(int i=memory.currentTargetPathIndexInList;i>=0;i--){
                     int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList.at(i) );
                     dist += pRoad->paths[pIdx]->pathLength;
@@ -236,7 +233,6 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
                         }
                         if( destPathsOut.indexOf(memory.targetPathList.at(i)) >= 0 ){
                             memory.distanceToNodeWPOut = dist - memory.distanceFromStartWPInCurrentPath;
-                            foundWPOut = true;
                             break;
                         }
                     }
@@ -276,16 +272,41 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
         }
 
 
+        //
+        // For Lane-Change
+        if( memory.checkSideVehicleForLC == true && memory.laneChangeTargetPathList.size() > 0 ){
+
+            float tdev,txt,tyt,txd,tyd,ts;
+            int currentPath = pRoad->GetNearestPathFromList( memory.laneChangeTargetPathList,
+                                                             state.x,
+                                                             state.y,
+                                                             state.yaw,
+                                                             tdev, txt, tyt, txd, tyd, ts);
+
+            if( currentPath >= 0 ){
+                memory.currentPathInLCTargetPathList = currentPath;
+                memory.latDeviFromLCTargetPathList   = tdev;
+                memory.distFromSWPLCTargetPathList   = ts;
+            }
+        }
+
     }
 
+
+    strForDebug = QString("");
 
 
     bool isNearIntersection = false;
-    if( memory.distanceToNodeWPIn < 30.0 || memory.distanceToNodeWPIn < 3.0 * state.V ){
+    if( (memory.distanceToNodeWPIn < 30.0 ||
+         memory.distanceToNodeWPIn < memory.requiredDistToStopFromTargetSpeed ||
+         memory.distanceToNodeWPIn < 3.0 * state.V) &&
+            memory.checkSideVehicleForLC == false ){
         isNearIntersection = true;
     }
 
+    strForDebug += QString("isNearIntersection=%1\n").arg(isNearIntersection);
 
+    onlyCheckPreceding = false;
     if( isNearIntersection == false ){
 
         // If not near intersection, reduce sampling rate to 5[Hz] to speed up calculation
@@ -295,10 +316,26 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
         }
         cognitionSubCount = 0;
 
+        if( state.V < 0.1 && memory.precedingVehicleID >= 0 && memory.speedPrecedingVehicle < 0.1 ){
+            float D = -1.0;
+            int PV = ID;
+            for(int i=0;i<memory.perceptedObjects.size();++i){
+                if( memory.perceptedObjects[i]->objectID == memory.precedingVehicleID &&
+                        memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::PRECEDING ){
+                    D = memory.perceptedObjects[i]->distanceToObject;
+                    PV = pAgent[memory.precedingVehicleID]->memory_reference.precedingVehicleID;
+                    break;
+                }
+            }
+            if( D > 0.0 && PV != ID ){
+                onlyCheckPreceding = true;
+            }
+        }
     }
 
+    strForDebug += QString("onlyCheckPreceding=%1\n").arg(onlyCheckPreceding);
 
-    strForDebug = QString("");
+
 
 
 
@@ -333,6 +370,9 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
 
     bool lookingBack = false;
+    if( memory.checkSideVehicleForLC == true ){
+        lookingBack = true;
+    }
 
 
     for(int i=0;i<=lastAgentIndex;++i){
@@ -345,6 +385,9 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
             continue;
         }
 
+        if( onlyCheckPreceding == true && pAgent[i]->ID != memory.precedingVehicleID ){
+            continue;
+        }
 
         // check the object is in agent view
         float rx = pAgent[i]->state.x - state.x;
@@ -439,15 +482,26 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
             memory.perceptedObjects[alreadyPercepted]->objectTargetNode        = pAgent[i]->memory_reference.currentTargetNode;
             memory.perceptedObjects[alreadyPercepted]->deviationFromObjectPath = pAgent[i]->memory_reference.lateralDeviationFromTargetPath;
 
-            memory.perceptedObjects[alreadyPercepted]->nearestTargetPath              = -1;
+//            memory.perceptedObjects[alreadyPercepted]->nearestTargetPath              = -1;
             memory.perceptedObjects[alreadyPercepted]->deviationFromNearestTargetPath = 0.0;
             memory.perceptedObjects[alreadyPercepted]->distanceToObject               = 0.0;
+
+            memory.perceptedObjects[alreadyPercepted]->objPathInLCTargetPathList = -1;
+            memory.perceptedObjects[alreadyPercepted]->latDevObjInLCTargetPathList = 0.0;
+            memory.perceptedObjects[alreadyPercepted]->distToObjInLCTargetPathList = 0.0;
 
             if( agentKind < 100 ){
 
                 memory.perceptedObjects[alreadyPercepted]->relPosEvaled = false;
 
-                int objPathIdx = memory.targetPathList.indexOf( memory.perceptedObjects[alreadyPercepted]->objectPath );
+                int objPathIdx = -1;
+
+                if( memory.perceptedObjects[alreadyPercepted]->nearestTargetPath >= 0 ){
+                    objPathIdx = memory.targetPathList.indexOf( memory.perceptedObjects[alreadyPercepted]->nearestTargetPath );
+                    if( objPathIdx < 0 ){
+                        memory.perceptedObjects[alreadyPercepted]->nearestTargetPath = -1;
+                    }
+                }
 
                 bool checkForward = true;
                 bool checkBackward = true;
@@ -632,36 +686,96 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
                     float distMe = 0.0;
                     float distObj = 0.0;
                     for(int l=memory.targetPathList.size()-1;l>=0;l--){
+
                         if( memory.targetPathList[l] == memory.currentTargetPath ){
                             foundMe = true;
-                            distMe += memory.distanceFromStartWPInCurrentPath;
                         }
+
                         if( l == k ){
                             foundObj = true;
-                            distObj += tsMin;
                         }
+
+                        if(foundMe == false && foundObj == false ){
+                            continue;
+                        }
+
+                        float pLen = memory.targetPathLength[l];
+                        if( foundMe == true ){
+                            distMe += pLen;
+                        }
+                        if( foundObj == true ){
+                            distObj += pLen;
+                        }
+
                         if( foundMe == true && foundObj == true ){
                             break;
                         }
-                        else if(foundMe == false && foundObj == false ){
-                            continue;
-                        }
-                        float pLen = memory.targetPathLength[l];
-                        if( foundMe == false ){
-                            distMe += pLen;
-                        }
-                        if( foundObj == false ){
-                            distObj += pLen;
-                        }
                     }
-                    dist = distObj - distMe;
 
+                    distMe -= memory.distanceFromStartWPInCurrentPath;
+                    distObj -= tsMin;
+
+                    dist = distMe - distObj;
+
+                    memory.perceptedObjects[alreadyPercepted]->objDistFromSWPOfNearTargetPath = tsMin;
                     memory.perceptedObjects[alreadyPercepted]->distanceToObject = dist;
 
                     memory.perceptedObjects[alreadyPercepted]->relPosEvaled = true;
 
     //                qDebug() << "distanceToObject=" << memory.perceptedObjects[alreadyPercepted]->distanceToObject;
                 }
+
+
+                if( memory.checkSideVehicleForLC == true && memory.laneChangeTargetPathList.size() > 0 ){
+
+                    float tdev,txt,tyt,txd,tyd,ts;
+                    int objPathInLCPath = pRoad->GetNearestPathFromList( memory.laneChangeTargetPathList,
+                                                                     pAgent[i]->state.x, pAgent[i]->state.y, pAgent[i]->state.yaw,
+                                                                     tdev, txt, tyt, txd, tyd, ts);
+
+                    if( objPathInLCPath >= 0 ){
+                        memory.perceptedObjects[alreadyPercepted]->objPathInLCTargetPathList = objPathInLCPath;
+                        memory.perceptedObjects[alreadyPercepted]->latDevObjInLCTargetPathList = tdev;
+
+                        bool foundMe = false;
+                        bool foundObj = false;
+                        float distMe = 0.0;
+                        float distObj = 0.0;
+                        for(int l=memory.laneChangeTargetPathList.size()-1;l>=0;l--){
+
+                            if( memory.laneChangeTargetPathList[l] == memory.currentPathInLCTargetPathList ){
+                                foundMe = true;
+                            }
+
+                            if( memory.laneChangeTargetPathList[l] == objPathInLCPath  ){
+                                foundObj = true;
+                            }
+
+                            if(foundMe == false && foundObj == false ){
+                                continue;
+                            }
+
+                            float pLen = memory.laneChangePathLength[l];
+                            if( foundMe == true ){
+                                distMe += pLen;
+                            }
+                            if( foundObj == true ){
+                                distObj += pLen;
+                            }
+
+                            if( foundMe == true && foundObj == true ){
+                                break;
+                            }
+                        }
+
+                        distMe -= memory.distFromSWPLCTargetPathList;
+                        distObj -= ts;
+
+                        memory.perceptedObjects[alreadyPercepted]->distToObjInLCTargetPathList = distMe - distObj;
+                    }
+
+                }
+
 
 #ifdef _PERFORMANCE_CHECK_AGENT_PERCEPTION_CORE
                 QueryPerformanceCounter(&end);
@@ -754,6 +868,10 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
             ap->objPathRecogLabelChecked = -1;
             ap->myPathRecogLabelChecked  = -1;
+
+            ap->objPathInLCTargetPathList = -1;
+            ap->latDevObjInLCTargetPathList = 0.0;
+            ap->distToObjInLCTargetPathList = 0.0;
 
             if( agentKind < 100 ){
 
@@ -922,9 +1040,61 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
                     }
                     dist = distObj - distMe;
 
+                    ap->objDistFromSWPOfNearTargetPath = tsMin;
                     ap->distanceToObject = dist;
 
                     ap->relPosEvaled = true;
+                }
+
+
+                if( memory.checkSideVehicleForLC == true && memory.laneChangeTargetPathList.size() > 0 ){
+
+                    float tdev,txt,tyt,txd,tyd,ts;
+                    int objPathInLCPath = pRoad->GetNearestPathFromList( memory.laneChangeTargetPathList,
+                                                                     pAgent[i]->state.x, pAgent[i]->state.y, pAgent[i]->state.yaw,
+                                                                     tdev, txt, tyt, txd, tyd, ts);
+
+                    if( objPathInLCPath >= 0 ){
+                        ap->objPathInLCTargetPathList = objPathInLCPath;
+                        ap->latDevObjInLCTargetPathList = tdev;
+
+                        bool foundMe = false;
+                        bool foundObj = false;
+                        float distMe = 0.0;
+                        float distObj = 0.0;
+                        for(int l=memory.laneChangeTargetPathList.size()-1;l>=0;l--){
+
+                            if( memory.laneChangeTargetPathList[l] == memory.currentPathInLCTargetPathList ){
+                                foundMe = true;
+                            }
+
+                            if( memory.laneChangeTargetPathList[l] == objPathInLCPath  ){
+                                foundObj = true;
+                            }
+
+                            if(foundMe == false && foundObj == false ){
+                                continue;
+                            }
+
+                            float pLen = memory.laneChangePathLength[l];
+                            if( foundMe == true ){
+                                distMe += pLen;
+                            }
+                            if( foundObj == true ){
+                                distObj += pLen;
+                            }
+
+                            if( foundMe == true && foundObj == true ){
+                                break;
+                            }
+                        }
+
+                        distMe -= memory.distFromSWPLCTargetPathList;
+                        distObj -= ts;
+
+                        ap->distToObjInLCTargetPathList = distMe - distObj;
+                    }
+
                 }
 
 #ifdef _PERFORMANCE_CHECK_AGENT_PERCEPTION_CORE
@@ -1018,7 +1188,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
 
 
-    if( agentKind < 100 && memory.routeType == AGENT_ROUTE_TYPE::NODE_LIST ){
+    if( agentKind < 100 && memory.routeType == AGENT_ROUTE_TYPE::NODE_LIST && onlyCheckPreceding == false ){
 
         QList<int> checkedNode;
 
@@ -1118,6 +1288,14 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
                     ts->yaw         = trafficSignal[j]->direction;
                     ts->relatedNode = cNode;
                     ts->SLonPathID  = -1;
+
+                }
+                else{
+
+                    int SLonPathID = memory.perceptedSignals[psIdx]->SLonPathID;
+                    if( memory.targetPathList.indexOf( SLonPathID ) < 0 ){
+                        memory.perceptedSignals[psIdx]->SLonPathID = -1;
+                    }
 
                 }
 

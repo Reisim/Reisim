@@ -77,7 +77,7 @@ GraphicCanvas::GraphicCanvas(QOpenGLWidget *parent) : QOpenGLWidget(parent)
     showPathID = false;
     showTSID = false;
 
-    fontScale = 1;
+    fontScale = 14;
 
     currentWidth = 800;
     currentHeight = 600;
@@ -845,6 +845,10 @@ void GraphicCanvas::wheelEvent(QWheelEvent *e)
     else if( e->delta() < 0.0 ){
         Z_eye *= 1.05 * s;
     }
+
+    int fs = (int)(-0.0838 * Z_eye) + 10;
+    emit ChangeFontScale(fs);
+
     QOpenGLWidget::update();
 }
 
@@ -1524,6 +1528,34 @@ void GraphicCanvas::SetRoadData()
 
         pathPolygons->pathPolygonData.reserve( nVertex * 5 );
 
+        float maxZ = 0.0;
+        float minZ = 0.0;
+        for(int i=0;i<road->paths.size();++i){
+            for(int j=1;j<road->paths[i]->pos.size();++j){
+                float zs = road->paths[i]->pos[j-1]->z();
+                float ze = road->paths[i]->pos[j]->z();
+                if( i == 0 && j == 1 ){
+                    maxZ = zs;
+                    minZ = zs;
+                }
+                if( maxZ < zs ){
+                    maxZ = zs;
+                }
+                if( minZ > zs ){
+                    minZ = zs;
+                }
+                if( maxZ < ze ){
+                    maxZ = ze;
+                }
+                if( minZ > ze ){
+                    minZ = ze;
+                }
+            }
+        }
+        if( fabs(maxZ - minZ) < 0.1 ){
+            maxZ += 0.01;
+        }
+
         for(int i=0;i<road->paths.size();++i){
 
             for(int j=1;j<road->paths[i]->pos.size();++j){
@@ -1554,17 +1586,20 @@ void GraphicCanvas::SetRoadData()
                     ze += 0.1;
                 }
 
+                float c1 = (zs - minZ + 0.01) / (maxZ - minZ) * 0.7 + 0.2;
+                float c2 = (ze - minZ + 0.01) / (maxZ - minZ) * 0.7 + 0.2;
+
                 if( road->paths[i]->scenarioObjectID >= 0 ){
-                    pathPolygons->pathPolygonData << x1 << y1 << zs << 0.0f << 0.0f << 0.2f << 0.3f << 0.7f;
-                    pathPolygons->pathPolygonData << x2 << y2 << zs << 0.0f << 0.0f << 0.2f << 0.3f << 0.7f;
-                    pathPolygons->pathPolygonData << x3 << y3 << ze << 0.0f << 0.0f << 0.2f << 0.3f << 0.7f;
-                    pathPolygons->pathPolygonData << x4 << y4 << ze << 0.0f << 0.0f << 0.2f << 0.3f << 0.7f;
+                    pathPolygons->pathPolygonData << x1 << y1 << zs << 0.0f << 0.0f << 0.2f << 0.3f << c1;
+                    pathPolygons->pathPolygonData << x2 << y2 << zs << 0.0f << 0.0f << 0.2f << 0.3f << c1;
+                    pathPolygons->pathPolygonData << x3 << y3 << ze << 0.0f << 0.0f << 0.2f << 0.3f << c2;
+                    pathPolygons->pathPolygonData << x4 << y4 << ze << 0.0f << 0.0f << 0.2f << 0.3f << c2;
                 }
                 else{
-                    pathPolygons->pathPolygonData << x1 << y1 << zs << 0.0f << 0.0f << 0.7f << 0.2f << 0.3f;
-                    pathPolygons->pathPolygonData << x2 << y2 << zs << 0.0f << 0.0f << 0.7f << 0.2f << 0.3f;
-                    pathPolygons->pathPolygonData << x3 << y3 << ze << 0.0f << 0.0f << 0.7f << 0.2f << 0.3f;
-                    pathPolygons->pathPolygonData << x4 << y4 << ze << 0.0f << 0.0f << 0.7f << 0.2f << 0.3f;
+                    pathPolygons->pathPolygonData << x1 << y1 << zs << 0.0f << 0.0f << c1 << 1.0-c1 << 0.3f;
+                    pathPolygons->pathPolygonData << x2 << y2 << zs << 0.0f << 0.0f << c1 << 1.0-c1 << 0.3f;
+                    pathPolygons->pathPolygonData << x3 << y3 << ze << 0.0f << 0.0f << c2 << 1.0-c2 << 0.3f;
+                    pathPolygons->pathPolygonData << x4 << y4 << ze << 0.0f << 0.0f << c2 << 1.0-c2 << 0.3f;
                 }
 
 
@@ -1712,9 +1747,11 @@ void GraphicCanvas::SetRoadData()
         qDebug() << "ymin = " << ymin << " ymax = " << ymax;
         qDebug() << "xlen = " << xlen << " ylen = " << ylen;
 
+        int fs = (int)(-0.0838 * Z_eye) + 10;
+        emit ChangeFontScale( fs );
     }
 
-    qDebug() << "X_eye = " << X_eye << " Y_eye = " << Y_eye << " Z_eye = " << Z_eye;
+    //qDebug() << "X_eye = " << X_eye << " Y_eye = " << Y_eye << " Z_eye = " << Z_eye;
 
     doneCurrent();
 }

@@ -93,7 +93,12 @@ void SystemThread::OutputRestartData(QString filename)
             << agent[i]->memory.distanceToTurnNodeWPIn << ","
             << agent[i]->memory.distanceToNodeWPIn << ","
             << agent[i]->memory.distanceToTurnNodeWPOut << ","
-            << agent[i]->memory.distanceToNodeWPOut << "\n";
+            << agent[i]->memory.distanceToNodeWPOut << ","
+            << agent[i]->memory.LCSupportRouteLaneIndex << ","
+            << agent[i]->memory.LCStartRouteIndex << ","
+            << agent[i]->memory.LCDirection << ","
+            << agent[i]->memory.checkSideVehicleForLC << ","
+            << agent[i]->memory.LCCheckState << "\n";
 
 
         out << agent[i]->memory.accel << ","
@@ -516,6 +521,14 @@ void SystemThread::SetRestartData()
             agent[cIdx]->memory.distanceToNodeWPIn               =  QString(valDiv[8]).trimmed().toFloat();
             agent[cIdx]->memory.distanceToTurnNodeWPOut          =  QString(valDiv[9]).trimmed().toFloat();
             agent[cIdx]->memory.distanceToNodeWPOut              =  QString(valDiv[10]).trimmed().toFloat();
+            if( valDiv.size() >= 16 ){
+                agent[cIdx]->memory.LCSupportRouteLaneIndex      =  QString(valDiv[11]).trimmed().toInt();
+                agent[cIdx]->memory.LCStartRouteIndex            =  QString(valDiv[12]).trimmed().toInt();
+                agent[cIdx]->memory.LCDirection                  =  QString(valDiv[13]).trimmed().toInt();
+                agent[cIdx]->memory.checkSideVehicleForLC        = (QString(valDiv[14]).trimmed().toInt() == 1 ? true : false);
+                agent[cIdx]->memory.LCCheckState                 =  QString(valDiv[15]).trimmed().toInt();
+            }
+
 
             if( agent[cIdx]->agentKind < 100 ){
 
@@ -531,6 +544,17 @@ void SystemThread::SetRestartData()
                 }
 
                 agent[cIdx]->SetTargetNodeListByTargetPaths( road );
+
+                agent[cIdx]->memory.laneMerge.clear();
+
+                for(int k=0;k<road->odRoute[i]->mergeLanesInfo[selIdx].size();++k){
+
+                    QPoint pairData;
+                    pairData.setX( road->odRoute[i]->mergeLanesInfo[selIdx][k].x() );
+                    pairData.setY( road->odRoute[i]->mergeLanesInfo[selIdx][k].y() );
+
+                    agent[cIdx]->memory.laneMerge.append( pairData );
+                }
             }
 
             lineNo++;

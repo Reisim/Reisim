@@ -63,6 +63,7 @@ private:
 
     QCheckBox *cbDSMode;
     QCheckBox *cbOutputLogFile;
+    QCheckBox *cbOnlyFilename;
 
     QLabel *logSaveFolder;
     QLabel *logFileName;

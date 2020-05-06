@@ -133,7 +133,7 @@ void CalDistributeThread::run()
                 QueryPerformanceCounter(&start);
 #endif
 
-                agent[i]->RiskEvaluation( agent, maxAgent, road );
+                agent[i]->RiskEvaluation( agent, maxAgent, road, trafficSignal );
 
 #ifdef _PERFORMANCE_CHECK
                 QueryPerformanceCounter(&end);

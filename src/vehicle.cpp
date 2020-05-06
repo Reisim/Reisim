@@ -242,7 +242,7 @@ void Vehicle::UpdateState(float dt)
         brakelamp = 1;
         brakelamp_count = (int)(0.2 / calInterval);
     }
-    if( state.vx < 0.001 ){
+    if( state.vx < 0.001 || ( aveAx < 0.0 && state.vx < 1.2 ) ){
         brakelamp = 1;
         brakelamp_count = (int)(0.2 / calInterval);
     }

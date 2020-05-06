@@ -46,17 +46,24 @@ Agent::Agent()
     memory.releaseStopCount = 0;
 
     memory.targetPathList.clear();
-    memory.targetPathListBackup.clear();
     memory.currentTargetPath = -1;
     memory.currentTargetPathIndexInList = -1;
 
     memory.precedingVehicleID = -1;
     memory.precedingVehicleIDByScenario = -1;
     memory.scenarioPathSelectID = -1;
+    memory.precedingVehicleIndex = -1;
+
+    memory.checkSideVehicleForLC = false;
+    memory.LCCheckState = 0;
+    memory.LCDirection = 0;
+    memory.LCInfoGetCount = 0;
+    memory.laneChangeTargetPathList.clear();
+    memory.laneChangePathLength.clear();
 
 
     // Default parameters
-    param.accelControlGain = 0.25 * 9.81;
+    param.accelControlGain = 0.35 * 9.81;
     param.deadZoneSpeedControl = 5.0 / 3.6;
     param.maxDeceleration = 0.6 * 9.81;
     param.accelOffDeceleration = 0.06 * 9.81;
@@ -75,6 +82,9 @@ Agent::Agent()
     param.safetyConfirmTime = 1.5;
 
     param.speedVariationFactor = 0.0;
+
+    param.LCInfoGetTime = 2.0;
+    param.LCCutInAllowTTC = 2.0;
 
 
     isScenarioObject   = false;
@@ -133,9 +143,7 @@ void Agent::InitializeMemory()
     if( memory.targetPathList.size() > 0 ){
         memory.targetPathList.clear();
     }
-    if( memory.targetPathListBackup.size() > 0 ){
-        memory.targetPathListBackup.clear();
-    }
+
     memory.currentTargetPath = -1;
     memory.currentTargetPathIndexInList = -1;
 
@@ -179,6 +187,17 @@ void Agent::InitializeMemory()
 
     memory.isChaningLane = false;
 
+    memory.checkSideVehicleForLC = false;
+    memory.LCCheckState = 0;
+    memory.LCDirection = 0;
+    memory.LCInfoGetCount = 0;
+    memory.laneChangeTargetPathList.clear();
+    memory.laneChangePathLength.clear();
+
+    memory.currentPathInLCTargetPathList = -1;
+    memory.latDeviFromLCTargetPathList = 0.0;
+    memory.distFromSWPLCTargetPathList = 0.0;
+
     strForDebug         = QString("");
     strForDebugRiskEval = QString("");
 }
@@ -205,7 +224,7 @@ void Agent::BackupMemory()
 
     memory_reference.distanceToZeroSpeed               = memory.distanceToZeroSpeed;
 //    memory_reference.timeToZeroSpeed                   = memory.timeToZeroSpeed;
-//    memory_reference.requiredDistToStopFromTargetSpeed = memory.requiredDistToStopFromTargetSpeed;
+    memory_reference.requiredDistToStopFromTargetSpeed = memory.requiredDistToStopFromTargetSpeed;
 //    memory_reference.minimumDistanceToStop             = memory.minimumDistanceToStop;
 
 //    memory_reference.actualTargetSpeed                           = memory.actualTargetSpeed;
@@ -268,7 +287,7 @@ void Agent::BackupMemory()
 
 
     // hazard and risk valuation
-//    memory_reference.precedingVehicleID           = memory.precedingVehicleID;
+    memory_reference.precedingVehicleID           = memory.precedingVehicleID;
 //    memory_reference.precedingVehicleIDByScenario = memory.precedingVehicleIDByScenario;
 //    memory_reference.distanceToPrecedingVehicle   = memory.distanceToPrecedingVehicle;
 //    memory_reference.speedPrecedingVehicle        = memory.speedPrecedingVehicle;
@@ -396,10 +415,6 @@ void Agent::BackupMemory()
 //        memory_reference.targetPathLength.append( memory.targetPathLength.at(i) );
 //    }
 
-//    memory_reference.targetPathListBackup.clear();
-//    for(int i=0;i<memory.targetPathListBackup.size();++i){
-//        memory_reference.targetPathListBackup.append( memory.targetPathListBackup.at(i) );
-//    }
 
     memory_reference.currentTargetPath                = memory.currentTargetPath;
     memory_reference.currentTargetPathIndexInList     = memory.currentTargetPathIndexInList;

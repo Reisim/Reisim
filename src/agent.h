@@ -23,6 +23,8 @@
 #include "road.h"
 #include "trafficsignal.h"
 
+#include "randomgenerator.h"
+
 #ifdef _PERFORMANCE_CHECK_AGENT
 #include <windows.h>
 #endif
@@ -91,6 +93,7 @@ struct AgentPerception
 
     bool relPosEvaled;
     int nearestTargetPath;
+    float objDistFromSWPOfNearTargetPath;
     float deviationFromNearestTargetPath;
     float distanceToObject;
     float xOnTargetPath;
@@ -117,6 +120,10 @@ struct AgentPerception
     int myCPPathIndex;
     int objCPPathIndex;
     int objPathCPChecked;
+
+    float distToObjInLCTargetPathList;
+    float latDevObjInLCTargetPathList;
+    int objPathInLCTargetPathList;
 
     bool shouldEvalRisk;
 
@@ -170,6 +177,7 @@ struct AgentMemory
     int controlMode;
 
     float distanceToZeroSpeed;
+    float distanceToZeroSpeedByMaxBrake;
     float timeToZeroSpeed;
     float requiredDistToStopFromTargetSpeed;
     float minimumDistanceToStop;
@@ -231,6 +239,8 @@ struct AgentMemory
     float distanceToPrecedingVehicle;
     float speedPrecedingVehicle;
     float axPrecedingVehicle;
+    float halfLenPrecedingVehicle;
+    int precedingVehicleIndex;
     int precedingObstacle;
 
     float targetLateralShift;
@@ -241,6 +251,7 @@ struct AgentMemory
     bool shouldWaitOverCrossPoint;
 
     float distToNearestCP;
+    int nearCPInNode;
     bool shouldStopAtSignalSL;
 
     float distToYeildStopLine;
@@ -262,7 +273,8 @@ struct AgentMemory
     // guidance
     QList<int> targetPathList;
     QList<float> targetPathLength;
-    QList<int> targetPathListBackup;
+    QList<QPoint> laneMerge;
+
     int currentTargetPath;
     int currentTargetPathIndexInList;
     float distanceFromStartWPInCurrentPath;
@@ -292,10 +304,28 @@ struct AgentMemory
 
 
 
+    // Lane-Change
+    int LCDirection;
+    bool checkSideVehicleForLC;
+    int LCCheckState;
+    int LCInfoGetCount;
+    bool sideVehicleRiskClear;
+    float LCSteerMax;
+
+    QList<int> laneChangeTargetPathList;
+    QList<float> laneChangePathLength;
+
+    int currentPathInLCTargetPathList;
+    float latDeviFromLCTargetPathList;
+    float distFromSWPLCTargetPathList;
+
+
     // navigation
     int routeType;
     int routeIndex;
     int routeLaneIndex;
+    int LCSupportRouteLaneIndex;
+    int LCStartRouteIndex;
 };
 
 struct AgentParam
@@ -318,6 +348,8 @@ struct AgentParam
     float pedestWaitPositionSafetyMargin;
     float safetyConfirmTime;
     float speedVariationFactor;
+    float LCInfoGetTime;
+    float LCCutInAllowTTC;
 };
 
 struct AgentState
@@ -374,7 +406,7 @@ public:
     void Perception( Agent**, int, Road*, QList<TrafficSignal*> trafficSignal );
     void Recognition( Agent**, int, Road* ) ;
     void HazardIdentification( Agent**, int,Road* );
-    void RiskEvaluation( Agent**, int, Road* );
+    void RiskEvaluation( Agent**, int, Road*, QList<TrafficSignal*> trafficSignal );
     void Control(Road*);
     void UpdateState(Road*);
 
@@ -428,6 +460,9 @@ public:
     int controlCountMax;
     int controlCount;
 
+    bool onlyCheckPreceding;
+
+    RandomGenerator rndGen;
 
 #ifdef _PERFORMANCE_CHECK_AGENT
     LARGE_INTEGER start, end;

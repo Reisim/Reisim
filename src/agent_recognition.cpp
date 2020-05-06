@@ -36,6 +36,11 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
 #endif
 
 
+        if( onlyCheckPreceding == true ){
+            return;
+        }
+
+
         for(int i=0;i<memory.perceptedObjects.size();++i){
 
             if( memory.perceptedObjects[i]->isValidData == false ){
@@ -168,20 +173,55 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                     }
                     else{
 
-                        if( memory.perceptedObjects[i]->distanceToObject > vHalfLength  ){
-                            memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::PRECEDING;
-                            memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
-                            memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
-                            strForDebug += QString("V%1-P3\n").arg(memory.perceptedObjects[i]->objectID);
-                            continue;
+                        float relV = memory.perceptedObjects[i]->V - state.V;
+                        if( relV < 0.0 || (relV < 1.0 && state.V < 1.0) ){
+                            if( memory.perceptedObjects[i]->distanceToObject > vHalfLength  ){
+                                memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::PRECEDING;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                strForDebug += QString("V%1-P3\n").arg(memory.perceptedObjects[i]->objectID);
+                                continue;
+                            }
+                            else{
 
+                                if( memory.perceptedObjects[i]->deviationFromNearestTargetPath > 0.0 ){
+                                    memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::LEFT_SIDE;
+                                    memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                    memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                    continue;
+                                }
+                                else{
+                                    memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::RIGHT_SIDE;
+                                    memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                    memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                    continue;
+                                }
+                            }
                         }
-                        else if( memory.perceptedObjects[i]->distanceToObject < -vHalfLength ){
-                            memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::FOLLOWING;
-                            memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
-                            memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
-                            continue;
+                        else{
+                            if( memory.perceptedObjects[i]->distanceToObject < -vHalfLength ){
+                                memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::FOLLOWING;
+                                memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                continue;
+                            }
+                            else{
+
+                                if( memory.perceptedObjects[i]->deviationFromNearestTargetPath > 0.0 ){
+                                    memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::LEFT_SIDE;
+                                    memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                    memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                    continue;
+                                }
+                                else{
+                                    memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::RIGHT_SIDE;
+                                    memory.perceptedObjects[i]->objPathRecogLabelChecked = objPath;
+                                    memory.perceptedObjects[i]->myPathRecogLabelChecked  = memory.currentTargetPath;
+                                    continue;
+                                }
+                            }
                         }
+
                     }
 
 #ifdef _PERFORMANCE_CHECK_AGENT_RECOGNITION

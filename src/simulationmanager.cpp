@@ -236,7 +236,6 @@ void SimulationManager::SetTargetPathListScenarioVehicle(Agent** pAgent,Road *pR
                         continue;
                     }
                     pAgent[objectID]->memory.targetPathList.prepend( pRoad->paths[j]->id );
-                    pAgent[objectID]->memory.targetPathListBackup.prepend( pRoad->paths[j]->id );
                 }
             }
         }
@@ -380,9 +379,61 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     }
                 }
 
+                pAgent[objID]->memory.LCStartRouteIndex = -1;
+                pAgent[objID]->memory.LCSupportRouteLaneIndex = -1;
                 pAgent[objID]->memory.routeLaneIndex = selIdx;
                 pAgent[objID]->memory.targetPathList = pRoad->odRoute[i]->laneListsToDestination[selIdx];
                 pAgent[objID]->memory.currentTargetPath = pAgent[objID]->memory.targetPathList.last();
+
+                pAgent[objID]->memory.laneMerge.clear();
+
+                for(int k=0;k<pRoad->odRoute[i]->mergeLanesInfo[selIdx].size();++k){
+
+                    QPoint pairData;
+                    pairData.setX( pRoad->odRoute[i]->mergeLanesInfo[selIdx][k].x() );
+                    pairData.setY( pRoad->odRoute[i]->mergeLanesInfo[selIdx][k].y() );
+
+                    pAgent[objID]->memory.laneMerge.append( pairData );
+                }
+            }
+            else if( pRoad->odRoute[i]->LCSupportLaneLists.size() > 0 ){
+
+                int numLaneLists = pRoad->odRoute[i]->LCSupportLaneLists.last()->laneList.size();
+
+                int selIdx = 0;
+                if( numLaneLists > 1 ){
+                    float rnd = rndGen.GenUniform();
+                    float H = 1.0 / (float)numLaneLists;
+                    for(int k=0;k<numLaneLists;++k){
+                        if( rnd >= k * H && rnd < (k+1) * H ){
+                            selIdx = k;
+                            break;
+                        }
+                    }
+                }
+
+                if( pRoad->odRoute[i]->LCSupportLaneLists.size() > 1 ){
+                    pAgent[objID]->memory.LCStartRouteIndex = pRoad->odRoute[i]->LCSupportLaneLists.last()->gIndexInNodeList;
+                }
+                else{
+                    pAgent[objID]->memory.LCStartRouteIndex = -1;
+                }
+
+                pAgent[objID]->memory.LCSupportRouteLaneIndex = pRoad->odRoute[i]->LCSupportLaneLists.size() - 1;
+                pAgent[objID]->memory.routeLaneIndex = selIdx;
+                pAgent[objID]->memory.targetPathList = pRoad->odRoute[i]->LCSupportLaneLists.last()->laneList[selIdx];
+                pAgent[objID]->memory.currentTargetPath = pAgent[objID]->memory.targetPathList.last();
+
+                pAgent[objID]->memory.laneMerge.clear();
+
+                for(int k=0;k<pRoad->odRoute[i]->mergeLanesInfo[selIdx].size();++k){
+
+                    QPoint pairData;
+                    pairData.setX( pRoad->odRoute[i]->mergeLanesInfo[selIdx][k].x() );
+                    pairData.setY( pRoad->odRoute[i]->mergeLanesInfo[selIdx][k].y() );
+
+                    pAgent[objID]->memory.laneMerge.append( pairData );
+                }
 
             }
             else{
@@ -1038,11 +1089,12 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                         continue;
                     }
                     pAgent[objectID]->memory.targetPathList.prepend( pRoad->paths[j]->id );
-                    pAgent[objectID]->memory.targetPathListBackup.prepend( pRoad->paths[j]->id );
                 }
 
-                float dist = 0;
-                int currentPath = pRoad->GetNearestPathFromList( xi, yi, YAi, dist, pAgent[objectID]->memory.targetPathList );
+                float tdev,txt,tyt,txd,tyd,ts;
+                int currentPath = pRoad->GetNearestPathFromList( pAgent[objectID]->memory.targetPathList,
+                                                                 xi, yi, YAi,
+                                                                 tdev,txt,tyt,txd,tyd,ts );
                 if( currentPath < 0 ){
                     qDebug() << "[Warning]----------------------------------";
                     qDebug() << " Scenario Vehicle ID = " << objectID << " cannot determin nearest path from assigned list.";
