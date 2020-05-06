@@ -1,0 +1,10 @@
+#-----------------------------------------------------
+#                 Re:sim Scenario File  
+#-----------------------------------------------------
+
+Road Data File ; simdata_citymap.rr.txt
+
+Signal Data File ; simdata_citymap.ts.txt
+
+Max Number of Agent ; 1000
+

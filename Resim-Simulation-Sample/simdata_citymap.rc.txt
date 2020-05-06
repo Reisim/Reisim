@@ -1,0 +1,14 @@
+=============================================
+         Re:sim Configulation File
+=============================================
+
+# 'DS Mode' should be ahead of 'Scenario File'
+DS Mode ; no
+
+Scenario File ; simdata_citymap.rs.txt
+Calculation Time Step ; 0.1
+
+Output Log File ; no
+Log Output Folder ; Not selected.
+CSV Output File ; Not selected.
+Restart File ; Not selected.

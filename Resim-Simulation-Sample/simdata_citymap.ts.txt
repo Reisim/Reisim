@@ -1,0 +1,213 @@
+#-----------------------------------------------------
+#           Re:sim Traffic Signal Data File
+#-----------------------------------------------------
+
+#-----------------------------------------------------
+# Type ; id , (vehicle or pedestrian) 
+#-----------------------------------------------------
+Type  ; 0 , vehicle
+Type  ; 1 , pedestrian
+Type  ; 2 , vehicle
+Type  ; 3 , pedestrian
+Type  ; 4 , vehicle
+Type  ; 5 , pedestrian
+Type  ; 6 , vehicle
+Type  ; 7 , pedestrian
+Type  ; 8 , vehicle
+Type  ; 9 , pedestrian
+Type  ; 10 , vehicle
+Type  ; 11 , pedestrian
+Type  ; 12 , vehicle
+Type  ; 13 , pedestrian
+Type  ; 14 , vehicle
+Type  ; 15 , pedestrian
+Type  ; 16 , vehicle
+Type  ; 17 , pedestrian
+Type  ; 18 , vehicle
+Type  ; 19 , pedestrian
+Type  ; 20 , vehicle
+Type  ; 21 , pedestrian
+Type  ; 22 , vehicle
+Type  ; 23 , pedestrian
+Type  ; 24 , vehicle
+Type  ; 25 , pedestrian
+Type  ; 26 , vehicle
+Type  ; 27 , pedestrian
+Type  ; 28 , vehicle
+Type  ; 29 , pedestrian
+Type  ; 30 , vehicle
+Type  ; 31 , pedestrian
+Type  ; 32 , vehicle
+Type  ; 33 , pedestrian
+Type  ; 34 , vehicle
+Type  ; 35 , pedestrian
+Type  ; 36 , vehicle
+Type  ; 37 , pedestrian
+Type  ; 38 , vehicle
+Type  ; 39 , pedestrian
+Type  ; 40 , vehicle
+Type  ; 41 , pedestrian
+Type  ; 42 , vehicle
+Type  ; 43 , pedestrian
+Type  ; 44 , vehicle
+Type  ; 45 , pedestrian
+Type  ; 46 , vehicle
+Type  ; 47 , pedestrian
+
+#-----------------------------------------------------
+# Location ; id , x, y, direction[deg] 
+#-----------------------------------------------------
+Location ; 0 , -165.213 , -230.721 , 0
+Location ; 1 , -161.563 , -235.892 , 0
+Location ; 2 , -168.775 , -221.677 , 90
+Location ; 3 , -164.19 , -216.723 , 90
+Location ; 4 , -177.037 , -225.477 , 180
+Location ; 5 , -182.207 , -219.089 , 180
+Location ; 6 , -173.564 , -232.957 , 270
+Location ; 7 , -179.452 , -237.802 , 270
+Location ; 8 , -158.951 , 144.218 , 0
+Location ; 9 , -157.111 , 136.644 , 0
+Location ; 10 , -167.712 , 162.293 , 90
+Location ; 11 , -161.916 , 168.251 , 90
+Location ; 12 , -180.75 , 155.127 , 180
+Location ; 13 , -183.793 , 164.051 , 180
+Location ; 14 , -172.73 , 137.049 , 270
+Location ; 15 , -179.344 , 131.423 , 270
+Location ; 16 , -433.053 , 142.335 , 0
+Location ; 17 , -429.67 , 136.242 , 0
+Location ; 18 , -441.219 , 162.898 , 90
+Location ; 19 , -434.926 , 166.29 , 90
+Location ; 20 , -450.236 , 154.391 , 180
+Location ; 21 , -454.941 , 162.541 , 180
+Location ; 22 , -444.578 , 133.905 , 270
+Location ; 23 , -450.695 , 132.416 , 270
+Location ; 24 , 193.739 , -224.9 , 0
+Location ; 25 , 198.393 , -228.677 , 0
+Location ; 26 , 185.774 , -212.473 , 90
+Location ; 27 , 192.401 , -208.156 , 90
+Location ; 28 , 171.339 , -221.634 , 180
+Location ; 29 , 168.981 , -215.5 , 180
+Location ; 30 , 178.521 , -234.411 , 270
+Location ; 31 , 172.172 , -237.997 , 270
+Location ; 32 , 194.944 , 146.797 , 0
+Location ; 33 , 198.691 , 139.881 , 0
+Location ; 34 , 187.076 , 164.314 , 90
+Location ; 35 , 192.875 , 165.034 , 90
+Location ; 36 , 167.855 , 154.832 , 180
+Location ; 37 , 164.694 , 160.384 , 180
+Location ; 38 , 178.632 , 137.764 , 270
+Location ; 39 , 171.435 , 133.134 , 270
+Location ; 40 , 444.673 , 146.54 , 0
+Location ; 41 , 447.986 , 135.962 , 0
+Location ; 42 , 437.51 , 165.045 , 90
+Location ; 43 , 445.38 , 167.925 , 90
+Location ; 44 , 425.195 , 156.702 , 180
+Location ; 45 , 422.114 , 165.892 , 180
+Location ; 46 , 434.088 , 139.031 , 270
+Location ; 47 , 425.986 , 136.153 , 270
+
+#-----------------------------------------------------
+# Control ; id , relatedNode, ctrlDir, CtrlLane, ctrlCrossWalk 
+#-----------------------------------------------------
+Control ; 0 , 0 , 0 , -1 , -1
+Control ; 1 , 0 , 0 , -1 , -1
+Control ; 2 , 0 , 1 , -1 , -1
+Control ; 3 , 0 , 1 , -1 , -1
+Control ; 4 , 0 , 2 , -1 , -1
+Control ; 5 , 0 , 2 , -1 , -1
+Control ; 6 , 0 , 3 , -1 , -1
+Control ; 7 , 0 , 3 , -1 , -1
+Control ; 8 , 21 , 0 , -1 , -1
+Control ; 9 , 21 , 0 , -1 , -1
+Control ; 10 , 21 , 1 , -1 , -1
+Control ; 11 , 21 , 1 , -1 , -1
+Control ; 12 , 21 , 2 , -1 , -1
+Control ; 13 , 21 , 2 , -1 , -1
+Control ; 14 , 21 , 3 , -1 , -1
+Control ; 15 , 21 , 3 , -1 , -1
+Control ; 16 , 40 , 0 , -1 , -1
+Control ; 17 , 40 , 0 , -1 , -1
+Control ; 18 , 40 , 1 , -1 , -1
+Control ; 19 , 40 , 1 , -1 , -1
+Control ; 20 , 40 , 2 , -1 , -1
+Control ; 21 , 40 , 2 , -1 , -1
+Control ; 22 , 40 , 3 , -1 , -1
+Control ; 23 , 40 , 3 , -1 , -1
+Control ; 24 , 44 , 0 , -1 , -1
+Control ; 25 , 44 , 0 , -1 , -1
+Control ; 26 , 44 , 1 , -1 , -1
+Control ; 27 , 44 , 1 , -1 , -1
+Control ; 28 , 44 , 2 , -1 , -1
+Control ; 29 , 44 , 2 , -1 , -1
+Control ; 30 , 44 , 3 , -1 , -1
+Control ; 31 , 44 , 3 , -1 , -1
+Control ; 32 , 61 , 0 , -1 , -1
+Control ; 33 , 61 , 0 , -1 , -1
+Control ; 34 , 61 , 1 , -1 , -1
+Control ; 35 , 61 , 1 , -1 , -1
+Control ; 36 , 61 , 2 , -1 , -1
+Control ; 37 , 61 , 2 , -1 , -1
+Control ; 38 , 61 , 3 , -1 , -1
+Control ; 39 , 61 , 3 , -1 , -1
+Control ; 40 , 75 , 0 , -1 , -1
+Control ; 41 , 75 , 0 , -1 , -1
+Control ; 42 , 75 , 1 , -1 , -1
+Control ; 43 , 75 , 1 , -1 , -1
+Control ; 44 , 75 , 2 , -1 , -1
+Control ; 45 , 75 , 2 , -1 , -1
+Control ; 46 , 75 , 3 , -1 , -1
+Control ; 47 , 75 , 3 , -1 , -1
+
+#-----------------------------------------------------
+# Display ; id , startOffset[s]
+#                 (signal / duration) * nPattern 
+#-----------------------------------------------------
+Display ; 0 , 0 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 1 , 60 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 2 , 60 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 3 , 0 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 4 , 0 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 5 , 60 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 6 , 60 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 7 , 0 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 8 , 0 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 9 , 60 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 10 , 60 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 11 , 0 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 12 , 0 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 13 , 60 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 14 , 60 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 15 , 0 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 16 , 0 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 17 , 60 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 18 , 60 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 19 , 0 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 20 , 0 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 21 , 60 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 22 , 60 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 23 , 0 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 24 , 0 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 25 , 60 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 26 , 60 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 27 , 0 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 28 , 0 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 29 , 60 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 30 , 60 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 31 , 0 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 32 , 0 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 33 , 60 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 34 , 60 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 35 , 0 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 36 , 0 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 37 , 60 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 38 , 60 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 39 , 0 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 40 , 0 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 41 , 60 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 42 , 60 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 43 , 0 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 44 , 0 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 45 , 60 , 1 / 45 , 2 / 3 , 4 / 72
+Display ; 46 , 60 , 1 / 55 , 2 / 3 , 4 / 62
+Display ; 47 , 0 , 1 / 45 , 2 / 3 , 4 / 72
+
