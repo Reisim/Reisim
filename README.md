@@ -29,7 +29,7 @@ See [quick_start.pdf](https://github.com/Reisim/Reisim/blob/master/quick_start.p
 
 ## Binary for windows and Sample Data
 
-You can get the binary files of Re:sim and S-Edit by downloading zip files in bin_win10 folder.
+You can get the binary files of Re:sim and S-Edit (and all necessary other files like DLLs) by downloading zip files in bin_win10 folder.
 Unzip the Resim.zip and SEdit.zip and run Reisim.exe and SEdit.exe in the resultant folders.
 
 The sample data is also provided, download the files in Resim-Simulation-Sample folder.
