@@ -1,6 +1,8 @@
 # Re:sim
 Multi-agent traffic simulation software
 
+<img width="980" alt="resim_image1" src="https://user-images.githubusercontent.com/60654261/81361024-3a34c180-9118-11ea-98bd-16d56e49d848.png">
+
 
 ## Requirement
 
