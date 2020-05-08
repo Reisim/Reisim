@@ -35,6 +35,7 @@ Unzip the Resim.zip and SEdit.zip and run Reisim.exe and SEdit.exe in the result
 The sample data is also provided, download the files in Resim-Simulation-Sample folder.
 Open CityMapData.se.txt with SEdit.exe to see the simulation data.
 To run the simulation, open simdata_citymap.rc.txt and press start button. 
+You will see the simulation running like the figures below.
 
 <img width="512" alt="resim-image2" src="https://user-images.githubusercontent.com/60654261/81362215-42dac700-911b-11ea-84c8-106bc923f891.png">
 
