@@ -38,7 +38,7 @@ To run the simulation, open simdata_citymap.rc.txt and press start button.
 
 <img width="512" alt="resim-image2" src="https://user-images.githubusercontent.com/60654261/81362215-42dac700-911b-11ea-84c8-106bc923f891.png">
 
-<img width="815" alt="resim-image3" src="https://user-images.githubusercontent.com/60654261/81362231-4d955c00-911b-11ea-9184-892efcbb9b7d.png">
+<img width="512" alt="resim-image3" src="https://user-images.githubusercontent.com/60654261/81362231-4d955c00-911b-11ea-9184-892efcbb9b7d.png">
 
 
 ## Licence
