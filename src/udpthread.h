@@ -76,8 +76,8 @@ signals:
     void SimulationStart();
     void SimulationStop();
     void ExitProgram();
-    void RequestSetSendData(char*,int,int *);
-    void RequestSetSendDataForFuncExtend(char*,int,int *);
+    void RequestSetSendData(char*,int,int *,int,int,int);
+    void RequestSetSendDataForFuncExtend(char*,int,int *,int,int,QList<int>);
     void ReceiveContinueCommand();
     void SetSimulationFrequency(int);
     void ReceiveTireHeight(int,float,float,float,float);
@@ -112,6 +112,9 @@ public slots:
 private:
     volatile bool stopped;
 
+    int maxAgentDataSend;
+    int maxTSDataSend;
+
     int maxAgent;
     int numberTrafficSignal;
 
@@ -124,6 +127,9 @@ private:
     int scoreSendSockIndex;
 
     int syncSigCount;
+
+    QList<int> SInterfaceObjIDs;
+    bool HasFuncExtender;
 };
 
 #endif // UDPTHREAD_H

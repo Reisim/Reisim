@@ -65,7 +65,7 @@ int Road::GetNearestPathFromList(QList<int> &pathList,float xp, float yp, float 
 }
 
 
-int Road::GetNearestPath(float xp, float yp,float yawAngle,float &dist)
+int Road::GetNearestPath(float xp, float yp,float yawAngle,float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP)
 {
     int ret = -1;
 
@@ -79,20 +79,30 @@ int Road::GetNearestPath(float xp, float yp,float yawAngle,float &dist)
             continue;
         }
 
-        float deviation,xt,yt,xd,yd,s;
+        float dev,txt,tyt,txd,tyd,s;
         int id = GetDeviationFromPath( paths[i]->id,
                                        xp, yp, yawAngle,
-                                       deviation, xt, yt, xd, yd, s );
+                                       dev, txt, tyt, txd, tyd, s );
 
         if( id == paths[i]->id ){
             if( ret < 0 ){
                 ret = id;
-                dist = deviation;
+                deviation = dev;
+                xt = txt;
+                yt = tyt;
+                xderiv = txd;
+                yderiv = tyd;
+                distFromStartWP = s;
             }
             else{
-                if( fabs(deviation) < dist ){
+                if( fabs(dev) < deviation ){
                     ret = id;
-                    dist = deviation;
+                    deviation = dev;
+                    xt = txt;
+                    yt = tyt;
+                    xderiv = txd;
+                    yderiv = tyd;
+                    distFromStartWP = s;
                 }
             }
         }

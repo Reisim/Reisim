@@ -426,20 +426,20 @@ void Agent::BackupMemory()
 //    memory_reference.distanceToTurnNodeWPOut = memory.distanceToTurnNodeWPOut;
 //    memory_reference.distanceToNodeWPOut     = memory.distanceToNodeWPOut;
 
-//    memory_reference.myNodeList.clear();
-//    for(int i=0;i<memory.myNodeList.size();++i){
-//        memory_reference.myNodeList.append( memory.myNodeList.at(i) );
-//    }
+    memory_reference.myNodeList.clear();
+    for(int i=0;i<memory.myNodeList.size();++i){
+        memory_reference.myNodeList.append( memory.myNodeList.at(i) );
+    }
 
-//    memory_reference.myInDirList.clear();
-//    for(int i=0;i<memory.myInDirList.size();++i){
-//        memory_reference.myInDirList.append(memory.myInDirList.at(i) );
-//    }
+    memory_reference.myInDirList.clear();
+    for(int i=0;i<memory.myInDirList.size();++i){
+        memory_reference.myInDirList.append(memory.myInDirList.at(i) );
+    }
 
-//    memory_reference.myOutDirList.clear();
-//    for(int i=0;i<memory.myOutDirList.size();++i){
-//        memory_reference.myOutDirList.append( memory.myOutDirList.at(i) );
-//    }
+    memory_reference.myOutDirList.clear();
+    for(int i=0;i<memory.myOutDirList.size();++i){
+        memory_reference.myOutDirList.append( memory.myOutDirList.at(i) );
+    }
 
 //    memory_reference.myTurnDirectionList.clear();
 //    for(int i=0;i<memory.myTurnDirectionList.size();++i){

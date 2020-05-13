@@ -45,6 +45,7 @@ extern bool allWorkerThreadFinshed;
 extern QWaitCondition *condSimMain;
 
 
+
 SystemThread::SystemThread(QObject *parent) :
     QThread(parent)
 {
@@ -93,6 +94,8 @@ SystemThread::SystemThread(QObject *parent) :
     tmpStopSecond = -1;
 
     restartFile = QString();
+
+    mutexDSStateWrite = new QMutex();
 }
 
 void SystemThread::Stop()
@@ -303,11 +306,13 @@ void SystemThread::run()
 
         // Set Agent IDs to Working Threads
         QList<int> evalAgentQueue;
+        QList<int> DSVehiclesQueue;
         for(int i=0;i<maxAgent;++i){
             if( agent[i]->agentStatus == 0 ){
                 continue;
             }
             if( agent[i]->isSInterfaceObject == true ){
+                DSVehiclesQueue.append( agent[i]->ID );
                 continue;
             }
             if( agent[i]->isBehaviorEmbeded == true ){
@@ -463,6 +468,15 @@ void SystemThread::run()
         }
 
 
+        if( DSMode == true ){
+            for(int i=0;i<DSVehiclesQueue.size();++i){
+                int id = DSVehiclesQueue[i];
+                mutexDSStateWrite->lock();
+                agent[id]->BackupMemory();
+                mutexDSStateWrite->unlock();
+            }
+        }
+
 
 #ifdef _PERFORMANCE_CHECK
             QueryPerformanceCounter(&start);
@@ -505,12 +519,16 @@ void SystemThread::SetSysFile(QString filename)
     //
     //  Prepare UDP Sockets
     if( udpThread == NULL ){
+
+        qDebug() << "Start UDPThread.";
+
         udpThread = new UDPThread();
+
         connect( udpThread, SIGNAL(SimulationStart()), this, SLOT(SimulationStart()) );
         connect( udpThread, SIGNAL(SimulationStop()), this, SLOT(SimulationStop()) );
         connect( udpThread, SIGNAL(ExitProgram()), this, SLOT(wrapExitProgram()));
-        connect( udpThread, SIGNAL(RequestSetSendData(char*,int,int *)), this, SLOT(SetSendData(char*,int,int *)) );
-        connect( udpThread, SIGNAL(RequestSetSendDataForFuncExtend(char*,int,int *)), this, SLOT(SetSendDataForFuncExtend(char*,int,int *)) );
+        connect( udpThread, SIGNAL(RequestSetSendData(char*,int,int *,int,int,int)), this, SLOT(SetSendData(char*,int,int *,int,int,int)) );
+        connect( udpThread, SIGNAL(RequestSetSendDataForFuncExtend(char*,int,int *,int,int,QList<int>)), this, SLOT(SetSendDataForFuncExtend(char*,int,int *,int,int,QList<int>)) );
         connect( udpThread, SIGNAL(ReceiveContinueCommand()), this, SLOT(quit()) );
         connect( udpThread, SIGNAL(SetSimulationFrequency(int)), this, SLOT(SetSimulationFrequency(int)) );
         connect( udpThread, SIGNAL(ReceiveTireHeight(int,float,float,float,float)), this, SLOT(SetTireHeight(int,float,float,float,float)) );
@@ -532,11 +550,13 @@ void SystemThread::SetSysFile(QString filename)
         connect( udpThread, SIGNAL(SetLateralGainMultiplier(int,float)),this,SLOT(SetLateralGainMultiplier(int,float)) );
         connect( udpThread, SIGNAL(SetAgentGenerationNotAllowFlag(int,bool)),this,SLOT(SetAgentGenerationNotAllowFlag(int,bool)) );
         connect( udpThread, SIGNAL(ForceChangeSpeed(int,float)),this,SLOT(ForceChangeSpeed(int,float)) );
-        connect( this, SIGNAL(SetMaxNumberAgent(int)), udpThread, SLOT(SetMaxAgentNumber(int)) );
-        connect( this, SIGNAL(SetNumberTrafficSignal(int)), udpThread, SLOT(SetNumberTrafficSignal(int)) );
+
         if( logThread ){
             connect( udpThread, SIGNAL(FEDataReceived(int,QString)), logThread, SLOT(SetFuncExtenderLogData(int,QString)) );
         }
+
+        udpThread->SetMaxAgentNumber( maxAgent );
+        udpThread->SetNumberTrafficSignal( trafficSignal.size() );
     }
     else{
         udpThread->destroySocks();
@@ -1622,9 +1642,12 @@ void SystemThread::SetSpeedAdjustVal(int val)
 }
 
 
-void SystemThread::SetSendData(char *sendData, int maxSize,int *pos)
+void SystemThread::SetSendData(char *sendData, int maxSize,int *pos,int maxAgentSend,int maxTSSend,int pivotID)
 {
-    int n = 0;
+    int numAgentSend = 0;
+
+    QList<int> sendIDList;
+
 
     // count number of data
     for(int i=0;i<maxAgent;++i){
@@ -1634,13 +1657,96 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos)
         if( agent[i]->isSInterfaceObject == true ){
             continue;
         }
-        n++;
+
+        if( numAgentSend < maxAgentSend ){
+            sendIDList.append(i);
+        }
+
+        numAgentSend++;
+    }
+
+    bool shouldSelect = false;
+    if( numAgentSend > maxAgentSend ){
+        shouldSelect = true;
+    }
+
+
+    if( shouldSelect == true ){
+
+        int countByDistance[20];   // 50[m] * 20 = 1000[m]
+        for(int i=0;i<20;++i){
+            countByDistance[i] = 0;
+        }
+
+        QList<int> calDist;
+        calDist.reserve(maxAgent);
+
+
+        numAgentSend = 0;
+        for(int i=0;i<maxAgent;++i){
+
+            calDist[i] = -1;
+
+            if( agent[i]->agentStatus == 0 ){
+                continue;
+            }
+            if( agent[i]->isSInterfaceObject == true ){
+                continue;
+            }
+            if( i == pivotID ){
+                continue;
+            }
+
+            float rx = agent[i]->state.x - agent[pivotID]->state.x;
+            float ry = agent[i]->state.y - agent[pivotID]->state.y;
+            float D = sqrt(rx * rx + ry * ry);
+
+            int idx = (int)(D / 50.0);
+            if( idx >=20 ){
+                idx = 19;
+            }
+
+            calDist[i] = idx;
+
+            countByDistance[idx]++;
+        }
+
+        int totalNum = 0;
+        int thrIdx = 0;
+        for(int i=0;i<20;++i){
+            if( totalNum < maxAgentSend && totalNum + countByDistance[i] >= maxAgentSend ){
+                thrIdx = i;
+                break;
+            }
+            else{
+                totalNum += countByDistance[i];
+            }
+        }
+
+
+        numAgentSend = 0;
+        sendIDList.clear();
+
+        for(int i=0;i<maxAgent;++i){
+
+            if( calDist[i] < 0 || calDist[i] > thrIdx ){
+                continue;
+            }
+
+            if( numAgentSend < maxAgentSend ){
+                sendIDList.append( i );
+                numAgentSend++;
+            }
+            else{
+                break;
+            }
+        }
     }
 
 
     int at = *pos;
 
-    memcpy(&(sendData[at]), &n, sizeof(int));   // 3
+    memcpy(&(sendData[at]), &numAgentSend, sizeof(int));   // 3
     at += sizeof(int);
 
     float tempFVal = 0.0;
@@ -1648,14 +1754,9 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos)
     char  tempCVal = 0;
 
 
-    for(int i=0;i<maxAgent;++i){
+    for(int n=0;n<numAgentSend;++n){
 
-        if( agent[i]->agentStatus == 0 ){
-            continue;
-        }
-        if( agent[i]->isSInterfaceObject == true ){
-            continue;
-        }
+        int i = sendIDList[n];
 
         if( at + 125 < maxSize ){
 
@@ -1748,19 +1849,39 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos)
             memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 63
             at += sizeof(char);
 
-            tempFVal = agent[i]->vehicle.param.Lf;
+            if( agent[i]->agentKind < 100 ){
+                tempFVal = agent[i]->vehicle.param.Lf;
+            }
+            else{
+                tempFVal = 0.0;
+            }
             memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 64
             at += sizeof(float);
 
-            tempFVal = agent[i]->vehicle.param.Lr;
+            if( agent[i]->agentKind < 100 ){
+                tempFVal = agent[i]->vehicle.param.Lr;
+            }
+            else{
+                tempFVal = 0.0;
+            }
             memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 68
             at += sizeof(float);
 
-            tempFVal = 1.8;     // Tf
+            if( agent[i]->agentKind < 100 ){
+                tempFVal = 1.8;     // Tf
+            }
+            else{
+                tempFVal = 0.0;
+            }
             memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 72
             at += sizeof(float);
 
-            tempFVal = 1.8;     // Tr
+            if( agent[i]->agentKind < 100 ){
+                tempFVal = 1.8;     // Tr
+            }
+            else{
+                tempFVal = 0.0;
+            }
             memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 76
             at += sizeof(float);
 
@@ -1830,10 +1951,83 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos)
         }
     }
 
-    memcpy(&(sendData[at]), &numTrafficSignals, sizeof(int));
+
+    int numTStSend = 0;
+
+    QList<int> sendTSList;
+
+    if( numTrafficSignals <= maxTSSend ){
+
+        numTStSend = numTrafficSignals;
+        for(int i=0;i<numTrafficSignals;++i){
+            sendTSList.append(i);
+        }
+
+    }
+    else{
+
+        int countByDistance[20];   // 50[m] * 20 = 1000[m]
+        for(int i=0;i<20;++i){
+            countByDistance[i] = 0;
+        }
+
+        QList<int> calDist;
+        calDist.reserve(numTrafficSignals);
+
+        for(int i=0;i<numTrafficSignals;++i){
+
+            float rx = trafficSignal[i]->xTS - agent[pivotID]->state.x;
+            float ry = trafficSignal[i]->yTS - agent[pivotID]->state.y;
+            float D = sqrt(rx * rx + ry * ry);
+
+            int idx = (int)(D / 50.0);
+            if( idx >=20 ){
+                idx = 19;
+            }
+
+            calDist[i] = idx;
+
+            countByDistance[idx]++;
+        }
+
+        int totalNum = 0;
+        int thrIdx = 0;
+        for(int i=0;i<20;++i){
+            if( totalNum < maxTSSend && totalNum + countByDistance[i] >= maxTSSend ){
+                thrIdx = i;
+                break;
+            }
+            else{
+                totalNum += countByDistance[i];
+            }
+        }
+
+        numTStSend = 0;
+
+        for(int i=0;i<numTrafficSignals;++i){
+
+            if( calDist[i] > thrIdx ){
+                continue;
+            }
+
+            if( numTStSend < maxTSSend ){
+                sendTSList.append( i );
+                numTStSend++;
+            }
+            else{
+                break;
+            }
+        }
+
+    }
+
+
+    memcpy(&(sendData[at]), &numTStSend, sizeof(int));
     at += sizeof(int);
 
-    for(int i=0;i<numTrafficSignals;++i){
+    for(int n=0;n<numTStSend;++n){
+
+        int i = sendTSList[n];
 
         memcpy(&(sendData[at]), &(trafficSignal[i]->id), sizeof(int));
         at += sizeof(int);
@@ -1851,28 +2045,115 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos)
     }
 
 
-    *pos = at;   // 132
+    *pos = at;
 
     //qDebug() << "data size = " << at;
 }
 
 
-void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos)
+void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos,int maxAgentSend,int maxTSSend,QList<int> pivotIDs)
 {
-    int n = 0;
+    int numAgentSend = 0;
+
+    QList<int> sendIDList;
+    sendIDList.reserve( maxAgentSend );
 
     // count number of data
     for(int i=0;i<maxAgent;++i){
         if( agent[i]->agentStatus == 0 ){
             continue;
         }
-        n++;
+        if( numAgentSend < maxAgentSend ){
+            sendIDList[numAgentSend] = i;
+        }
+
+        numAgentSend++;
     }
+
+    bool shouldSelect = false;
+    if( numAgentSend > maxAgentSend ){
+        shouldSelect = true;
+    }
+
+    if( shouldSelect == true ){
+
+        int countByDistance[20];   // 50[m] * 20 = 1000[m]
+        for(int i=0;i<20;++i){
+            countByDistance[i] = 0;
+        }
+
+        QList<int> calDist;
+        calDist.reserve(maxAgent);
+
+        numAgentSend = 0;
+        for(int i=0;i<maxAgent;++i){
+
+            calDist[i] = -1;
+
+            if( agent[i]->agentStatus == 0 ){
+                continue;
+            }
+
+            if( pivotIDs.contains(i) == true ){
+                calDist[i] = 0;
+                countByDistance[0]++;
+                continue;
+            }
+
+            int idx = -1;
+            for(int j=0;j<pivotIDs.size();++j){
+                float rx = agent[i]->state.x - agent[pivotIDs[j]]->state.x;
+                float ry = agent[i]->state.y - agent[pivotIDs[j]]->state.y;
+                float D = sqrt(rx * rx + ry * ry);
+                int tidx = (int)(D / 50.0);
+                if( tidx >=20 ){
+                    tidx = 19;
+                }
+                if( idx < 0 || idx > tidx ){
+                    idx = tidx;
+                }
+            }
+
+            calDist[i] = idx;
+
+            countByDistance[idx]++;
+        }
+
+        int totalNum = 0;
+        int thrIdx = 0;
+        for(int i=0;i<20;++i){
+            if( totalNum < maxAgentSend && totalNum + countByDistance[i] >= maxAgentSend ){
+                thrIdx = i;
+                break;
+            }
+            else{
+                totalNum += countByDistance[i];
+            }
+        }
+
+        numAgentSend = 0;
+
+        for(int i=0;i<maxAgent;++i){
+
+            if( calDist[i] < 0 || calDist[i] > thrIdx ){
+                continue;
+            }
+
+            if( numAgentSend < maxAgentSend ){
+                sendIDList[numAgentSend] = i;
+                numAgentSend++;
+            }
+            else{
+                break;
+            }
+        }
+    }
+
 
 
     int at = *pos;
 
-    memcpy(&(sendData[at]), &n, sizeof(int));   // 3
+    memcpy(&(sendData[at]), &numAgentSend, sizeof(int));   // 3
     at += sizeof(int);
 
     float tempFVal = 0.0;
@@ -1880,11 +2161,9 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
     char  tempCVal = 0;
 
 
-    for(int i=0;i<maxAgent;++i){
+    for(int n=0;n<numAgentSend;++n){
 
-        if( agent[i]->agentStatus == 0 ){
-            continue;
-        }
+        int i = sendIDList[n];
 
         if( at + 125 < maxSize ){
 
@@ -1977,19 +2256,39 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
             memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 63
             at += sizeof(char);
 
-            tempFVal = agent[i]->vehicle.param.Lf;
+            if( agent[i]->agentKind < 100 ){
+                tempFVal = agent[i]->vehicle.param.Lf;
+            }
+            else{
+                tempFVal = 0.0;
+            }
             memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 64
             at += sizeof(float);
 
-            tempFVal = agent[i]->vehicle.param.Lr;
+            if( agent[i]->agentKind < 100 ){
+                tempFVal = agent[i]->vehicle.param.Lr;
+            }
+            else{
+                tempFVal = 0.0;
+            }
             memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 68
             at += sizeof(float);
 
-            tempFVal = 1.8;     // Tf
+            if( agent[i]->agentKind < 100 ){
+                tempFVal = 1.8;     // Tf
+            }
+            else{
+                tempFVal = 0.0;
+            }
             memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 72
             at += sizeof(float);
 
-            tempFVal = 1.8;     // Tr
+            if( agent[i]->agentKind < 100 ){
+                tempFVal = 1.8;     // Tr
+            }
+            else{
+                tempFVal = 0.0;
+            }
             memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 76
             at += sizeof(float);
 
@@ -2059,10 +2358,87 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
         }
     }
 
-    memcpy(&(sendData[at]), &numTrafficSignals, sizeof(int));
+
+    int numTStSend = 0;
+
+    QList<int> sendTSList;
+    sendTSList.reserve( maxTSSend );
+
+    if( numTrafficSignals <= maxTSSend ){
+
+        numTStSend = numTrafficSignals;
+        for(int i=0;i<numTrafficSignals;++i){
+            sendTSList[i] = i;
+        }
+
+    }
+    else{
+
+        int countByDistance[20];   // 50[m] * 20 = 1000[m]
+        for(int i=0;i<20;++i){
+            countByDistance[i] = 0;
+        }
+
+        QList<int> calDist;
+        calDist.reserve(numTrafficSignals);
+
+        for(int i=0;i<numTrafficSignals;++i){
+
+            int idx = -1;
+            for(int j=0;j<pivotIDs.size();++j){
+                float rx = trafficSignal[i]->xTS - agent[pivotIDs[j]]->state.x;
+                float ry = trafficSignal[i]->yTS - agent[pivotIDs[j]]->state.y;
+                float D = sqrt(rx * rx + ry * ry);
+                int tidx = (int)(D / 50.0);
+                if( tidx >=20 ){
+                    tidx = 19;
+                }
+                if( idx < 0 || idx > tidx ){
+                    idx = tidx;
+                }
+            }
+
+            calDist[i] = idx;
+
+            countByDistance[idx]++;
+        }
+
+        int totalNum = 0;
+        int thrIdx = 0;
+        for(int i=0;i<20;++i){
+            if( totalNum < maxTSSend && totalNum + countByDistance[i] >= maxTSSend ){
+                thrIdx = i;
+                break;
+            }
+            else{
+                totalNum += countByDistance[i];
+            }
+        }
+
+        numTStSend = 0;
+
+        for(int i=0;i<numTrafficSignals;++i){
+
+            if( calDist[i] > thrIdx ){
+                continue;
+            }
+
+            if( numTStSend < maxTSSend ){
+                sendTSList[numTStSend] = i;
+                numTStSend++;
+            }
+            else{
+                break;
+            }
+        }
+    }
+
+    memcpy(&(sendData[at]), &numTStSend, sizeof(int));
     at += sizeof(int);
 
-    for(int i=0;i<numTrafficSignals;++i){
+    for(int n=0;n<numTStSend;++n){
+
+        int i = sendTSList[n];
 
         memcpy(&(sendData[at]), &(trafficSignal[i]->id), sizeof(int));
         at += sizeof(int);
@@ -2080,7 +2456,7 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
     }
 
 
-    *pos = at;   // 132
+    *pos = at;
 
     //qDebug() << "data size = " << at;
 }
@@ -2157,6 +2533,8 @@ void SystemThread::SetTireHeight(int id, float zFL, float zFR, float zRL, float 
 
 void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SInterObjInfo *so)
 {
+    mutexDSStateWrite->lock();
+
     if( type == 'v' || type == 'm' ){
         agent[id]->agentKind = 0;
     }
@@ -2203,6 +2581,11 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
         float wheelbase = so->lf + so->lr;
         int vModelID = simManage->GetVehicleShapeByWheelbase( wheelbase, road );
         agent[id]->vehicle.SetVehicleModelID( vModelID );
+
+        //qDebug() << "vModel = " << vModelID;
+
+        agent[id]->vHalfLength = agent[id]->vehicle.GetVehicleLength() * 0.5;
+        agent[id]->vHalfWidth  = agent[id]->vehicle.GetVehicleWidth()  * 0.5;
     }
 
     if( so->brakeLamp == true ){
@@ -2238,46 +2621,82 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
     }
 
 
-    float dist = 0.0;
-    int pathId = road->GetNearestPath( as->x, as->y, as->yaw, dist );
+    float deviation,xt,yt,xd,yd,s;
+    int pathId = road->GetNearestPath( as->x, as->y, as->yaw, deviation, xt, yt, xd, yd, s );
 
 //    qDebug() << "S-Interface Object: near path = " << pathId;
 
-    if( pathId >= 0 ){
+    agent[id]->memory.precedingVehicleID = -1;
+    agent[id]->memory.distanceToNodeWPIn = 0.0;
+    agent[id]->memory.distanceToStopPoint = 0.0;
+    agent[id]->memory.distanceToZeroSpeed = as->V * as->V * 0.5f / (0.3 * 9.81) + 5.0;
+    agent[id]->memory.requiredDistToStopFromTargetSpeed = 150.0;
+    agent[id]->memory.nextTurnNode = -1;
 
-        float deviation,xt,yt,xd,yd,s;
-        road->GetDeviationFromPath( pathId,
-                                    as->x, as->y, as->yaw,
-                                    deviation, xt, yt, xd, yd, s );
+    if( pathId < 0 ){
 
-        agent[id]->memory.currentTargetPath = pathId;
-        agent[id]->memory.lateralDeviationFromTargetPath = deviation;
-        agent[id]->memory.distanceFromStartWPInCurrentPath = s;
+        agent[id]->memory.currentTargetPath = -1;
+        agent[id]->memory.currentTargetPathIndexInList = -1;
 
+        agent[id]->memory.lateralDeviationFromTargetPath = 0.0;
+        agent[id]->memory.distanceFromStartWPInCurrentPath = 0.0;
 
-//        qDebug() << "deviation = " << deviation;
+        agent[id]->memory.lateralDeviationFromTargetPathAtPreviewPoint = 0.0;
+        agent[id]->memory.previewPointPath = -1;
 
+        agent[id]->memory.currentTargetNode = -1;
+        agent[id]->memory.currentTargetNodeIndexInNodeList = -1;
 
-        agent[id]->memory.targetPathList.clear();
-        agent[id]->memory.targetPathList.append( pathId );
+    }
+    else if( pathId >= 0 ){
 
         int cpath = pathId;
         int idx = road->pathId2Index.indexOf(cpath);
 
-        agent[id]->memory.currentTargetNode = road->paths[idx]->connectingNode;
+        //
+        //  Set Target Path
+        //
+        agent[id]->memory.currentTargetPath = pathId;
+        agent[id]->memory.lateralDeviationFromTargetPath = deviation;
+        agent[id]->memory.distanceFromStartWPInCurrentPath = s;
 
+//        qDebug() << "deviation = " << deviation;
+
+
+        //
+        //  Set requiredDistToStopFromTargetSpeed
+        //
+        float targetSpeed = road->paths[idx]->speed85pt;
+        agent[id]->memory.requiredDistToStopFromTargetSpeed = targetSpeed * targetSpeed * 0.5f / 2.943 + 5.0;
+
+
+        //
+        //  Set Target Node
+        //
+        agent[id]->memory.currentTargetNode = road->paths[idx]->connectingNode;
         agent[id]->memory.currentTargetNodeIndexInNodeList = -1;
 
+        if( winkerVal == 1 || winkerVal == 2 ){
+            agent[id]->memory.nextTurnNode = agent[id]->memory.currentTargetNode;
+        }
+
+
+        //
+        // Set Target Path List
+        //
+        agent[id]->memory.targetPathList.clear();
+        agent[id]->memory.targetPathList.append( pathId );
 
         float totalLen = 0.0;
+        int tIdx = idx;
         while(1){
-            int nNp = road->paths[idx]->forwardPaths.size();
+            int nNp = road->paths[tIdx]->forwardPaths.size();
             if( nNp == 0 ){
                 break;
             }
             else{
                 if( nNp == 1 ){
-                    cpath = road->paths[idx]->forwardPaths[0];
+                    cpath = road->paths[tIdx]->forwardPaths[0];
                     agent[id]->memory.targetPathList.prepend( cpath );
                 }
                 else{
@@ -2288,10 +2707,10 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
 
                     for(int j=0;j<nNp;++j){
 
-                        int tpath = road->paths[idx]->forwardPaths[j];
-                        int tidx = road->pathId2Index.indexOf(tpath);
+                        int tpath = road->paths[tIdx]->forwardPaths[j];
+                        int fidx = road->pathId2Index.indexOf(tpath);
 
-                        float tmpCurvature = fabs(road->paths[tidx]->meanPathCurvature);
+                        float tmpCurvature = fabs(road->paths[fidx]->meanPathCurvature);
 
                         if( minIdx < 0 || minCurvature > tmpCurvature ){
                             minIdx = j;
@@ -2300,23 +2719,26 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
 
                     }
 
-                    cpath = road->paths[idx]->forwardPaths[minIdx];
+                    cpath = road->paths[tIdx]->forwardPaths[minIdx];
                     agent[id]->memory.targetPathList.prepend( cpath );
                 }
 
-                totalLen += road->paths[idx]->pathLength;
+                totalLen += road->paths[tIdx]->pathLength;
 
                 if( totalLen > 400.0 ){
                     break;
                 }
 
-                idx = road->pathId2Index.indexOf(cpath);
+                tIdx = road->pathId2Index.indexOf(cpath);
             }
         }
 
-//        qDebug() << "targetPathList = " << agent[id]->memory.targetPathList;
+        agent[id]->memory.currentTargetPathIndexInList = agent[id]->memory.targetPathList.indexOf( agent[id]->memory.currentTargetPath );
 
 
+        //
+        // Set lateralDeviationFromTargetPathAtPreviewPoint
+        //
         float preview_dist = as->V;
         if( preview_dist < 5.0 ){
             preview_dist = 5.0;
@@ -2336,8 +2758,6 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
                                                    preview_x, preview_y, as->yaw,
                                                    tdev, txt, tyt, txd, tyd, ts, true );
 
-    //        qDebug() << "i=" << i << " chk=" << chk << " dev=" << tdev;
-
             if( chk != agent[id]->memory.targetPathList[i] ){
                 continue;
             }
@@ -2348,17 +2768,125 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
 
             agent[id]->memory.lateralDeviationFromTargetPathAtPreviewPoint = tdev;
             agent[id]->memory.previewPointPath = agent[id]->memory.targetPathList[i];
-
-//            qDebug() << "deviation at aim point = " << agent[id]->memory.lateralDeviationFromTargetPathAtPreviewPoint;
-
             break;
         }
 
-        agent[id]->memory.currentTargetPathIndexInList = agent[id]->memory.targetPathList.indexOf( agent[id]->memory.currentTargetPath );
+
+        //
+        // Set Node List
+        //
+        int inDir = road->paths[idx]->connectingNodeInDir;
+        int lastNode = -1;
+        int lastNodeOut = -1;
+        int tNdIdx = road->nodeId2Index.indexOf( agent[id]->memory.currentTargetNode );
+        for(int i=0;i<road->nodes[tNdIdx]->nodeConnectInfo.size();++i){
+            if( road->nodes[tNdIdx]->nodeConnectInfo[i]->inDirectionID == inDir ){
+                lastNode = road->nodes[tNdIdx]->nodeConnectInfo[i]->connectedNode;
+                lastNodeOut = road->nodes[tNdIdx]->nodeConnectInfo[i]->outDirectionID;
+                break;
+            }
+        }
+
+        agent[id]->memory.myNodeList.clear();
+        agent[id]->memory.myInDirList.clear();
+        agent[id]->memory.myOutDirList.clear();
 
 
-        agent[id]->BackupMemory();
+        agent[id]->memory.myNodeList.append( lastNode );
+        agent[id]->memory.myInDirList.append( -1 );
+        agent[id]->memory.myOutDirList.append( lastNodeOut );
+
+        agent[id]->memory.myNodeList.append( agent[id]->memory.currentTargetNode );
+        agent[id]->memory.myInDirList.append( inDir );
+
+        int cNode = agent[id]->memory.currentTargetNode;
+        for(int n=agent[id]->memory.currentTargetPathIndexInList;n>=0;n--){
+            int tpath = agent[id]->memory.targetPathList[n];
+            int lidx = road->pathId2Index.indexOf( tpath );
+
+            if( cNode != road->paths[lidx]->connectingNode ){
+
+                tNdIdx = road->nodeId2Index.indexOf( road->paths[lidx]->connectingNode );
+                inDir = road->paths[lidx]->connectingNodeInDir;
+
+                lastNodeOut = -1;
+                for(int i=0;i<road->nodes[tNdIdx]->nodeConnectInfo.size();++i){
+                    if( road->nodes[tNdIdx]->nodeConnectInfo[i]->inDirectionID == inDir ){
+                        lastNodeOut = road->nodes[tNdIdx]->nodeConnectInfo[i]->outDirectionID;
+                        break;
+                    }
+                }
+                agent[id]->memory.myOutDirList.append( lastNodeOut );
+
+                cNode = road->paths[lidx]->connectingNode;
+
+                agent[id]->memory.myNodeList.append( cNode );
+                agent[id]->memory.myInDirList.append( inDir );
+            }
+        }
+        agent[id]->memory.myOutDirList.append( -1 );
+
+        agent[id]->memory.currentTargetNodeIndexInNodeList = agent[id]->memory.myNodeList.indexOf( agent[id]->memory.currentTargetNode );
+
+//        qDebug() << "targetPathList = " << agent[id]->memory.targetPathList;
+//        qDebug() << "myNodeList = " << agent[id]->memory.myNodeList;
+//        qDebug() << "myInDirList = " << agent[id]->memory.myInDirList;
+//        qDebug() << "myOutDirList = " << agent[id]->memory.myOutDirList;
+
+
+
+        //
+        // Set distanceToWPIn
+        //
+        if( agent[id]->memory.currentTargetNodeIndexInNodeList >= 0 &&
+                agent[id]->memory.currentTargetNodeIndexInNodeList < agent[id]->memory.myInDirList.size() ){
+
+            QList<int> destPathsIn;
+
+            int inDir = agent[id]->memory.myInDirList.at( agent[id]->memory.currentTargetNodeIndexInNodeList );
+
+            int tnIdx = road->nodeId2Index.indexOf( agent[id]->memory.currentTargetNode );
+            for(int i=0;i<road->nodes[tnIdx]->inBoundaryWPs.size();++i){
+                if( road->nodes[tnIdx]->inBoundaryWPs[i]->relatedDirection == inDir ){
+                    for(int j=0;j<road->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP.size();++j){
+                        destPathsIn.append( road->nodes[tnIdx]->inBoundaryWPs[i]->PathWithEWP[j] );
+                    }
+                }
+            }
+
+            float dist = 0.0;
+            for(int i=agent[id]->memory.currentTargetPathIndexInList;i>=0;i--){
+                int pIdx = road->pathId2Index.indexOf( agent[id]->memory.targetPathList.at(i) );
+                dist += road->paths[pIdx]->pathLength;
+                if( road->paths[pIdx]->connectingNode == agent[id]->memory.currentTargetNode ){
+                    if( destPathsIn.indexOf(agent[id]->memory.targetPathList.at(i)) >= 0 ){
+                        agent[id]->memory.distanceToNodeWPIn = dist - agent[id]->memory.distanceFromStartWPInCurrentPath;
+                        break;
+                    }
+                }
+            }
+        }
+
+        //
+        // Set distanceToStopPoint
+        //
+        float dist = 0.0;
+        for(int i=agent[id]->memory.currentTargetPathIndexInList;i>=0;i--){
+            int tpath = agent[id]->memory.targetPathList[i];
+            int lidx = road->pathId2Index.indexOf( tpath );
+            if( road->paths[lidx]->stopPoints.size() > 0 ){
+                dist += road->paths[lidx]->stopPoints[0]->distFromStartWP;
+                break;
+            }
+            else{
+                dist += road->paths[lidx]->pathLength;
+            }
+        }
+        agent[id]->memory.distanceToStopPoint = dist - agent[id]->memory.distanceFromStartWPInCurrentPath;
+
     }
+
+    mutexDSStateWrite->unlock();
 }
 
 

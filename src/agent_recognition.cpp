@@ -51,6 +51,10 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                 continue;
             }
 
+//            if( pAgent[memory.perceptedObjects[i]->objectID]->isSInterfaceObject == true ){
+//                continue;
+//            }
+
             if( memory.perceptedObjects[i]->objectType >= 100 ){
                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::PEDESTRIAN;
                 continue;
@@ -69,11 +73,26 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
 
 
             int objPath = memory.perceptedObjects[i]->objectPath;
+            if( objPath < 0 ){
+                continue;
+            }
+
             bool isSameLane = false;
             int sameLaneIndex = memory.targetPathList.indexOf( objPath );
             if( sameLaneIndex >= 0 ){
                 isSameLane = true;
             }
+
+
+            // S-Interface vehicle outside road-lane is ignored
+            if( isSameLane == true &&
+                    memory.perceptedObjects[i]->objectID >= 0 &&
+                    memory.perceptedObjects[i]->objectID < maxAgent &&
+                    pAgent[memory.perceptedObjects[i]->objectID]->isSInterfaceObject == true &&
+                    fabs( memory.perceptedObjects[i]->deviationFromNearestTargetPath ) > 3.0 ){
+                continue;
+            }
+
 
             if( isSameLane == true ){
 
@@ -245,7 +264,9 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                     QueryPerformanceCounter(&start);
 #endif
 
-                    if( memory.currentTargetNode == pAgent[aID]->memory_reference.currentTargetNode ){
+                    if( memory.currentTargetNode == pAgent[aID]->memory_reference.currentTargetNode &&
+                            memory.currentTargetNodeIndexInNodeList >= 0 &&
+                            memory.currentTargetNodeIndexInNodeList < memory.myNodeList.size() ){
 
 //                        strForDebug += QString("[1][Recog] V=%1\n").arg( aID );
 //                        strForDebug += QString(" crossNode=%1\n").arg( memory.currentTargetNode );
@@ -260,31 +281,29 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
 //                        strForDebug += QString(" currentTargetNodeIndexInNodeList=%1\n").arg( cTNIndex );
 
 
-                        if( cTNIndex >= 0 && cTNIndex < pAgent[aID]->memory.myInDirList.size() ){
+                        if( cTNIndex >= 0 && cTNIndex < pAgent[aID]->memory_reference.myInDirList.size() ){
 
-                            crossNodeObjInDir  = pAgent[aID]->memory.myInDirList.at( cTNIndex );
+                            crossNodeObjInDir  = pAgent[aID]->memory_reference.myInDirList.at( cTNIndex );
 
 //                            strForDebug += QString(" crossNodeObjInDir=%1\n").arg( crossNodeObjInDir );
 
                         }
-                        if( cTNIndex >= 0 && cTNIndex < pAgent[aID]->memory.myOutDirList.size() ){
+                        if( cTNIndex >= 0 && cTNIndex < pAgent[aID]->memory_reference.myOutDirList.size() ){
 
-                            crossNodeObjOutDir = pAgent[aID]->memory.myOutDirList.at( cTNIndex );
+                            crossNodeObjOutDir = pAgent[aID]->memory_reference.myOutDirList.at( cTNIndex );
 
 //                            strForDebug += QString(" crossNodeObjOutDir=%1\n").arg( crossNodeObjOutDir );
                         }
 
-//                        for(int m=0;m<pAgent[aID]->memory.myNodeList.size();++m){
-//                            strForDebug += QString(" I%1 - N%2 - O%3 \n").arg( pAgent[aID]->memory.myInDirList.at(m) )
-//                                    .arg( pAgent[aID]->memory.myNodeList.at(m) )
-//                                    .arg( pAgent[aID]->memory.myOutDirList.at(m) );
-//                        }
                     }
                     else{
 
 
                         int cnIdx = memory.myNodeList.indexOf( pAgent[aID]->memory_reference.currentTargetNode );
-                        if( cnIdx >= memory.currentTargetNodeIndexInNodeList ){
+                        if( memory.currentTargetNodeIndexInNodeList >= 0 &&
+                                cnIdx >= memory.currentTargetNodeIndexInNodeList &&
+                                cnIdx < memory.myNodeList.size() &&
+                                cnIdx < memory.myInDirList.size() ){
 
                             crossNode          = memory.myNodeList.at(cnIdx);
 
@@ -296,26 +315,29 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
 //                            strForDebug += QString(" currentTargetNodeIndexInNodeList=%1\n").arg( pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList );
 
                             if( pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList >= 0 &&
-                                    pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList < pAgent[aID]->memory.myInDirList.size() ){
+                                    pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList < pAgent[aID]->memory_reference.myInDirList.size() ){
 
-                                crossNodeObjInDir  = pAgent[aID]->memory.myInDirList.at( pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList );
+                                crossNodeObjInDir  = pAgent[aID]->memory_reference.myInDirList.at( pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList );
 
 //                                strForDebug += QString(" crossNodeObjInDir=%1\n").arg( crossNodeObjInDir );
                             }
                             if( pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList >= 0 &&
-                                    pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList < pAgent[aID]->memory.myOutDirList.size() ){
+                                    pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList < pAgent[aID]->memory_reference.myOutDirList.size() ){
 
-                                crossNodeObjOutDir = pAgent[aID]->memory.myOutDirList.at( pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList );
+                                crossNodeObjOutDir = pAgent[aID]->memory_reference.myOutDirList.at( pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList );
 
 //                                strForDebug += QString(" crossNodeObjOutDir=%1\n").arg( crossNodeObjOutDir );
                             }
                         }
                         else {
 
-                            if( pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList >= 0 ){
+                            if( memory.currentTargetNodeIndexInNodeList >= 0 &&
+                                    memory.currentTargetNodeIndexInNodeList < memory.myNodeList.size() &&
+                                    pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList >= 0 &&
+                                    pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList < pAgent[aID]->memory_reference.myNodeList.size() ){
 
                                 int nCheckObj = 0;
-                                for(int j=pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList;j<pAgent[aID]->memory.myNodeList.size();++j){
+                                for(int j=pAgent[aID]->memory_reference.currentTargetNodeIndexInNodeList;j<pAgent[aID]->memory_reference.myNodeList.size();++j){
                                     nCheckObj++;
                                     if( nCheckObj > 3){
                                         break;
@@ -326,7 +348,7 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                                         if( nCheck > 3 ){
                                             break;
                                         }
-                                        if( pAgent[aID]->memory.myNodeList.at(j) == memory.myNodeList.at(k) ){
+                                        if( pAgent[aID]->memory_reference.myNodeList.at(j) == memory.myNodeList.at(k) ){
 
                                             crossNode          = memory.myNodeList.at(k);
 
@@ -337,8 +359,8 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
 
 //                                            strForDebug += QString(" j=%1\n").arg( j );
 
-                                            crossNodeObjInDir  = pAgent[aID]->memory.myInDirList.at(j);
-                                            crossNodeObjOutDir = pAgent[aID]->memory.myOutDirList.at(j);
+                                            crossNodeObjInDir  = pAgent[aID]->memory_reference.myInDirList.at(j);
+                                            crossNodeObjOutDir = pAgent[aID]->memory_reference.myOutDirList.at(j);
 
 //                                            strForDebug += QString(" crossNodeObjInDir=%1\n").arg( crossNodeObjInDir );
 //                                            strForDebug += QString(" crossNodeObjOutDir=%1\n").arg( crossNodeObjOutDir );

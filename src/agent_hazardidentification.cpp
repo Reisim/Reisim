@@ -57,6 +57,10 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                     continue;
                 }
 
+//                if( pAgent[memory.perceptedObjects[i]->objectID]->isSInterfaceObject == true ){
+//                    continue;
+//                }
+
                 if( memory.perceptedObjects[i]->relPosEvaled == false ){
                     memory.perceptedObjects[i]->hasCollisionPoint = false;
                     continue;
@@ -75,8 +79,8 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                 }
 
 
-                    memory.perceptedObjects[i]->myCPPathIndex  = -1;
-                    memory.perceptedObjects[i]->objCPPathIndex = -1;
+                memory.perceptedObjects[i]->myCPPathIndex  = -1;
+                memory.perceptedObjects[i]->objCPPathIndex = -1;
 
 
                 if( memory.perceptedObjects[i]->objectType >= 100 ){
@@ -157,98 +161,108 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                 }
 
 
-                    memory.perceptedObjects[i]->hasCollisionPoint = false;
+                memory.perceptedObjects[i]->hasCollisionPoint = false;
 
-                    int objID = memory.perceptedObjects[i]->objectID;
+                int objID = memory.perceptedObjects[i]->objectID;
+                float distEvaled = 0.0;
+                for(int j=memory.currentTargetPathIndexInList;j>=0;j--){
+                    int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList[j] );
+
+                    if( pRoad->paths[pIdx]->crossPoints.size() == 0 ){
+                        distEvaled += pRoad->paths[pIdx]->pathLength;
+                        if( distEvaled > 200.0 ){
+                            break;
+                        }
+                        continue;
+                    }
+                    for(int k=0;k<pRoad->paths[pIdx]->crossPoints.size();++k){
+                        int cpath = pRoad->paths[pIdx]->crossPoints[k]->crossPathID;
+                        if( pAgent[objID]->memory_reference.targetPathList.size() > 0 &&
+                                pAgent[objID]->memory_reference.targetPathList.indexOf( cpath ) >= 0 ){
+
+                            memory.perceptedObjects[i]->hasCollisionPoint = true;
+                            memory.perceptedObjects[i]->mergingAsCP       = false;
+
+                            memory.perceptedObjects[i]->xCP = pRoad->paths[pIdx]->crossPoints[k]->pos.x();
+                            memory.perceptedObjects[i]->yCP = pRoad->paths[pIdx]->crossPoints[k]->pos.y();
+                            memory.perceptedObjects[i]->CPinNode = pRoad->paths[pIdx]->connectingNode;
+
+                            memory.perceptedObjects[i]->myCPPathIndex = j;
+                            memory.perceptedObjects[i]->objCPPathIndex = k;
+                            memory.perceptedObjects[i]->objPathCPChecked = memory.perceptedObjects[i]->objectPath;
+
+                            break;
+                        }
+                    }
+                    distEvaled += pRoad->paths[pIdx]->pathLength;
+                    if( distEvaled > 200.0 ){
+                        break;
+                    }
+                    if( memory.perceptedObjects[i]->hasCollisionPoint == true ){
+                        break;
+                    }
+                }
+
+                if( memory.perceptedObjects[i]->hasCollisionPoint == false ){
+
+                    // Check merging point as collision point; this is only for vehicles
+
+                    QList<int> myEWPList;
                     float distEvaled = 0.0;
                     for(int j=memory.currentTargetPathIndexInList;j>=0;j--){
                         int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList[j] );
-
-                        if( pRoad->paths[pIdx]->crossPoints.size() == 0 ){
-                            distEvaled += pRoad->paths[pIdx]->pathLength;
-                            if( distEvaled > 200.0 ){
-                                break;
-                            }
-                            continue;
+                        myEWPList.append( pRoad->paths[pIdx]->endWpId );
+                        distEvaled += pRoad->paths[pIdx]->pathLength;
+                        if( distEvaled > 200.0 ){
+                            break;
                         }
-                        for(int k=0;k<pRoad->paths[pIdx]->crossPoints.size();++k){
-                            int cpath = pRoad->paths[pIdx]->crossPoints[k]->crossPathID;
-                            if( pAgent[objID]->memory_reference.targetPathList.indexOf( cpath ) >= 0 ){
+                    }
+
+                    QList<int> objEWPList;
+                    distEvaled = 0.0;
+                    if( pAgent[objID]->memory_reference.currentTargetPathIndexInList >= 0 &&
+                            pAgent[objID]->memory_reference.targetPathList.size() > 0 &&
+                            pAgent[objID]->memory_reference.currentTargetPathIndexInList < pAgent[objID]->memory_reference.targetPathList.size() ){
+                        for(int j=pAgent[objID]->memory_reference.currentTargetPathIndexInList;j>=0;j--){
+                            int tpath = pAgent[objID]->memory_reference.targetPathList[j];
+                            int pIdx = pRoad->pathId2Index.indexOf( tpath );
+                            if( pIdx >= 0 ){
+                                objEWPList.append( pRoad->paths[pIdx]->endWpId );
+                                distEvaled += pRoad->paths[pIdx]->pathLength;
+                                if( distEvaled > 200.0 ){
+                                    break;
+                                }
+                            }
+
+                        }
+                    }
+
+
+                    for(int j=0;j<myEWPList.size();++j){
+                        for(int k=0;k<objEWPList.size();++k){
+                            if( myEWPList[j] == objEWPList[k] ){
 
                                 memory.perceptedObjects[i]->hasCollisionPoint = true;
-                                memory.perceptedObjects[i]->mergingAsCP       = false;
+                                memory.perceptedObjects[i]->mergingAsCP       = true;
 
-                                memory.perceptedObjects[i]->xCP = pRoad->paths[pIdx]->crossPoints[k]->pos.x();
-                                memory.perceptedObjects[i]->yCP = pRoad->paths[pIdx]->crossPoints[k]->pos.y();
-                                memory.perceptedObjects[i]->CPinNode = pRoad->paths[pIdx]->connectingNode;
+                                int wIdx = pRoad->wpId2Index.indexOf( myEWPList[j] );
+                                memory.perceptedObjects[i]->xCP = pRoad->wps[wIdx]->pos.x();
+                                memory.perceptedObjects[i]->yCP = pRoad->wps[wIdx]->pos.y();
+                                memory.perceptedObjects[i]->CPinNode = pRoad->wps[wIdx]->relatedNode;
 
-                                memory.perceptedObjects[i]->myCPPathIndex = j;
-                                memory.perceptedObjects[i]->objCPPathIndex = k;
+                                memory.perceptedObjects[i]->myCPPathIndex  = myEWPList[j];
+                                memory.perceptedObjects[i]->objCPPathIndex = objEWPList[k];
                                 memory.perceptedObjects[i]->objPathCPChecked = memory.perceptedObjects[i]->objectPath;
 
                                 break;
                             }
-                        }
-                        distEvaled += pRoad->paths[pIdx]->pathLength;
-                        if( distEvaled > 200.0 ){
-                            break;
                         }
                         if( memory.perceptedObjects[i]->hasCollisionPoint == true ){
                             break;
                         }
                     }
 
-                    if( memory.perceptedObjects[i]->hasCollisionPoint == false ){
-
-                        // Check merging point as collision point; this is only for vehicles
-
-                        QList<int> myEWPList;
-                        float distEvaled = 0.0;
-                        for(int j=memory.currentTargetPathIndexInList;j>=0;j--){
-                            int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList[j] );
-                            myEWPList.append( pRoad->paths[pIdx]->endWpId );
-                            distEvaled += pRoad->paths[pIdx]->pathLength;
-                            if( distEvaled > 200.0 ){
-                                break;
-                            }
-                        }
-
-                        QList<int> objEWPList;
-                        distEvaled = 0.0;
-                        for(int j=pAgent[objID]->memory_reference.currentTargetPathIndexInList;j>=0;j--){
-                            int pIdx = pRoad->pathId2Index.indexOf( pAgent[objID]->memory_reference.targetPathList[j] );
-                            objEWPList.append( pRoad->paths[pIdx]->endWpId );
-                            distEvaled += pRoad->paths[pIdx]->pathLength;
-                            if( distEvaled > 200.0 ){
-                                break;
-                            }
-                        }
-
-                        for(int j=0;j<myEWPList.size();++j){
-                            for(int k=0;k<objEWPList.size();++k){
-                                if( myEWPList[j] == objEWPList[k] ){
-
-                                    memory.perceptedObjects[i]->hasCollisionPoint = true;
-                                    memory.perceptedObjects[i]->mergingAsCP       = true;
-
-                                    int wIdx = pRoad->wpId2Index.indexOf( myEWPList[j] );
-                                    memory.perceptedObjects[i]->xCP = pRoad->wps[wIdx]->pos.x();
-                                    memory.perceptedObjects[i]->yCP = pRoad->wps[wIdx]->pos.y();
-                                    memory.perceptedObjects[i]->CPinNode = pRoad->wps[wIdx]->relatedNode;
-
-                                    memory.perceptedObjects[i]->myCPPathIndex  = myEWPList[j];
-                                    memory.perceptedObjects[i]->objCPPathIndex = objEWPList[k];
-                                    memory.perceptedObjects[i]->objPathCPChecked = memory.perceptedObjects[i]->objectPath;
-
-                                    break;
-                                }
-                            }
-                            if( memory.perceptedObjects[i]->hasCollisionPoint == true ){
-                                break;
-                            }
-                        }
-
-                    }
+                }
 
 
                 // Update distance to CP
@@ -275,36 +289,46 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                     memory.perceptedObjects[i]->myDistanceToCP = myDist;
                     memory.perceptedObjects[i]->myTimeToCP = myDist / (state.V + 0.5);
 
-                    float objDist = 0.0;
+                    if( pAgent[objID]->memory_reference.currentTargetPathIndexInList >= 0 &&
+                            pAgent[objID]->memory_reference.targetPathList.size() > 0 &&
+                            pAgent[objID]->memory_reference.currentTargetPathIndexInList < pAgent[objID]->memory_reference.targetPathList.size() ){
 
-                    int ctpIndexList = pAgent[objID]->memory_reference.currentTargetPathIndexInList;
-                    int mlIdx = pAgent[objID]->memory_reference.targetPathList.size()-1;
-                    for(int l=ctpIndexList;l>=0;l--){
-                        if( pAgent[objID]->memory_reference.targetPathList[l] == cpath ){
-                            mlIdx = l;
-                            break;
-                        }
-                    }
+                        float objDist = 0.0;
 
-                    for(int l=ctpIndexList;l>=mlIdx;l--){
-                        if( pAgent[objID]->memory_reference.targetPathList[l] == cpath ){
-                            int tpIdx = pRoad->pathId2Index.indexOf( cpath );
-                            for(int m=0;m<pRoad->paths[tpIdx]->crossPoints.size();++m){
-                                if( pRoad->paths[tpIdx]->crossPoints[m]->crossPathID == memory.targetPathList[j] ){
-                                    objDist += pRoad->paths[tpIdx]->crossPoints[m]->distFromStartWP;
-                                    break;
-                                }
+                        int ctpIndexList = pAgent[objID]->memory_reference.currentTargetPathIndexInList;
+                        int mlIdx = pAgent[objID]->memory_reference.targetPathList.size()-1;
+                        for(int l=ctpIndexList;l>=0;l--){
+                            if( pAgent[objID]->memory_reference.targetPathList[l] == cpath ){
+                                mlIdx = l;
+                                break;
                             }
-                            break;
                         }
-                        int tpath = pAgent[objID]->memory_reference.targetPathList[l];
-                        int tpIdx = pRoad->pathId2Index.indexOf( tpath );
-                        objDist += pRoad->paths[tpIdx]->pathLength;
-                    }
-                    objDist -= pAgent[objID]->memory_reference.distanceFromStartWPInCurrentPath;
 
-                    memory.perceptedObjects[i]->objectDistanceToCP = objDist;
-                    memory.perceptedObjects[i]->objectTimeToCP = objDist / ( memory.perceptedObjects[i]->V + 0.5);
+                        for(int l=ctpIndexList;l>=mlIdx;l--){
+                            if( pAgent[objID]->memory_reference.targetPathList[l] == cpath ){
+                                int tpIdx = pRoad->pathId2Index.indexOf( cpath );
+                                for(int m=0;m<pRoad->paths[tpIdx]->crossPoints.size();++m){
+                                    if( pRoad->paths[tpIdx]->crossPoints[m]->crossPathID == memory.targetPathList[j] ){
+                                        objDist += pRoad->paths[tpIdx]->crossPoints[m]->distFromStartWP;
+                                        break;
+                                    }
+                                }
+                                break;
+                            }
+                            int tpath = pAgent[objID]->memory_reference.targetPathList[l];
+                            int tpIdx = pRoad->pathId2Index.indexOf( tpath );
+                            objDist += pRoad->paths[tpIdx]->pathLength;
+                        }
+                        objDist -= pAgent[objID]->memory_reference.distanceFromStartWPInCurrentPath;
+
+                        memory.perceptedObjects[i]->objectDistanceToCP = objDist;
+                        memory.perceptedObjects[i]->objectTimeToCP = objDist / ( memory.perceptedObjects[i]->V + 0.5);
+                    }
+                    else{
+                        memory.perceptedObjects[i]->objectDistanceToCP = 0.0;
+                        memory.perceptedObjects[i]->objectTimeToCP = 0.0;
+                    }
+
                 }
                 else if( memory.perceptedObjects[i]->mergingAsCP == true &&
                         memory.perceptedObjects[i]->myCPPathIndex >= 0 && memory.perceptedObjects[i]->objCPPathIndex >= 0 ){
@@ -324,18 +348,28 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                     memory.perceptedObjects[i]->myDistanceToCP = myDist;
                     memory.perceptedObjects[i]->myTimeToCP = myDist / (state.V + 0.5);
 
-                    float objDist = 0.0;
-                    for(int l=pAgent[objID]->memory_reference.currentTargetPathIndexInList;l>=0;l--){
-                        int tpIdx = pRoad->pathId2Index.indexOf( pAgent[objID]->memory_reference.targetPathList[l] );
-                        objDist += pRoad->paths[tpIdx]->pathLength;
-                        if( pRoad->paths[tpIdx]->endWpId == memory.perceptedObjects[i]->objCPPathIndex ){
-                            break;
-                        }
-                    }
-                    objDist -= pAgent[objID]->memory_reference.distanceFromStartWPInCurrentPath;
+                    if( pAgent[objID]->memory_reference.currentTargetPathIndexInList >= 0 &&
+                            pAgent[objID]->memory_reference.targetPathList.size() > 0 &&
+                            pAgent[objID]->memory_reference.currentTargetPathIndexInList < pAgent[objID]->memory_reference.targetPathList.size() ){
 
-                    memory.perceptedObjects[i]->objectDistanceToCP = objDist;
-                    memory.perceptedObjects[i]->objectTimeToCP = objDist / ( memory.perceptedObjects[i]->V + 0.5);
+                        float objDist = 0.0;
+                        for(int l=pAgent[objID]->memory_reference.currentTargetPathIndexInList;l>=0;l--){
+                            int tpIdx = pRoad->pathId2Index.indexOf( pAgent[objID]->memory_reference.targetPathList[l] );
+                            objDist += pRoad->paths[tpIdx]->pathLength;
+                            if( pRoad->paths[tpIdx]->endWpId == memory.perceptedObjects[i]->objCPPathIndex ){
+                                break;
+                            }
+                        }
+                        objDist -= pAgent[objID]->memory_reference.distanceFromStartWPInCurrentPath;
+
+                        memory.perceptedObjects[i]->objectDistanceToCP = objDist;
+                        memory.perceptedObjects[i]->objectTimeToCP = objDist / ( memory.perceptedObjects[i]->V + 0.5);
+                    }
+                    else{
+                        memory.perceptedObjects[i]->objectDistanceToCP = 0.0;
+                        memory.perceptedObjects[i]->objectTimeToCP = 0.0;
+                    }
+
                 }
             }
 

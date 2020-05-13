@@ -13,5 +13,6 @@
         <file>images/resume.png</file>
         <file>images/reset.png</file>
         <file>images/Pin.png</file>
+        <file>images/resim-icon.png</file>
     </qresource>
 </RCC>

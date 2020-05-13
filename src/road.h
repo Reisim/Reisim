@@ -278,7 +278,8 @@ public:
     float CalculateCurvatureFromThreePoints(float x1,float y1,float x2,float y2,float x3,float y3);
 
     float GetPathLength(int pathID);
-    int GetNearestPath(float xp, float yp,float yawAngle,float &dist);
+    int GetNearestPath(float xp, float yp,float yawAngle,
+                       float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP);
     int GetNearestPathFromList(QList<int> &pathList,float xp,float yp,float yawAngle,
                                float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP);
     int GetDeviationFromPath(int pathID,

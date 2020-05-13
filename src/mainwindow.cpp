@@ -27,6 +27,7 @@ MainWindow::MainWindow(QWidget *parent)
     canvas = new GraphicCanvas();
 
     confWin = new ConfigWindow();
+    confWin->setWindowIcon( QIcon(":images/resim-icon.png") );
     confWin->hide();
 
 
@@ -109,7 +110,7 @@ MainWindow::MainWindow(QWidget *parent)
     controlLayout1->addWidget( pauseBtn );
     controlLayout1->addWidget( resumeBtn );
     controlLayout1->addWidget( stopBtn );
-    controlLayout1->addWidget( new QLabel("Simulation Speed Weight:"));
+    controlLayout1->addWidget( new QLabel("Simulation Speed Control:"));
     controlLayout1->addWidget( animeSpeedAdjusterByValue );
     controlLayout1->addWidget( animeSpeedAdjuster );
     controlLayout1->addWidget( resetSpeedAdjuster );

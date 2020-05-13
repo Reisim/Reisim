@@ -35,6 +35,10 @@ LARGE_INTEGER freq;
 QVector<double> time_record;
 
 
+char *sendDataBuf = NULL;
+
+
+
 UDPThread::UDPThread(QObject *parent) :
     QThread(parent)
 {
@@ -42,6 +46,11 @@ UDPThread::UDPThread(QObject *parent) :
     maxAgent = 100;
     numberTrafficSignal = 0;
     syncSigCount = 0;
+
+    maxAgentDataSend = 350;
+    maxTSDataSend = 200;
+
+    HasFuncExtender = false;
 
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&start_time);
@@ -85,6 +94,10 @@ void UDPThread::destroySocks()
             delete recvSocks[i];
         }
         recvSocks.clear();
+    }
+
+    if( sendDataBuf ){
+        delete [] sendDataBuf;
     }
 }
 
@@ -222,6 +235,8 @@ void UDPThread::loadSysFile(QString filename)
                         if( QString(divOptStr[i]).contains("-id=") == true ){
                             QString valStr = QString( divOptStr[i] ).remove("-id=");
                             as->appName += QString("[") + valStr + QString("]");
+
+                            SInterfaceObjIDs.append( valStr.toInt() );
                         }
                     }
                 }
@@ -234,6 +249,8 @@ void UDPThread::loadSysFile(QString filename)
                             as->appName += QString("[") + valStr + QString("]");
                         }
                     }
+
+                    HasFuncExtender = true;
                 }
             }
         }
@@ -268,6 +285,8 @@ void UDPThread::loadSysFile(QString filename)
     for(int i=0;i<sysNet.size();++i){
         qDebug() << "     " << sysNet[i]->sender << " -> " << sysNet[i]->receiver << "(" << sysNet[i]->receive_port << ")";
     }
+
+    qDebug() << " SInterfaceObjIDs = " << SInterfaceObjIDs;
 
     setupSockets();
 }
@@ -778,67 +797,71 @@ void UDPThread::ReadUDPData()
 //                    qDebug() << cal_time;
 //                    time_record.append(cal_time);
 
-                    int sendDataMaxSize = 125 * maxAgent + 13 * numberTrafficSignal + 20;
-                    if( sendDataMaxSize > 65536 ){
-                        qDebug() << "!!! Buffer size smaller than required [emit RequestSetSendData]";
-                        qDebug() << "maxAgent = " << maxAgent << " numberTrafficSignal = " << numberTrafficSignal << " sendDataMaxSize = " << sendDataMaxSize;
+                    int sendDataMaxSize = 125 * maxAgentDataSend + 13 * maxTSDataSend + 20 + 5;
+
+//                    // should wait until last agent calculation finished
+//                    mutex_sync->lock();
+//                    if( allowDataGetForDS == 0 ){
+//                        cond_sync->wait(mutex_sync);
+//                    }
+//                    allowDataGetForDS = 0;
+//                    mutex_sync->unlock();
+
+
+
+                    if( sendDataBuf == NULL ){
+                        sendDataBuf = new char [sendDataMaxSize];
                     }
-                    else{
 
 
-//                        // should wait until last agent calculation finished
-//                        mutex_sync->lock();
-//                        if( allowDataGetForDS == 0 ){
-//                            cond_sync->wait(mutex_sync);
-//                        }
-//                        allowDataGetForDS = 0;
-//                        mutex_sync->unlock();
+                    // Send data to UE4
+                    for(int i=0;i<SInterfaceObjIDs.size();++i){
 
+                        // set agent and TS data to UE4
+                        memset( sendDataBuf, 0, sendDataMaxSize );
 
-                        // set agent and TS data
-                        static char sendData[65536];
-                        memset( sendData, 0, 65536 );
-
-                        sendData[0] = 'R';
-                        sendData[1] = 'S';
-                        sendData[2] = 'd';
+                        sendDataBuf[0] = 'R';
+                        sendDataBuf[1] = 'S';
+                        sendDataBuf[2] = 'd';
 
                         //qDebug() << "emit RequestSetSendData";
                         int sendSize = 3;
-                        emit RequestSetSendData(sendData, sendDataMaxSize, &sendSize);
+                        emit RequestSetSendData(sendDataBuf, sendDataMaxSize, &sendSize, maxAgentDataSend, maxTSDataSend, SInterfaceObjIDs[i] );
 
 
                         //
-                        //  Send data to Apps except S-Interface and FuncExtend
+                        //  Send data to Apps UE4
                         //
-                        for(int i=0;i<sendSocks.size();++i){
 
-                            if( sendSocks[i]->sock.objectName().contains("S-Interface") == true ){
-                                continue;
+                        QString UE4SockName = QString("UE4App[%1,").arg( SInterfaceObjIDs[i] );
+
+                        for(int j=0;j<sendSocks.size();++j){
+
+                            if( sendSocks[j]->sock.objectName().contains( UE4SockName ) == true ){
+
+                                sendSocks[j]->sock.writeDatagram( sendDataBuf,
+                                                                  sendSize,
+                                                                  QHostAddress(sendSocks[j]->ipAddress),
+                                                                  sendSocks[j]->to_port);
+
+                                sendSocks[j]->sock.flush();
                             }
-                            if( sendSocks[i]->sock.objectName().contains("Function Extender") == true ){
-                                continue;
-                            }
 
-                            //qDebug() << "send data to " << sendSocks[i]->sock.objectName();
-
-                            sendSocks[i]->sock.writeDatagram( sendData,
-                                                              sendSize,
-                                                              QHostAddress(sendSocks[i]->ipAddress),
-                                                              sendSocks[i]->to_port);
-
-                            sendSocks[i]->sock.flush();
                         }
+                    }
 
 
-                        memset( sendData, 0, 65536 );
+                    // Send Data to FuncExtender
+                    if( HasFuncExtender == true ){
 
-                        sendData[0] = 'R';
-                        sendData[1] = 'S';
-                        sendData[2] = 'd';
+                        memset( sendDataBuf, 0, sendDataMaxSize );
 
-                        sendSize = 3;
-                        emit RequestSetSendDataForFuncExtend(sendData, sendDataMaxSize, &sendSize);
+                        sendDataBuf[0] = 'R';
+                        sendDataBuf[1] = 'S';
+                        sendDataBuf[2] = 'd';
+
+                        int sendSize = 3;
+                        emit RequestSetSendDataForFuncExtend(sendDataBuf, sendDataMaxSize, &sendSize, maxAgentDataSend, maxTSDataSend, SInterfaceObjIDs);
 
 
                         //
@@ -856,21 +879,41 @@ void UDPThread::ReadUDPData()
 
                             //qDebug() << "send data to " << sendSocks[i]->sock.objectName();
 
-                            sendSocks[i]->sock.writeDatagram( sendData,
+                            sendSocks[i]->sock.writeDatagram( sendDataBuf,
                                                               sendSize,
                                                               QHostAddress(sendSocks[i]->ipAddress),
                                                               sendSocks[i]->to_port);
 
                             sendSocks[i]->sock.flush();
                         }
-
-
-
-//                        QueryPerformanceCounter(&end_time);
-//                        double cal_time = static_cast<double>(end_time.QuadPart - start_time.QuadPart) * 1000.0 / freq.QuadPart;
-//                        start_time = end_time;
-//                        qDebug() << cal_time;
                     }
+
+
+                    // Send Reponse to Score
+                    {
+                        memset( sendDataBuf, 0, sendDataMaxSize );
+
+                        sendDataBuf[0] = 'R';
+                        sendDataBuf[1] = 'S';
+                        sendDataBuf[2] = 'd';
+
+                        int sendSize = 3;
+
+                        if( scoreSendSockIndex >= 0 && scoreSendSockIndex < sendSocks.size() ){
+                            sendSocks[scoreSendSockIndex]->sock.writeDatagram( sendDataBuf,
+                                                                               sendSize,
+                                                                               QHostAddress( sendSocks[scoreSendSockIndex]->ipAddress ),
+                                                                               sendSocks[scoreSendSockIndex]->to_port );
+                            sendSocks[scoreSendSockIndex]->sock.flush();
+                        }
+                    }
+
+
+
+//                    QueryPerformanceCounter(&end_time);
+//                    double cal_time = static_cast<double>(end_time.QuadPart - start_time.QuadPart) * 1000.0 / freq.QuadPart;
+//                    start_time = end_time;
+//                    qDebug() << cal_time;
 
 
                     //
@@ -1299,12 +1342,15 @@ void UDPThread::ReadUDPData()
 void UDPThread::SetMaxAgentNumber(int maNum)
 {
     maxAgent = maNum;
+
+    qDebug() << "[UDPThread::SetMaxAgentNumber] maxAgent = " << maxAgent;
 }
 
 
 void UDPThread::SetNumberTrafficSignal(int n)
 {
     numberTrafficSignal = n;
+
     qDebug() << "[UDPThread::SetNumberTrafficSignal]  numberTrafficSignal = " << numberTrafficSignal;
 }
 

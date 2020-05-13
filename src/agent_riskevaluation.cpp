@@ -762,6 +762,10 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad,QList<Traff
                     continue;
                 }
 
+//                if( pAgent[memory.perceptedObjects[i]->objectID]->isSInterfaceObject == true ){
+//                    continue;
+//                }
+
                 if( memory.perceptedObjects[i]->objectType >= 100 ){
                     continue;
                 }
@@ -785,106 +789,116 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad,QList<Traff
                                 memory.perceptedObjects[i]->recognitionLabel == AGENT_RECOGNITION_LABEL::RIGHT_SIDE_PRECEDING ){
 
                             int objID = memory.perceptedObjects[i]->objectID;
-                            int sIdx = pAgent[objID]->memory_reference.targetPathList.indexOf( memory.laneMerge[j].y() );
+                            if( pAgent[objID]->memory_reference.targetPathList.size() > 0 ){
 
-                            strForDebugRiskEval += QString("check path=%1, sIdx=%2\n").arg( memory.laneMerge[j].y() ).arg(sIdx);
+                                int sIdx = pAgent[objID]->memory_reference.targetPathList.indexOf( memory.laneMerge[j].y() );
 
-                            if( sIdx < 0 || sIdx > pAgent[objID]->memory_reference.currentTargetPathIndexInList ){
+                                strForDebugRiskEval += QString("check path=%1, sIdx=%2\n").arg( memory.laneMerge[j].y() ).arg(sIdx);
 
-                                alreadyCheckedList.append( objID );
+                                if( sIdx < 0 || (pAgent[objID]->memory_reference.currentTargetPathIndexInList >= 0 && sIdx > pAgent[objID]->memory_reference.currentTargetPathIndexInList) ){
 
-                                continue;
-                            }
+                                    alreadyCheckedList.append( objID );
 
-                            float length = 0.0;
-                            for(int k=sIdx;k<=pAgent[objID]->memory_reference.currentTargetPathIndexInList;k++){
-                                int pIdx = pRoad->pathId2Index.indexOf( pAgent[objID]->memory_reference.targetPathList[k] );
-                                length += pRoad->paths[pIdx]->pathLength;
-                            }
-                            length -= pAgent[objID]->memory_reference.distanceFromStartWPInCurrentPath;
-
-                            strForDebugRiskEval += QString("length=%1 RefLength=%2\n").arg( length )
-                                    .arg( pAgent[objID]->memory_reference.requiredDistToStopFromTargetSpeed );
-
-                            if( length > pAgent[objID]->memory_reference.requiredDistToStopFromTargetSpeed ){
-
-                                alreadyCheckedList.append( objID );
-
-                                continue;
-                            }
-
-                            strForDebugRiskEval += QString("SideMerge: V=%1, path=%2 length=%3\n").arg( objID ).arg(memory.laneMerge[j].y()).arg(length);
-
-                            float myTTC = distToSideLaneMergePoint[j] / (state.V + 0.1 );
-                            float objTTC = length / ( memory.perceptedObjects[i]->V + 0.1 );
-
-                            strForDebugRiskEval += QString("SmyTTC=%1 objTTC=%2\n").arg( myTTC ).arg( objTTC );
-
-                            if( myTTC < 6.0 && (objTTC < myTTC || distToSideLaneMergePoint[j] > length) ){
-
-                                bool regardAsPreceding = false;
-                                if( memory.precedingVehicleID < 0 ){
-                                    regardAsPreceding = true;
+                                    continue;
                                 }
-                                else{
 
-                                    float relVp = state.V - memory.speedPrecedingVehicle;
-                                    if( relVp < 0.1 ){
-                                        relVp = 0.1;
-                                    }
-                                    float TTCp = memory.distanceToPrecedingVehicle / relVp;
 
-                                    float relVt = state.V - memory.perceptedObjects[i]->V;
-                                    if( relVt < 0.1 ){
-                                        relVt = 0.1;
+                                if( pAgent[objID]->memory_reference.currentTargetPathIndexInList >= 0 &&
+                                        pAgent[objID]->memory_reference.targetPathList.size() > 0 &&
+                                        pAgent[objID]->memory_reference.currentTargetPathIndexInList < pAgent[objID]->memory_reference.targetPathList.size() ){
+
+                                    float length = 0.0;
+                                    for(int k=sIdx;k<=pAgent[objID]->memory_reference.currentTargetPathIndexInList;k++){
+                                        int pIdx = pRoad->pathId2Index.indexOf( pAgent[objID]->memory_reference.targetPathList[k] );
+                                        length += pRoad->paths[pIdx]->pathLength;
                                     }
-                                    float TTCt = memory.perceptedObjects[i]->distanceToObject / relVt;
-                                    if( TTCt < 0.0 ){
+                                    length -= pAgent[objID]->memory_reference.distanceFromStartWPInCurrentPath;
+
+                                    strForDebugRiskEval += QString("length=%1 RefLength=%2\n").arg( length )
+                                            .arg( pAgent[objID]->memory_reference.requiredDistToStopFromTargetSpeed );
+
+                                    if( length > pAgent[objID]->memory_reference.requiredDistToStopFromTargetSpeed ){
+
+                                        alreadyCheckedList.append( objID );
+
                                         continue;
                                     }
 
-                                    if( TTCp > TTCt ){
-                                        regardAsPreceding = true;
+                                    strForDebugRiskEval += QString("SideMerge: V=%1, path=%2 length=%3\n").arg( objID ).arg(memory.laneMerge[j].y()).arg(length);
+
+                                    float myTTC = distToSideLaneMergePoint[j] / (state.V + 0.1 );
+                                    float objTTC = length / ( memory.perceptedObjects[i]->V + 0.1 );
+
+                                    strForDebugRiskEval += QString("SmyTTC=%1 objTTC=%2\n").arg( myTTC ).arg( objTTC );
+
+                                    if( myTTC < 6.0 && (objTTC < myTTC || distToSideLaneMergePoint[j] > length) ){
+
+                                        bool regardAsPreceding = false;
+                                        if( memory.precedingVehicleID < 0 ){
+                                            regardAsPreceding = true;
+                                        }
+                                        else{
+
+                                            float relVp = state.V - memory.speedPrecedingVehicle;
+                                            if( relVp < 0.1 ){
+                                                relVp = 0.1;
+                                            }
+                                            float TTCp = memory.distanceToPrecedingVehicle / relVp;
+
+                                            float relVt = state.V - memory.perceptedObjects[i]->V;
+                                            if( relVt < 0.1 ){
+                                                relVt = 0.1;
+                                            }
+                                            float TTCt = memory.perceptedObjects[i]->distanceToObject / relVt;
+                                            if( TTCt < 0.0 ){
+                                                continue;
+                                            }
+
+                                            if( TTCp > TTCt ){
+                                                regardAsPreceding = true;
+                                            }
+
+                                            float H = memory.perceptedObjects[i]->distanceToObject;
+                                            H -= vHalfLength;
+                                            H -= memory.perceptedObjects[i]->vHalfLength;
+
+                                            if( H < param.minimumHeadwayDistanceAtStop &&
+                                                    fabs(memory.perceptedObjects[i]->deviationFromNearestTargetPath) - memory.perceptedObjects[i]->effectiveHalfWidth < 1.5 ){
+
+                                                regardAsPreceding = true;
+                                            }
+
+                                            strForDebugRiskEval += QString("[S]V%1 TTCt=%2 TTCp=%3 : PV=%4\n")
+                                                    .arg( memory.perceptedObjects[i]->objectID )
+                                                    .arg( TTCt )
+                                                    .arg( TTCp )
+                                                    .arg( memory.precedingVehicleID );
+
+                                        }
+
+                                        strForDebugRiskEval += QString("V%1 regardAsPreceding=%2 : PV=%3\n")
+                                                .arg( memory.perceptedObjects[i]->objectID )
+                                                .arg( regardAsPreceding )
+                                                .arg( memory.precedingVehicleID );
+
+                                        if( regardAsPreceding == true ){
+
+                                            memory.precedingVehicleID         = memory.perceptedObjects[i]->objectID;
+                                            memory.distanceToPrecedingVehicle = memory.perceptedObjects[i]->distanceToObject;
+                                            memory.speedPrecedingVehicle      = memory.perceptedObjects[i]->V;
+                                            memory.axPrecedingVehicle         = memory.perceptedObjects[i]->Ax;
+                                            memory.halfLenPrecedingVehicle    = memory.perceptedObjects[i]->vHalfLength;
+                                            memory.precedingVehicleIndex      = i;
+                                            memory.precedingObstacle          = 0;
+                                        }
                                     }
-
-                                    float H = memory.perceptedObjects[i]->distanceToObject;
-                                    H -= vHalfLength;
-                                    H -= memory.perceptedObjects[i]->vHalfLength;
-
-                                    if( H < param.minimumHeadwayDistanceAtStop &&
-                                            fabs(memory.perceptedObjects[i]->deviationFromNearestTargetPath) - memory.perceptedObjects[i]->effectiveHalfWidth < 1.5 ){
-
-                                        regardAsPreceding = true;
-                                    }
-
-                                    strForDebugRiskEval += QString("[S]V%1 TTCt=%2 TTCp=%3 : PV=%4\n")
-                                            .arg( memory.perceptedObjects[i]->objectID )
-                                            .arg( TTCt )
-                                            .arg( TTCp )
-                                            .arg( memory.precedingVehicleID );
-
-                                }
-
-                                strForDebugRiskEval += QString("V%1 regardAsPreceding=%2 : PV=%3\n")
-                                        .arg( memory.perceptedObjects[i]->objectID )
-                                        .arg( regardAsPreceding )
-                                        .arg( memory.precedingVehicleID );
-
-                                if( regardAsPreceding == true ){
-
-                                    memory.precedingVehicleID         = memory.perceptedObjects[i]->objectID;
-                                    memory.distanceToPrecedingVehicle = memory.perceptedObjects[i]->distanceToObject;
-                                    memory.speedPrecedingVehicle      = memory.perceptedObjects[i]->V;
-                                    memory.axPrecedingVehicle         = memory.perceptedObjects[i]->Ax;
-                                    memory.halfLenPrecedingVehicle    = memory.perceptedObjects[i]->vHalfLength;
-                                    memory.precedingVehicleIndex      = i;
-                                    memory.precedingObstacle          = 0;
                                 }
                             }
                         }
                     }
 
 
+                    // Check Merging vehicle
                     if( pRoad->LeftOrRight == 0 ){
 
                         // Check if to regard merging from left as preceding
@@ -1503,6 +1517,10 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad,QList<Traff
                             continue;
                         }
 
+//                        if( pAgent[memory.perceptedObjects[i]->objectID]->isSInterfaceObject == true ){
+//                            continue;
+//                        }
+
                         if( memory.perceptedObjects[i]->objectType >= 100 ){
                             continue;
                         }
@@ -2021,6 +2039,10 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad,QList<Traff
                                     continue;
                                 }
 
+//                                if( pAgent[memory.perceptedObjects[i]->objectID]->isSInterfaceObject == true ){
+//                                    continue;
+//                                }
+
                                 if( memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::LEFT_CROSSING_STRAIGHT &&
                                         memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::LEFT_CROSSING_LEFT &&
                                         memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::LEFT_CROSSING_RIGHT ){
@@ -2083,6 +2105,10 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad,QList<Traff
                                 if( memory.perceptedObjects[i]->objectType >= 100 ){
                                     continue;
                                 }
+
+//                                if( pAgent[memory.perceptedObjects[i]->objectID]->isSInterfaceObject == true ){
+//                                    continue;
+//                                }
 
                                 if( memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_STRAIGHT &&
                                         memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::RIGHT_CROSSING_LEFT &&
@@ -2162,6 +2188,10 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad,QList<Traff
                     if( memory.perceptedObjects[i]->isValidData == false ){
                         continue;
                     }
+
+//                    if( pAgent[memory.perceptedObjects[i]->objectID]->isSInterfaceObject == true ){
+//                        continue;
+//                    }
 
                     if( memory.perceptedObjects[i]->objectType >= 100 ){
                         continue;

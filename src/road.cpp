@@ -658,7 +658,7 @@ void Road::LoadRoadData(QString filename)
                 QStringList nodeList = elem;
                 nodeList.removeAt(0);
 
-                qDebug() << "Route Multi-Lanes: nodeList = " << nodeList;
+//                qDebug() << "Route Multi-Lanes: nodeList = " << nodeList;
 
                 for(int i=0;i<odRoute.size();++i){
 
@@ -679,7 +679,7 @@ void Road::LoadRoadData(QString filename)
 
                     currentODRouteIndex = i;
 
-                    qDebug() << "currentODRouteIndex = " << currentODRouteIndex;
+//                    qDebug() << "currentODRouteIndex = " << currentODRouteIndex;
                 }
             }
             else if( com == 2 ){
@@ -697,9 +697,9 @@ void Road::LoadRoadData(QString filename)
 
                     odRoute[currentODRouteIndex]->LCSupportLaneLists.append( rld );
 
-                    qDebug() << "RouteLaneData add to odRoute[" << currentODRouteIndex << "]->LCSupportLaneLists: size = "
-                             << odRoute[currentODRouteIndex]->LCSupportLaneLists.size();
-                    qDebug() << "    Start = " << rld->startNode << " Goal = " << rld->goalNode;
+//                    qDebug() << "RouteLaneData add to odRoute[" << currentODRouteIndex << "]->LCSupportLaneLists: size = "
+//                             << odRoute[currentODRouteIndex]->LCSupportLaneLists.size();
+//                    qDebug() << "    Start = " << rld->startNode << " Goal = " << rld->goalNode;
                 }
 
             }
@@ -719,12 +719,12 @@ void Road::LoadRoadData(QString filename)
 
                     rld->laneList.append( lanelist );
 
-                    for(int i=0;i<odRoute[currentODRouteIndex]->LCSupportLaneLists.size();++i){
-                        qDebug() << "odRoute[" << currentODRouteIndex << "]->LCSupportLaneLists[" << i << "]:";
-                        for(int j=0;j<odRoute[currentODRouteIndex]->LCSupportLaneLists[i]->laneList.size();++j){
-                            qDebug() << "  Lane List[" << j << "] : " << odRoute[currentODRouteIndex]->LCSupportLaneLists[i]->laneList[j];
-                        }
-                    }
+//                    for(int i=0;i<odRoute[currentODRouteIndex]->LCSupportLaneLists.size();++i){
+//                        qDebug() << "odRoute[" << currentODRouteIndex << "]->LCSupportLaneLists[" << i << "]:";
+//                        for(int j=0;j<odRoute[currentODRouteIndex]->LCSupportLaneLists[i]->laneList.size();++j){
+//                            qDebug() << "  Lane List[" << j << "] : " << odRoute[currentODRouteIndex]->LCSupportLaneLists[i]->laneList[j];
+//                        }
+//                    }
                 }
             }
         }
@@ -734,7 +734,7 @@ void Road::LoadRoadData(QString filename)
 
             QStringList nodeList = QString( elem[0] ).trimmed().split(",");
 
-            qDebug() << "Route Lanes: nodeList = " << nodeList;
+//            qDebug() << "Route Lanes: nodeList = " << nodeList;
 
             for(int i=0;i<odRoute.size();++i){
 
@@ -1060,7 +1060,7 @@ void Road::LoadRoadData(QString filename)
 
         for(int j=1;j<odRoute[i]->LCSupportLaneLists.size();++j){
 
-            qDebug() << "odRoute[" << i << "]: need LC , LCSupportLaneLists[" << j << "] -> [" << j-1 << "]";
+//            qDebug() << "odRoute[" << i << "]: need LC , LCSupportLaneLists[" << j << "] -> [" << j-1 << "]";
 
             struct RouteLaneData *rld = odRoute[i]->LCSupportLaneLists.at( j );
 
@@ -1078,7 +1078,7 @@ void Road::LoadRoadData(QString filename)
                     break;
                 }
             }
-            qDebug() << "    myWPin = " << myWPin;
+//            qDebug() << "    myWPin = " << myWPin;
 
             struct RouteLaneData *nextrld = odRoute[i]->LCSupportLaneLists.at( j-1 );
 
@@ -1096,7 +1096,7 @@ void Road::LoadRoadData(QString filename)
                 }
             }
 
-            qDebug() << "    targetWPin = " << targetWPin;
+//            qDebug() << "    targetWPin = " << targetWPin;
 
             if( myWPin >= 0 && targetWPin >= 0 ){
 
@@ -1107,13 +1107,13 @@ void Road::LoadRoadData(QString filename)
                     if( nodes[ndIdx]->inBoundaryWPs[i]->wpId == myWPin ){
                         laneNoDiff += nodes[ndIdx]->inBoundaryWPs[i]->laneNo;
 
-                        qDebug() << "    [m]laneNoDiff = " << laneNoDiff;
+//                        qDebug() << "    [m]laneNoDiff = " << laneNoDiff;
 
                     }
                     if( nodes[ndIdx]->inBoundaryWPs[i]->wpId == targetWPin ){
                         laneNoDiff -= nodes[ndIdx]->inBoundaryWPs[i]->laneNo;
 
-                        qDebug() << "    [t]laneNoDiff = " << laneNoDiff;
+//                        qDebug() << "    [t]laneNoDiff = " << laneNoDiff;
                     }
                 }
 
@@ -1126,7 +1126,7 @@ void Road::LoadRoadData(QString filename)
 
             }
 
-            qDebug() << "    LCDirect = " << rld->LCDirect << " " << (rld->LCDirect == DIRECTION_LABEL::RIGHT_CROSSING ? "RIGHT" : (rld->LCDirect == DIRECTION_LABEL::LEFT_CROSSING ? "LEFT" : "STRAIGHT") );
+//            qDebug() << "    LCDirect = " << rld->LCDirect << " " << (rld->LCDirect == DIRECTION_LABEL::RIGHT_CROSSING ? "RIGHT" : (rld->LCDirect == DIRECTION_LABEL::LEFT_CROSSING ? "LEFT" : "STRAIGHT") );
         }
     }
 
@@ -1418,16 +1418,6 @@ void Road::SetPathShape(int id)
     }
 
     CalculatePathShape( paths[index] );
-
-    if( paths[index]->id == 31 ){
-        for(int i=0;i<paths[index]->pos.size();++i){
-            qDebug() << QString("[%1]Pos=(%2,%3) Deriv=(%4,%5)").arg(i)
-                        .arg( paths[index]->pos[i]->x() )
-                        .arg( paths[index]->pos[i]->y() )
-                        .arg( paths[index]->derivative[i]->x() )
-                        .arg( paths[index]->derivative[i]->y() );
-        }
-    }
 }
 
 

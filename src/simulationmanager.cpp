@@ -590,7 +590,6 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
             pAgent[objID]->agentKind = 0;
 
-            int vKind = 0;
             pAgent[objID]->vehicle.SetVehicleModelID( 0 );
 
             {
@@ -600,8 +599,6 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                 for(int j=0;j<pRoad->odRoute[i]->vehicleKindSelectProbability.size();++j){
 
                     if( p <= rnd && rnd < p + pRoad->odRoute[i]->vehicleKindSelectProbability[j] ){
-
-                        vKind = j;
 
                         pAgent[objID]->vehicle.SetVehicleModelID( j );
 
@@ -1084,11 +1081,14 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pathSelectID = pAgent[objectID]->memory.scenarioPathSelectID;
                 }
 
+
                 for(int j=0;j<pRoad->paths.size();++j){
                     if( pRoad->paths[j]->scenarioObjectID != pathSelectID ){
                         continue;
                     }
                     pAgent[objectID]->memory.targetPathList.prepend( pRoad->paths[j]->id );
+
+                    pAgent[objectID]->memory.targetPathLength.append( pRoad->paths[j]->pathLength );
                 }
 
                 float tdev,txt,tyt,txd,tyd,ts;
@@ -1276,7 +1276,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             if( pmID < 0 || pmID >= pRoad->pedestrianKind.size() ){
                 pmID = 0;
             }
-            pAgent[objectID]->vehicle.SetVehicleID( pmID );   // This ID is used to draw the object in canvas
+            pAgent[objectID]->vehicle.SetVehicleModelID( pmID );   // This ID is used to draw the object in canvas
 
 
             // Set route information

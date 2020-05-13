@@ -197,7 +197,11 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
             QueryPerformanceCounter(&start);
     #endif
 
-            if( memory.currentTargetNode != memory.nextTurnNode ){
+            if( memory.currentTargetNode != memory.nextTurnNode &&
+                    memory.currentTargetNodeIndexInNodeList >= 0 &&
+                    memory.currentTargetNodeIndexInNodeList < memory.myNodeList.size() &&
+                    memory.currentTargetNodeIndexInNodeList < memory.myInDirList.size() &&
+                    memory.currentTargetNodeIndexInNodeList < memory.myOutDirList.size() ){
 
                 QList<int> destPathsIn;
                 QList<int> destPathsOut;
@@ -385,6 +389,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
             continue;
         }
 
+
         if( onlyCheckPreceding == true && pAgent[i]->ID != memory.precedingVehicleID ){
             continue;
         }
@@ -428,12 +433,14 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
         }
 
 
-        if( pAgent[i]->isSInterfaceObject == false && pAgent[i]->agentKind < 100 ){
+        if( pAgent[i]->isSInterfaceObject == false && pAgent[i]->agentKind < 100 &&
+                memory.currentTargetNodeIndexInNodeList >= 0 &&
+                memory.currentTargetNodeIndexInNodeList < memory.myNodeList.size() ){
             // Check route data to have cross node
             bool hasCrossNode = false;
             for(int j=memory.currentTargetNodeIndexInNodeList;j<memory.myNodeList.size();++j){
                 int tNd = memory.myNodeList[j];
-                if( pAgent[i]->memory.myNodeList.indexOf( tNd ) >= pAgent[i]->memory_reference.currentTargetNodeIndexInNodeList ){
+                if( pAgent[i]->memory_reference.myNodeList.indexOf( tNd ) >= pAgent[i]->memory_reference.currentTargetNodeIndexInNodeList ){
                     hasCrossNode = true;
                     break;
                 }

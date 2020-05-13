@@ -160,6 +160,7 @@ int main(int argc, char *argv[])
 
     w.setWindowTitle("MDS02-Canopus | Re:sim");
     w.setMinimumSize( QSize(800,600) );
+    w.setWindowIcon( QIcon(":images/resim-icon.png") );
     w.show();
 
     if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){

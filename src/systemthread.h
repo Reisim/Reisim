@@ -23,6 +23,7 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QList>
+#include <QMutex>
 
 #include "udpthread.h"
 #include "simulationmanager.h"
@@ -86,8 +87,8 @@ public slots:
     void SimulationResume();
     void SetSpeedAdjustVal(int);
     void wrapExitProgram();
-    void SetSendData(char *,int,int *);
-    void SetSendDataForFuncExtend(char *,int,int *);
+    void SetSendData(char *,int,int *,int ,int ,int);
+    void SetSendDataForFuncExtend(char *,int,int *,int ,int ,QList<int>);
     void SetSimulationFrequency(int);
     void SetTireHeight(int,float,float,float,float);
 
@@ -161,6 +162,7 @@ private:
 
     QString restartFile;
 
+    QMutex *mutexDSStateWrite;
 };
 
 #endif // SYSTEMTHREAD_H
