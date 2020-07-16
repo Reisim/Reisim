@@ -82,6 +82,8 @@ class LowPassFilter
 public:
     LowPassFilter(int dim,float dt,float cutoffFrq,float dampingCoef);
     void SetInput(float u1){ u[0] = u1; }
+    void SetInitialValue(float y0){ y[0] = y0; y[1] = y0; y[2] = y0; u[0] = y0; u[1] = y0; u[2] = y0; }
+    void SetParam(int dim,float dt,float cutoffFrq,float dampingCoef);
     float GetOutput(){ return y[0]; }
     float GetInput(){ return u[0]; }
     void Update();
@@ -163,6 +165,7 @@ public:
     LowPassFilter *tireFR4CG;
     LowPassFilter *tireRL4CG;
     LowPassFilter *tireRR4CG;
+    LowPassFilter *yawFiltered4CG;
 
     float axBuf4BrakeLamp[3];
     int axBufIndex;

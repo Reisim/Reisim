@@ -116,7 +116,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
         memory.distanceToNodeWPOut     = -1.0;
 
         // only for agent with node list route data
-        if( memory.myNodeList.size() > 0 ){
+        if( memory.myNodeList.size() > 1 ){
 
 #ifdef _PERFORMANCE_CHECK_AGENT_PERCEPTION
             QueryPerformanceCounter(&start);
@@ -284,6 +284,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
             int currentPath = pRoad->GetNearestPathFromList( memory.laneChangeTargetPathList,
                                                              state.x,
                                                              state.y,
+                                                             state.z_path,
                                                              state.yaw,
                                                              tdev, txt, tyt, txd, tyd, ts);
 
@@ -385,7 +386,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
             continue;
         }
 
-        if( pAgent[i]->agentStatus == 0 ){
+        if( pAgent[i]->agentStatus != 1 ){
             continue;
         }
 
@@ -737,8 +738,11 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
                     float tdev,txt,tyt,txd,tyd,ts;
                     int objPathInLCPath = pRoad->GetNearestPathFromList( memory.laneChangeTargetPathList,
-                                                                     pAgent[i]->state.x, pAgent[i]->state.y, pAgent[i]->state.yaw,
-                                                                     tdev, txt, tyt, txd, tyd, ts);
+                                                                         pAgent[i]->state.x,
+                                                                         pAgent[i]->state.y,
+                                                                         pAgent[i]->state.z_path,
+                                                                         pAgent[i]->state.yaw,
+                                                                         tdev, txt, tyt, txd, tyd, ts);
 
                     if( objPathInLCPath >= 0 ){
                         memory.perceptedObjects[alreadyPercepted]->objPathInLCTargetPathList = objPathInLCPath;
@@ -1058,8 +1062,11 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
                     float tdev,txt,tyt,txd,tyd,ts;
                     int objPathInLCPath = pRoad->GetNearestPathFromList( memory.laneChangeTargetPathList,
-                                                                     pAgent[i]->state.x, pAgent[i]->state.y, pAgent[i]->state.yaw,
-                                                                     tdev, txt, tyt, txd, tyd, ts);
+                                                                         pAgent[i]->state.x,
+                                                                         pAgent[i]->state.y,
+                                                                         pAgent[i]->state.z_path,
+                                                                         pAgent[i]->state.yaw,
+                                                                         tdev, txt, tyt, txd, tyd, ts);
 
                     if( objPathInLCPath >= 0 ){
                         ap->objPathInLCTargetPathList = objPathInLCPath;

@@ -107,6 +107,7 @@ struct Path
 
     float pathLength;
     float meanPathCurvature;
+    float maxPathCurvature;
 
     float speedInfo;   // Speed Limit[m/s]
     float speed85pt;    // Actual Speed, 85th-percentile[m/s]
@@ -139,7 +140,6 @@ struct PedestPathShapeInfo
     int controlPedestSignalID;
     int runOutDirect;
     float runOutProb;
-
 };
 
 struct PedestPath
@@ -247,6 +247,9 @@ struct ODRouteData
     float meanArrivalTime;
     float NextAppearTime;
     QList<QList<QPoint>> mergeLanesInfo;
+
+    bool onlyForScenarioVehicle;
+    int relatedScenarioObjectID;
 };
 
 
@@ -279,9 +282,12 @@ public:
 
     float GetPathLength(int pathID);
     int GetNearestPath(float xp, float yp,float yawAngle,
-                       float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP);
-    int GetNearestPathFromList(QList<int> &pathList,float xp,float yp,float yawAngle,
+                       float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP,
+                       bool negrectYawAngleInfo = false );
+    int GetNearestPathFromList(QList<int> &pathList,float xp,float yp,float zp,float yawAngle,
                                float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP);
+    int GetNearestPathFromListWithZ(QList<int> &pathList,float xp,float yp,float yawAngle,
+                               float &deviation,float &xt,float &yt,float &zt,float &xderiv,float &yderiv,float &distFromStartWP);
     int GetDeviationFromPath(int pathID,
                              float xp,float yp,float yawAngle,
                              float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP,

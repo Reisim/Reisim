@@ -79,7 +79,7 @@ Agent::Agent()
     param.crossTimeSafetyMargin = 2.5;
     param.crossWaitPositionSafeyMargin = 7.5;
     param.pedestWaitPositionSafetyMargin = 5.0;
-    param.safetyConfirmTime = 1.5;
+    param.safetyConfirmTime = 0.75;
 
     param.speedVariationFactor = 0.0;
 
@@ -107,10 +107,9 @@ Agent::Agent()
 
     memory.perceptedSignals.append( vts );
 
-
-
-
-
+    for(int i=0;i<10;++i){
+        UE4ObjectID[i] = -1;
+    }
 
 #ifdef _PERFORMANCE_CHECK_AGENT
     QueryPerformanceFrequency(&freq);
@@ -142,6 +141,27 @@ void Agent::InitializeMemory()
 
     if( memory.targetPathList.size() > 0 ){
         memory.targetPathList.clear();
+    }
+
+    memory.ADDisturbFlag = false;
+    memory.ADDisturbCount = 0;
+
+    if( memory.ADDisturbTime.size() > 0 ){
+        memory.ADDisturbTime.clear();
+    }
+    if( memory.ADDisturb.size() > 0 ){
+        memory.ADDisturb.clear();
+    }
+
+    memory.steerDisturbFlag = false;
+    memory.steerDisturbCount = 0;
+    memory.steerDisturbInit = 0.0;
+
+    if( memory.steerDisturbTime.size() > 0 ){
+        memory.steerDisturbTime.clear();
+    }
+    if( memory.steerDisturb.size() > 0 ){
+        memory.steerDisturb.clear();
     }
 
     memory.currentTargetPath = -1;
@@ -200,6 +220,10 @@ void Agent::InitializeMemory()
 
     strForDebug         = QString("");
     strForDebugRiskEval = QString("");
+
+    for(int i=0;i<10;++i){
+        UE4ObjectID[i] = -1;
+    }
 }
 
 

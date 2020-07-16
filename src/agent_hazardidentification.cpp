@@ -37,12 +37,17 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
 
 
             // If far from intersection, skip CP check
+            bool skipCPCheckOfVehicle = false;
             if( memory.distanceToNodeWPIn > 6.0 * ( state.V > 5.0 ? state.V : 5.0) ){
-                return;
+
+                skipCPCheckOfVehicle = true;
+
             }
 
             if( onlyCheckPreceding == true ){
-                return;
+
+                skipCPCheckOfVehicle = true;
+
             }
 
 
@@ -53,6 +58,12 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
             // Collision or Mergining Point Check
             for(int i=0;i<memory.perceptedObjects.size();++i){
 
+                memory.perceptedObjects[i]->hasCollisionPoint = false;
+
+                if( skipCPCheckOfVehicle == true && memory.perceptedObjects[i]->objectType < 100 ){
+                    continue;
+                }
+
                 if( memory.perceptedObjects[i]->isValidData == false ){
                     continue;
                 }
@@ -62,19 +73,16 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
 //                }
 
                 if( memory.perceptedObjects[i]->relPosEvaled == false ){
-                    memory.perceptedObjects[i]->hasCollisionPoint = false;
                     continue;
                 }
 
 
                 // Not evaluate far object
                 if( memory.perceptedObjects[i]->distanceToObject > 100.0 ){
-                    memory.perceptedObjects[i]->hasCollisionPoint = false;
                     continue;
                 }
                 // Not evaluate behind object
                 else if( memory.perceptedObjects[i]->distanceToObject < -5.0 ){
-                    memory.perceptedObjects[i]->hasCollisionPoint = false;
                     continue;
                 }
 
@@ -88,36 +96,38 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                     int plIdx = pRoad->pedestPathID2Index.indexOf( memory.perceptedObjects[i]->objectPath );
                     if( plIdx >= 0 ){
 
-                            memory.perceptedObjects[i]->hasCollisionPoint = false;
+                        memory.perceptedObjects[i]->hasCollisionPoint = false;
 
-                            for(int j=memory.currentTargetPathIndexInList;j>=0;j--){
+                        for(int j=memory.currentTargetPathIndexInList;j>=0;j--){
 
-                                int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList[j] );
-                                if( pRoad->paths[pIdx]->pedestCrossPoints.size() == 0 ){
+                            int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList[j] );
+                            if( pRoad->paths[pIdx]->pedestCrossPoints.size() == 0 ){
+                                continue;
+                            }
+
+                            for(int k=0;k<pRoad->paths[pIdx]->pedestCrossPoints.size();++k){
+
+                                if( pRoad->paths[pIdx]->pedestCrossPoints[k]->crossPathID != memory.perceptedObjects[i]->objectPath ){
                                     continue;
                                 }
 
-                                for(int k=0;k<pRoad->paths[pIdx]->pedestCrossPoints.size();++k){
+                                memory.perceptedObjects[i]->hasCollisionPoint = true;
 
-                                    if( pRoad->paths[pIdx]->pedestCrossPoints[k]->crossPathID != memory.perceptedObjects[i]->objectPath ){
-                                        continue;
-                                    }
+                                memory.perceptedObjects[i]->xCP = pRoad->paths[pIdx]->pedestCrossPoints[k]->pos.x();
+                                memory.perceptedObjects[i]->yCP = pRoad->paths[pIdx]->pedestCrossPoints[k]->pos.y();
 
-                                    memory.perceptedObjects[i]->hasCollisionPoint = true;
+                                memory.perceptedObjects[i]->myCPPathIndex  = j;
+                                memory.perceptedObjects[i]->objCPPathIndex = k;
 
-                                    memory.perceptedObjects[i]->xCP = pRoad->paths[pIdx]->pedestCrossPoints[k]->pos.x();
-                                    memory.perceptedObjects[i]->yCP = pRoad->paths[pIdx]->pedestCrossPoints[k]->pos.y();
-
-                                    memory.perceptedObjects[i]->myCPPathIndex  = j;
-                                    memory.perceptedObjects[i]->objCPPathIndex = k;
-
-                                    break;
-                                }
-
-                                if( memory.perceptedObjects[i]->hasCollisionPoint == true ){
-                                    break;
-                                }
+                                break;
                             }
+
+                            if( memory.perceptedObjects[i]->hasCollisionPoint == true ){
+                                break;
+                            }
+                        }
+
+                        strForDebugRiskEval += QString("P%1 myIdx=%2 ObjIdx=%3\n").arg( memory.perceptedObjects[i]->objectID ).arg( memory.perceptedObjects[i]->myCPPathIndex ).arg( memory.perceptedObjects[i]->objCPPathIndex );
 
 
                         // Update distance to CP
@@ -128,16 +138,29 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                             int k = memory.perceptedObjects[i]->objCPPathIndex;
 
                             float myDist = 0.0;
-                            for(int l=memory.currentTargetPathIndexInList;l>=0;l--){
-                                if( l == j ){
+                            if( memory.currentTargetPathIndexInList >= j ){
+                                for(int l=memory.currentTargetPathIndexInList;l>=0;l--){
+                                    if( l == j ){
 
-                                    myDist += pRoad->paths[pIdx]->pedestCrossPoints[k]->distFromStartWP;
-                                    break;
+                                        myDist += pRoad->paths[pIdx]->pedestCrossPoints[k]->distFromStartWP;
+                                        break;
+                                    }
+                                    int tpIdx = pRoad->pathId2Index.indexOf( memory.targetPathList[l] );
+                                    myDist += pRoad->paths[tpIdx]->pathLength;
                                 }
-                                int tpIdx = pRoad->pathId2Index.indexOf( memory.targetPathList[l] );
-                                myDist += pRoad->paths[tpIdx]->pathLength;
+                                myDist -= memory.distanceFromStartWPInCurrentPath;
                             }
-                            myDist -= memory.distanceFromStartWPInCurrentPath;
+                            else{
+
+                                myDist -= pRoad->paths[pIdx]->pedestCrossPoints[k]->distFromStartWP;
+
+                                for(int l=j;l<memory.currentTargetPathIndexInList;l++){
+                                    int tpIdx = pRoad->pathId2Index.indexOf( memory.targetPathList[l] );
+                                    myDist -= pRoad->paths[tpIdx]->pathLength;
+                                }
+
+                                myDist += memory.distanceFromStartWPInCurrentPath;
+                            }
 
                             memory.perceptedObjects[i]->myDistanceToCP = myDist;
                             memory.perceptedObjects[i]->myTimeToCP = myDist / (state.V + 0.5);
@@ -146,9 +169,21 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                             float dx = memory.perceptedObjects[i]->xCP - memory.perceptedObjects[i]->x;
                             float dy = memory.perceptedObjects[i]->yCP - memory.perceptedObjects[i]->y;
                             float objDist = dx * (pRoad->pedestPaths[plIdx]->shape[secIdx]->cosA) + dy * (pRoad->pedestPaths[plIdx]->shape[secIdx]->sinA);
+                            float objWidth = dx * (pRoad->pedestPaths[plIdx]->shape[secIdx]->sinA) * (-1.0) + dy * (pRoad->pedestPaths[plIdx]->shape[secIdx]->cosA);
+                            if( objWidth > 4.5 ){
+                                objDist += objWidth;
+                            }
+                            else if( objWidth < -4.5 ){
+                                objDist -= objWidth;
+                            }
 
                             memory.perceptedObjects[i]->objectDistanceToCP = objDist;
                             memory.perceptedObjects[i]->objectTimeToCP = objDist / (memory.perceptedObjects[i]->V + 0.1);
+
+
+                            if( memory.perceptedObjects[i]->myDistanceToCP < 0.0 ){
+                                memory.perceptedObjects[i]->hasCollisionPoint = false;
+                            }
                         }
                     }
 
@@ -499,73 +534,27 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                         }
                         continue;
                     }
-
-                    memory.shouldYeild = true;
-
-                    float dist = -1.0;
-                    for(int j=0;j<pRoad->paths[pIdx]->stopPoints.size();++j){
-                        if( dist < 0.0 || dist > pRoad->paths[pIdx]->stopPoints[j]->distFromStartWP ){
-                            dist = pRoad->paths[pIdx]->stopPoints[j]->distFromStartWP;
-                        }
-                    }
-                    memory.distToYeildStopLine += dist;
-                    memory.distToYeildStopLine -= memory.distanceFromStartWPInCurrentPath;
-
-                    break;
-                }
-            }
-
-            float tmpDist = memory.distanceFromStartWPInCurrentPath * (-1.0);
-            bool backCheck = false;
-            distEvaled = 0.0;
-            for(int i=memory.currentTargetPathIndexInList+1;i<memory.targetPathList.size();i++){
-
-                int pIdx = pRoad->pathId2Index.indexOf( memory.targetPathList[i] );
-                if( pRoad->paths[pIdx]->stopPoints.size() == 0 ){
-                    tmpDist -= pRoad->paths[pIdx]->pathLength;
-                    distEvaled += pRoad->paths[pIdx]->pathLength;
-                    if( distEvaled > 200.0 ){
-                        break;
-                    }
-                    continue;
-                }
-                else{
-                    int nIdx = pRoad->nodeId2Index.indexOf( pRoad->paths[pIdx]->connectingNode );
-                    if( pRoad->nodes[nIdx]->hasTS == true ){
-                        tmpDist -= pRoad->paths[pIdx]->pathLength;
-                        distEvaled += pRoad->paths[pIdx]->pathLength;
-                        if( distEvaled > 200.0 ){
-                            break;
-                        }
-                        continue;
-                    }
-
-                    if( pRoad->paths[pIdx]->connectingNode == memory.currentTargetNode ){
-                        backCheck = true;
-                        tmpDist -= pRoad->paths[pIdx]->pathLength;
+                    else{
 
                         float dist = -1.0;
                         for(int j=0;j<pRoad->paths[pIdx]->stopPoints.size();++j){
-                            if( dist < pRoad->paths[pIdx]->stopPoints[j]->distFromStartWP ){
+                            if( dist < 0.0 || dist > pRoad->paths[pIdx]->stopPoints[j]->distFromStartWP ){
                                 dist = pRoad->paths[pIdx]->stopPoints[j]->distFromStartWP;
                             }
                         }
-                        tmpDist += dist;
 
-                        break;
-                    }
-                    else{
-                        distEvaled += pRoad->paths[pIdx]->pathLength;
-                        if( distEvaled > 200.0 ){
+                        if( memory.distToYeildStopLine + dist - memory.distanceFromStartWPInCurrentPath > 200.0){
                             break;
                         }
+
+                        memory.shouldYeild = true;
+                        memory.distToYeildStopLine += dist;
+                        memory.distToYeildStopLine -= memory.distanceFromStartWPInCurrentPath;
+                        break;
                     }
                 }
             }
-            if( backCheck == true ){
-                memory.shouldYeild = true;
-                memory.distToYeildStopLine = tmpDist;
-            }
+
 
 #ifdef _PERFORMANCE_CHECK_AGENT_HAZARD
             QueryPerformanceCounter(&end);

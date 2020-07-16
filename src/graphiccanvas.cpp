@@ -80,7 +80,14 @@ GraphicCanvas::GraphicCanvas(QOpenGLWidget *parent) : QOpenGLWidget(parent)
     fontScale = 14;
 
     currentWidth = 800;
-    currentHeight = 600;
+    currentHeight = 800;
+
+    trackingMode = false;
+    trackingObjID = -1;
+
+    last_X_eye = X_eye;
+    last_Y_eye = Y_eye;
+    last_Z_eye = Z_eye;
 }
 
 
@@ -315,6 +322,25 @@ void GraphicCanvas::paintGL()
     float cyc = cos( cameraYaw );
     float cys = sin( cameraYaw );
 
+    if( trackingMode == true ){
+
+        if( trackingObjID >= 0 && trackingObjID < maxAgent ){
+
+            xE = agent[trackingObjID]->state.x * (-1.0);
+            yE = agent[trackingObjID]->state.y * (-1.0);
+
+            cpc = cos( cameraPitch );
+            cps = sin( cameraPitch );
+
+            cameraYaw = agent[trackingObjID]->state.yaw * (-1.0) + 3.141592 * 0.5;
+            cyc = cos( cameraYaw );
+            cys = sin( cameraYaw );
+
+            cameraQuat = QQuaternion(cos(cameraPitch*0.5), sin(cameraPitch*0.5) , 0.0 , 0.0 ) * QQuaternion(cos(cameraYaw*0.5), 0.0 , 0.0 , sin(cameraYaw*0.5));
+        }
+    }
+
+
     X_trans = xE * cyc - yE * cys;
     Y_trans = xE * cys + yE * cyc;
 
@@ -323,7 +349,6 @@ void GraphicCanvas::paintGL()
     Z_trans = yE * cps;
 
     Z_trans += Z_eye;
-
 
     w2c.translate( QVector3D(X_trans,Y_trans, Z_trans) );
 
@@ -403,11 +428,19 @@ void GraphicCanvas::paintGL()
 
 
                 int colorPos  = program->uniformLocation("vColor");
-                program->setUniformValue( colorPos, QVector4D(0.2, 0.2, 0.7, 1.0) );
+                if( agent[i]->isSInterfaceObject == true ){
+                    program->setUniformValue( colorPos, QVector4D(0.7, 0.7, 0.7, 1.0) );
+                }
+                else if( agent[i]->isScenarioObject == true ){
+                    program->setUniformValue( colorPos, QVector4D(0.12, 0.7, 0.7, 1.0) );
+                }
+                else{
+                    program->setUniformValue( colorPos, QVector4D(0.2, 0.2, 0.7, 1.0) );
+                }
 
                 int useTex  = program->uniformLocation("useTex");
 
-                int lampCom = 0;
+                int lampCom = 10;
                 if( brakeLame == 1 && winkerState == 0 ){
                     lampCom = 2;
                 }
@@ -476,10 +509,19 @@ void GraphicCanvas::paintGL()
 
 
             int colorPos  = program->uniformLocation("vColor");
-            program->setUniformValue( colorPos, QVector4D(0.2, 0.2, 0.7, 1.0) );
+            if( agent[i]->isSInterfaceObject == true ){
+                program->setUniformValue( colorPos, QVector4D(0.7, 0.7, 0.7, 1.0) );
+            }
+            else if( agent[i]->isScenarioObject == true ){
+                program->setUniformValue( colorPos, QVector4D(0.12, 0.7, 0.7, 1.0) );
+            }
+            else{
+                program->setUniformValue( colorPos, QVector4D(0.2, 0.2, 0.7, 1.0) );
+            }
+
 
             int useTex  = program->uniformLocation("useTex");
-            program->setUniformValue( useTex, 0 );
+            program->setUniformValue( useTex, 10 );
 
             int isText  = program->uniformLocation("isText");
             program->setUniformValue( isText, 0 );
@@ -728,10 +770,26 @@ void GraphicCanvas::paintGL()
 
             char str[25];
             if( agent[i]->agentKind < 100 ){
-                sprintf(str,"V%d",agent[i]->ID);
+                if( agent[i]->isSInterfaceObject == true ){
+                    sprintf(str,"[DS]V%d",agent[i]->ID);
+                }
+                else if( agent[i]->isScenarioObject == true ){
+                    sprintf(str,"[snr]V%d",agent[i]->ID);
+                }
+                else{
+                    sprintf(str,"V%d",agent[i]->ID);
+                }
             }
             else if( agent[i]->agentKind >= 100 ){
-                sprintf(str,"P%d",agent[i]->ID);
+                if( agent[i]->isSInterfaceObject == true ){
+                    sprintf(str,"[DS]P%d",agent[i]->ID);
+                }
+                else if( agent[i]->isScenarioObject == true ){
+                    sprintf(str,"[snr]P%d",agent[i]->ID);
+                }
+                else{
+                    sprintf(str,"P%d",agent[i]->ID);
+                }
             }
 
             for(unsigned int c=0;c<strlen(str);++c ){
@@ -739,7 +797,7 @@ void GraphicCanvas::paintGL()
                 Character* ch = Characters[ str[c] ];
 
                 GLfloat xpos = x + ch->Bearing.width() * scale;
-                GLfloat ypos = y + (Characters['H']->Bearing.height() - ch->Bearing.height()) * scale;
+                GLfloat ypos = y - Characters['H']->Bearing.height() * scale;
                 program->setUniformValue( letterPos, QVector3D(xpos, ypos, 0.0) );
 
                 glBindTexture( GL_TEXTURE_2D, ch->TextureID );
@@ -776,15 +834,21 @@ void GraphicCanvas::mousePressEvent(QMouseEvent *e)
 {
     mousePressPosition = QVector2D(e->localPos());
 
-    if( e->modifiers() & Qt::ControlModifier ){
+    if( e->modifiers() & Qt::ControlModifier || e->modifiers() & Qt::AltModifier ){
         float x,y;
         int ret = Get3DPhysCoordFromPickPoint( e->x(), e->y(), x, y );
         if( ret == 1 ){
-            emit ShowAgentData(x,y);
+            if( e->modifiers() & Qt::ControlModifier ){
+                emit ShowAgentData(x,y);
+            }
+            else if( e->modifiers() & Qt::AltModifier ){
+                qDebug() << "Emit DSMove";
+                emit DSMove(x,y);
+            }
+
         }
 //        qDebug() << "ret = " << ret << " x = " << x << " y = " << y;
     }
-
 }
 
 

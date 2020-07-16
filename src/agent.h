@@ -39,7 +39,8 @@ enum AGENT_CONTROL_MODE
     SPEED_PROFILE,
     STOP_AT,
     INTERSECTION_TURN_CONTROL,
-    SET_STEER_CONTROL_FLAG
+    SET_STEER_CONTROL_FLAG,
+    RUN_OUT
 };
 
 enum AGENT_ROUTE_TYPE
@@ -214,6 +215,17 @@ struct AgentMemory
     QList<float> profileTime;
     QList<float> profileSpeed;
 
+    bool ADDisturbFlag;
+    int ADDisturbCount;
+    QList<float> ADDisturbTime;
+    QList<float> ADDisturb;
+
+    bool steerDisturbFlag;
+    int steerDisturbCount;
+    QList<float> steerDisturbTime;
+    QList<float> steerDisturb;
+    float steerDisturbInit;
+
     bool doHeadwayDistanceControl;
     float axHeadwayControl;
 
@@ -326,6 +338,7 @@ struct AgentMemory
     int routeLaneIndex;
     int LCSupportRouteLaneIndex;
     int LCStartRouteIndex;
+    int destinationNode;
 };
 
 struct AgentParam
@@ -371,6 +384,8 @@ struct AgentState
     float brake_log;
     float steer_log;
     int  warpFlag;
+
+    float z_path;
 };
 
 struct AgentAttiribute
@@ -428,6 +443,7 @@ public:
                           // 100 ~ 199 : other traffic participants(pedestrian, bicycle, etc.0
     int agentStatus;
     bool isScenarioObject;
+    bool canAppearRepeatedly;   // This is only used for scenario vehicle, isScenarioObject = true
     bool isSInterfaceObject;
     bool isBehaviorEmbeded;
     bool notAllowedAppear;
@@ -463,6 +479,9 @@ public:
     bool onlyCheckPreceding;
 
     RandomGenerator rndGen;
+
+
+    int UE4ObjectID[10];
 
 #ifdef _PERFORMANCE_CHECK_AGENT
     LARGE_INTEGER start, end;

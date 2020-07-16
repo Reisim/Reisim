@@ -47,13 +47,19 @@ UDPThread::UDPThread(QObject *parent) :
     numberTrafficSignal = 0;
     syncSigCount = 0;
 
-    maxAgentDataSend = 350;
-    maxTSDataSend = 200;
+    maxAgentDataSend = 50;
+    maxTSDataSend = 40;
 
     HasFuncExtender = false;
 
+    agentCalFinished = false;
+    SInterfaceDataEmbeded = false;
+
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&start_time);
+
+    memset( &asv, 0, sizeof(asv) );
+    memset( &sov, 0, sizeof(sov) );
 }
 
 
@@ -65,7 +71,7 @@ void UDPThread::Stop()
 
 void UDPThread::run()
 {
-    qDebug() << "[UDPThread]Start thread";
+    //qDebug() << "[UDPThread]Start thread";
 
     stopped = false;
     while( stopped == false ){
@@ -74,7 +80,7 @@ void UDPThread::run()
 
     }
 
-    qDebug() << "[UDPThread]Now leave thread";
+    //qDebug() << "[UDPThread]Now leave thread";
 }
 
 
@@ -237,6 +243,7 @@ void UDPThread::loadSysFile(QString filename)
                             as->appName += QString("[") + valStr + QString("]");
 
                             SInterfaceObjIDs.append( valStr.toInt() );
+                            recvFromSinterfaceObjFlag.append( false );
                         }
                     }
                 }
@@ -438,6 +445,7 @@ void UDPThread::ReadUDPData()
                     qDebug() << " calHz = " << calHz;
 
                     emit SetSimulationFrequency( calHz );
+                    emit SetRestartData();
 
                     char res[255];
                     memset(res,0,255);
@@ -653,70 +661,91 @@ void UDPThread::ReadUDPData()
                                 pos += sizeof(float);
 
 
-                                struct AgentState as;
+                                asv.x = xVal;
+                                asv.y = yVal * (-1.0);
+                                asv.z = zVal;
 
-                                as.x = xVal;
-                                as.y = yVal * (-1.0);
-                                as.z = zVal;
+                                asv.roll = rollVal;
+                                asv.pitch = pitchVal;
+                                asv.yaw = yawVal * (-1.0);
 
-                                as.roll = rollVal;
-                                as.pitch = pitchVal;
-                                as.yaw = yawVal * (-1.0);
+                                asv.V = vVal;
+                                asv.cosYaw = cos( asv.yaw );
+                                asv.sinYaw = sin( asv.yaw );
 
-                                as.V = vVal;
-                                as.cosYaw = cos( as.yaw );
-                                as.sinYaw = sin( as.yaw );
+    //                            asv.accel = accel;
+    //                            asv.brake = brake;
 
-    //                            as.accel = accel;
-    //                            as.brake = brake;
-
-                                as.accel_log = accel;   // 0 ~ 1
-                                as.brake_log = brake;   // 0 ~ 1
+                                asv.accel_log = accel;   // 0 ~ 1
+                                asv.brake_log = brake;   // 0 ~ 1
 
                                 if( axVal >= 0.0 ){
-                                    as.accel = axVal;
-                                    as.brake = 0.0;
+                                    asv.accel = axVal;
+                                    asv.brake = 0.0;
                                 }
                                 else if( axVal < 0.0 ){
-                                    as.accel = 0.0;
-                                    as.brake = axVal * (-1.0);
+                                    asv.accel = 0.0;
+                                    asv.brake = axVal * (-1.0);
                                 }
 
-                                as.steer = steer;       // [rad]
-                                as.steer_log = steer;   // [rad]
+                                asv.steer = steer;       // [rad]
+                                asv.steer_log = steer;   // [rad]
 
-                                struct SInterObjInfo so;
 
-                                so.lf = lfVal;
-                                so.lr = lrVal;
-                                so.tf = tfVal;
-                                so.tr = trVal;
+                                sov.lf = lfVal;
+                                sov.lr = lrVal;
+                                sov.tf = tfVal;
+                                sov.tr = trVal;
 
-                                so.brakeLamp = false;
-                                so.winkerLeft = false;
-                                so.winkerRight = false;
+                                sov.brakeLamp = false;
+                                sov.winkerLeft = false;
+                                sov.winkerRight = false;
 
                                 if( (lightFlag1 & 0x01) == 0x01 ){
-                                    so.brakeLamp = true;
+                                    sov.brakeLamp = true;
                                 }
 
                                 if( (lightFlag1 & 0x02) == 0x02 ){
-                                    so.winkerLeft = true;
+                                    sov.winkerLeft = true;
                                 }
 
                                 if( (lightFlag1 & 0x04) == 0x04 ){
-                                    so.winkerRight = true;
+                                    sov.winkerRight = true;
                                 }
 
                                 if( (lightFlag1 & 0x08) == 0x08 ){
-                                    so.lowbeam = true;
+                                    sov.lowbeam = true;
                                 }
 
                                 if( (lightFlag1 & 0x10) == 0x10 ){
-                                    so.highbeam = true;
+                                    sov.highbeam = true;
                                 }
 
-                                emit ReceiveSInterObjData( SInterObjType, SInterObjID, &as, &so );
+                                emit ReceiveSInterObjData( SInterObjType, SInterObjID, &asv, &sov );
+
+
+                                int sobjIdx = SInterfaceObjIDs.indexOf( SInterObjID );
+                                if( sobjIdx >= 0 ){
+
+                                    recvFromSinterfaceObjFlag[sobjIdx] = true;
+
+                                    SInterfaceDataEmbeded = true;
+                                    for(int ns=0;ns<SInterfaceObjIDs.size();++ns){
+                                        if( recvFromSinterfaceObjFlag[ns] == false ){
+                                            SInterfaceDataEmbeded = false;
+                                            break;
+                                        }
+                                    }
+
+                                    if( SInterfaceDataEmbeded == true ){
+                                        //
+                                        //  Start agent calculation
+                                        mutex->lock();
+                                        g_DSTimingFlag = 1;
+                                        cond->wakeAll();
+                                        mutex->unlock();
+                                    }
+                                }
                             }
                         }
 
@@ -778,9 +807,14 @@ void UDPThread::ReadUDPData()
                     memcpy( &zRR, &(com[index+pos]), sizeof(float) );
                     pos += sizeof(float);
 
-                    //qDebug() << "targetID = " << targetID << " z = " << zFL << " " << zFR << " " << zRL << " " << zRR;
 
-                    emit ReceiveTireHeight( targetID, zFL, zFR, zRL, zRR );
+                    QString sockName = sendSocks[idx]->sock.objectName();
+                    QStringList divSockName = sockName.split(",");
+                    int siObjectID = QString(divSockName[0]).remove("UE4App[").trimmed().toInt();
+
+                    //qDebug() << "siObjectID=" << siObjectID << " targetID=" << targetID << " z = " << zFL << " " << zFR << " " << zRL << " " << zRR;
+
+                    emit ReceiveTireHeight( siObjectID, targetID, zFL, zFR, zRL, zRR );
 
                     index += 22;
                 }
@@ -797,131 +831,11 @@ void UDPThread::ReadUDPData()
 //                    qDebug() << cal_time;
 //                    time_record.append(cal_time);
 
-                    int sendDataMaxSize = 125 * maxAgentDataSend + 13 * maxTSDataSend + 20 + 5;
-
-//                    // should wait until last agent calculation finished
-//                    mutex_sync->lock();
-//                    if( allowDataGetForDS == 0 ){
-//                        cond_sync->wait(mutex_sync);
-//                    }
-//                    allowDataGetForDS = 0;
-//                    mutex_sync->unlock();
-
-
-
-                    if( sendDataBuf == NULL ){
-                        sendDataBuf = new char [sendDataMaxSize];
-                    }
-
-
-                    // Send data to UE4
-                    for(int i=0;i<SInterfaceObjIDs.size();++i){
-
-                        // set agent and TS data to UE4
-                        memset( sendDataBuf, 0, sendDataMaxSize );
-
-                        sendDataBuf[0] = 'R';
-                        sendDataBuf[1] = 'S';
-                        sendDataBuf[2] = 'd';
-
-                        //qDebug() << "emit RequestSetSendData";
-                        int sendSize = 3;
-                        emit RequestSetSendData(sendDataBuf, sendDataMaxSize, &sendSize, maxAgentDataSend, maxTSDataSend, SInterfaceObjIDs[i] );
-
-
-                        //
-                        //  Send data to Apps UE4
-                        //
-
-                        QString UE4SockName = QString("UE4App[%1,").arg( SInterfaceObjIDs[i] );
-
-                        for(int j=0;j<sendSocks.size();++j){
-
-                            if( sendSocks[j]->sock.objectName().contains( UE4SockName ) == true ){
-
-                                sendSocks[j]->sock.writeDatagram( sendDataBuf,
-                                                                  sendSize,
-                                                                  QHostAddress(sendSocks[j]->ipAddress),
-                                                                  sendSocks[j]->to_port);
-
-                                sendSocks[j]->sock.flush();
-                            }
-
-                        }
-                    }
-
-
-                    // Send Data to FuncExtender
-                    if( HasFuncExtender == true ){
-
-                        memset( sendDataBuf, 0, sendDataMaxSize );
-
-                        sendDataBuf[0] = 'R';
-                        sendDataBuf[1] = 'S';
-                        sendDataBuf[2] = 'd';
-
-                        int sendSize = 3;
-                        emit RequestSetSendDataForFuncExtend(sendDataBuf, sendDataMaxSize, &sendSize, maxAgentDataSend, maxTSDataSend, SInterfaceObjIDs);
-
-
-                        //
-                        //  Send data to Function Extender
-                        //   * This is because the data send to function extender should contain s-interface object
-                        //     data to transmit lateral deviation from path to function extender.
-                        //     UE4 can not accept s-interface object data from Re:sim, cause the data is send to UE4
-                        //     from S-interface itself.
-                        //
-                        for(int i=0;i<sendSocks.size();++i){
-
-                            if( sendSocks[i]->sock.objectName().contains("Function Extender") == false ){
-                                continue;
-                            }
-
-                            //qDebug() << "send data to " << sendSocks[i]->sock.objectName();
-
-                            sendSocks[i]->sock.writeDatagram( sendDataBuf,
-                                                              sendSize,
-                                                              QHostAddress(sendSocks[i]->ipAddress),
-                                                              sendSocks[i]->to_port);
-
-                            sendSocks[i]->sock.flush();
-                        }
-                    }
-
-
-                    // Send Reponse to Score
-                    {
-                        memset( sendDataBuf, 0, sendDataMaxSize );
-
-                        sendDataBuf[0] = 'R';
-                        sendDataBuf[1] = 'S';
-                        sendDataBuf[2] = 'd';
-
-                        int sendSize = 3;
-
-                        if( scoreSendSockIndex >= 0 && scoreSendSockIndex < sendSocks.size() ){
-                            sendSocks[scoreSendSockIndex]->sock.writeDatagram( sendDataBuf,
-                                                                               sendSize,
-                                                                               QHostAddress( sendSocks[scoreSendSockIndex]->ipAddress ),
-                                                                               sendSocks[scoreSendSockIndex]->to_port );
-                            sendSocks[scoreSendSockIndex]->sock.flush();
-                        }
-                    }
-
-
-
 //                    QueryPerformanceCounter(&end_time);
 //                    double cal_time = static_cast<double>(end_time.QuadPart - start_time.QuadPart) * 1000.0 / freq.QuadPart;
 //                    start_time = end_time;
 //                    qDebug() << cal_time;
 
-
-                    //
-                    //  Start agent calculation
-                    mutex->lock();
-                    g_DSTimingFlag = 1;
-                    cond->wakeAll();
-                    mutex->unlock();
 
                     index += 2;
                 }
@@ -1356,3 +1270,121 @@ void UDPThread::SetNumberTrafficSignal(int n)
 
 
 
+void UDPThread::SendDSMoveCommand(int targetID, float x, float y, float psi)
+{
+    if( SInterfaceObjIDs.contains( targetID ) == false ){
+        return;
+    }
+
+    char sendDataBuf[255];
+
+    memset( sendDataBuf, 0, 255 );
+
+    sendDataBuf[0] = 'F';
+    sendDataBuf[1] = 'W';
+
+    memcpy( &(sendDataBuf[2]), &x, sizeof(float) );
+    memcpy( &(sendDataBuf[6]), &y, sizeof(float) );
+    memcpy( &(sendDataBuf[10]), &psi, sizeof(float) );
+
+    sendDataBuf[14] = 'y';
+
+    int sendSize = 15;
+
+    QString targetSockName = QString("S-Interface[%1]").arg( targetID );
+
+    for(int i=0;i<sendSocks.size();++i){
+
+        if( sendSocks[i]->sock.objectName().contains(targetSockName) == false ){
+            continue;
+        }
+
+        sendSocks[i]->sock.writeDatagram( sendDataBuf,
+                                          sendSize,
+                                          QHostAddress(sendSocks[i]->ipAddress),
+                                          sendSocks[i]->to_port);
+
+        sendSocks[i]->sock.flush();
+        break;
+    }
+}
+
+
+void UDPThread::SendScenarioData(QString ipAddr, int port, char *sendBuf, int dataSize)
+{
+    QUdpSocket *sock = new QUdpSocket();
+    sock->writeDatagram( sendBuf, dataSize, QHostAddress(ipAddr), port);
+    sock->flush();
+}
+
+
+
+void UDPThread::SendToFE(char *buf, int size)
+{
+    //
+    //  Send data to Function Extender
+    //   * This is because the data send to function extender should contain s-interface object
+    //     data to transmit lateral deviation from path to function extender.
+    //     UE4 can not accept s-interface object data from Re:sim, cause the data is send to UE4
+    //     from S-interface itself.
+    //
+    for(int i=0;i<sendSocks.size();++i){
+
+        if( sendSocks[i]->sock.objectName().contains("Function Extender") == false ){
+            continue;
+        }
+
+        sendSocks[i]->sock.writeDatagram( buf,
+                                          size,
+                                          QHostAddress(sendSocks[i]->ipAddress),
+                                          sendSocks[i]->to_port);
+
+        sendSocks[i]->sock.flush();
+    }
+}
+
+
+
+void UDPThread::SendToUE4(int SInterObjID, char *buf, int size)
+{
+    QString UE4SockName = QString("UE4App[%1,").arg( SInterObjID );
+
+    for(int j=0;j<sendSocks.size();++j){
+
+        if( sendSocks[j]->sock.objectName().contains( UE4SockName ) == true ){
+
+            sendSocks[j]->sock.writeDatagram( buf,
+                                              size,
+                                              QHostAddress(sendSocks[j]->ipAddress),
+                                              sendSocks[j]->to_port);
+
+            sendSocks[j]->sock.flush();
+        }
+    }
+}
+
+
+void UDPThread::SendToSCore()
+{
+    char sendDataBuf[5];
+
+    memset( sendDataBuf, 0, 5 );
+
+    sendDataBuf[0] = 'R';
+    sendDataBuf[1] = 'S';
+    sendDataBuf[2] = 'd';
+
+    int sendSize = 3;
+
+    if( scoreSendSockIndex >= 0 && scoreSendSockIndex < sendSocks.size() ){
+        sendSocks[scoreSendSockIndex]->sock.writeDatagram( sendDataBuf,
+                                                           sendSize,
+                                                           QHostAddress( sendSocks[scoreSendSockIndex]->ipAddress ),
+                                                           sendSocks[scoreSendSockIndex]->to_port );
+        sendSocks[scoreSendSockIndex]->sock.flush();
+    }
+
+    for(int ns=0;ns<SInterfaceObjIDs.size();++ns){
+        recvFromSinterfaceObjFlag[ns] = false;
+    }
+}

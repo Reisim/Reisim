@@ -128,7 +128,11 @@ void Agent::Control(Road* pRoad)
 
                 SpeedAdjustForCurve( pRoad, cIdx, memory.profileSpeed.last() );
 
+                memory.activeBrakeInVelocityControl = true;
                 SpeedControl();
+                memory.activeBrakeInVelocityControl = false;
+
+                ax_com = memory.axSpeedControl;
 
                 if( ax_com >= 0.0 ){
                     memory.accel = ax_com;
@@ -151,13 +155,15 @@ void Agent::Control(Road* pRoad)
                             aReq = (-1.0) * param.maxDeceleration;
                         }
 
-                        float ax_com = aReq + err * param.accelControlGain;
+                        float ax_com = aReq + err * param.accelControlGain * 1.5;
                         if( ax_com >= 0.0 ){
                             memory.accel = ax_com;
                         }
                         else{
                             memory.brake = -ax_com;
                         }
+
+                        //qDebug() << "Vref = " << targetProfSpeed << " V = " <<  state.V << " ax = " << ax_com / 9.81;
 
                         break;
                     }
@@ -261,15 +267,17 @@ void Agent::Control(Road* pRoad)
 
                 SpeedAdjustForCurve( pRoad, cIdx, memory.targetSpeedByScenario );
 
+                memory.activeBrakeInVelocityControl = true;
                 SpeedControl();
+                memory.activeBrakeInVelocityControl = false;
 
                 ax_com = memory.axSpeedControl;
 
                 if( memory.doHeadwayDistanceControl == true ){
 
-                        //
-                        //  Determine target headway distance
-                        //
+                    //
+                    //  Determine target headway distance
+                    //
                     if( fabs(memory.targetHeadwayDistanceByScenario) < 0.001f ){
 
                         if( fabs(memory.targetHeadwayTimeByScenario) < 0.001f ){
@@ -334,7 +342,9 @@ void Agent::Control(Road* pRoad)
 
             SpeedAdjustForCurve( pRoad, cIdx, memory.targetSpeedByScenario );
 
+            memory.activeBrakeInVelocityControl = true;
             SpeedControl();
+            memory.activeBrakeInVelocityControl = false;
 
             ax_com = memory.axSpeedControl;
 
@@ -388,11 +398,11 @@ void Agent::Control(Road* pRoad)
 
             memory.distanceToStopPoint = dist - vHalfLength;
 
-    //        qDebug() << "distanceToStopPoint = " << memory.distanceToStopPoint
-    //                 << " Index=" << memory.actualStopOnPathIndex
-    //                 << " Current=" << memory.currentTargetPathIndexInList
-    //                 << " S = " << memory.distanceFromStartWPInCurrentPath
-    //                 << " L = " << memory.distToStopAtOnThePath;
+//            qDebug() << "distanceToStopPoint = " << memory.distanceToStopPoint
+//                     << " Index=" << memory.actualStopOnPathIndex
+//                     << " Current=" << memory.currentTargetPathIndexInList
+//                     << " S = " << memory.distanceFromStartWPInCurrentPath
+//                     << " L = " << memory.distToStopAtOnThePath;
 
 
             StopControl();
@@ -503,6 +513,40 @@ void Agent::Control(Road* pRoad)
         }
 
 
+        if( memory.ADDisturbFlag == true ){
+
+            float lt = memory.ADDisturbCount * calInterval;
+            if( lt > memory.ADDisturbTime.last() ){
+                memory.ADDisturbFlag = false;
+            }
+            else{
+                for(int np=0;np<memory.ADDisturbTime.size()-1;++np){
+                    if( memory.ADDisturbTime[np] <= lt && lt <= memory.ADDisturbTime[np+1] ){
+
+                        float tt = ( lt - memory.ADDisturbTime[np] ) / ( memory.ADDisturbTime[np+1] - memory.ADDisturbTime[np] );
+
+                        float adval = memory.ADDisturb[np] + (memory.ADDisturb[np+1] - memory.ADDisturb[np]) * tt;  // [G]
+
+                        adval *= 9.81;  // [m/s^2]
+
+                        if( adval >= 0.0f ){
+                            memory.accel = adval;
+                            memory.brake = 0.0;
+                        }
+                        else{
+                            memory.accel = 0.0;
+                            memory.brake = adval * (-1.0f);
+                        }
+
+                        break;
+                    }
+                }
+
+                memory.ADDisturbCount++;
+            }
+        }
+
+
         //
         // Lateral Control
         //
@@ -522,8 +566,16 @@ void Agent::Control(Road* pRoad)
             lowSpeedAdjustGain = 1.5 - 0.5 * state.V / 8.0;
         }
 
+        float highSpeedAdjustGain = 1.0;
+        if( state.V > 22.22 ){
+            highSpeedAdjustGain = 1.0 - (state.V - 22.22) / 11.11 * 0.7;
+            if( highSpeedAdjustGain < 0.3 ){
+                highSpeedAdjustGain = 0.3;
+            }
+        }
+
         float Y = memory.lateralDeviationFromTargetPathAtPreviewPoint - memory.lateralShiftTarget;
-        memory.steer = (-1.0) * Y * param.steeringControlGain * lowSpeedAdjustGain;
+        memory.steer = (-1.0) * Y * param.steeringControlGain * lowSpeedAdjustGain * highSpeedAdjustGain;
 
 
         float maxSteer = 4.2;
@@ -549,6 +601,31 @@ void Agent::Control(Road* pRoad)
 
         if( memory.overrideSteerByScenario == true ){
            memory.steer = memory.overrideSteerControl * 0.014752; // should be multiplied a gain varied depending on speed
+        }
+
+
+        if( memory.steerDisturbFlag == true ){
+
+            float lt = memory.steerDisturbCount * calInterval;
+            if( lt > memory.steerDisturbTime.last() ){
+                memory.steerDisturbFlag = false;
+            }
+            else{
+                for(int np=0;np<memory.steerDisturbTime.size()-1;++np){
+                    if( memory.steerDisturbTime[np] <= lt && lt <= memory.steerDisturbTime[np+1] ){
+
+                        float tt = ( lt - memory.steerDisturbTime[np] ) / ( memory.steerDisturbTime[np+1] - memory.steerDisturbTime[np] );
+
+                        float sval = memory.steerDisturb[np] + (memory.steerDisturb[np+1] - memory.steerDisturb[np]) * tt;
+
+                        memory.steer = memory.steerDisturbInit + sval * 0.017452 / 8.0;  // 8.0; assumed gear-ratio
+
+                        break;
+                    }
+                }
+
+                memory.steerDisturbCount++;
+            }
         }
 
 
@@ -585,49 +662,93 @@ void Agent::Control(Road* pRoad)
         }
 
 
-        float tV = memory.targetSpeed;
-        if( isScenarioObject == true ){
-            tV = memory.targetSpeedByScenario;
+        if( memory.controlMode == AGENT_CONTROL_MODE::AGENT_LOGIC ){
+
+            float tV = memory.targetSpeed;
+            if( isScenarioObject == true ){
+                tV = memory.targetSpeedByScenario;
+            }
+
+            if( memory.shouldStopAtSignalSL == true ){
+                tV = 0.0;
+            }
+
+            if( memory.doHeadwayDistanceControl == true ){
+                tV = 0.0;
+            }
+
+            float dv = (tV - state.V);
+            float dvMax = 2.0 * calInterval * controlCountMax;
+            if( dv > dvMax ){
+                dv = dvMax;
+            }
+            else if( dv < -dvMax ){
+                dv = -dvMax;
+            }
+            state.V += dv;
+            if( state.V < 0.0 ){
+                state.V = 0.0;
+            }
+        }
+        else if( memory.controlMode == AGENT_CONTROL_MODE::CONSTANT_SPEED_HEADWAY ){
+
+            state.V = memory.targetSpeedByScenario;
+
+        }
+        else if( memory.controlMode == AGENT_CONTROL_MODE::SPEED_PROFILE ){
+
+            memory.speedProfileCount++;
+            float currentProfTime = memory.speedProfileCount * controlCountMax * calInterval;
+
+            if( memory.profileTime.last() <= currentProfTime ){
+
+                state.V = memory.profileSpeed.last();
+
+            }
+            else{
+                for(int i=1;i<memory.profileTime.size();++i){
+                    if( memory.profileTime[i-1] <= currentProfTime && currentProfTime < memory.profileTime[i] ){
+                        float deltaT = memory.profileTime[i] - memory.profileTime[i-1];
+                        float deltaV = memory.profileSpeed[i] - memory.profileSpeed[i-1];
+                        float aReq = deltaV / deltaT;
+                        state.V = memory.profileSpeed[i-1] + aReq * ( currentProfTime - memory.profileTime[i-1] );
+                        break;
+                    }
+                }
+            }
+            //qDebug() << "V = " << state.V;
         }
 
 
-        if( memory.shouldStopAtSignalSL == true ){
-            tV = 0.0;
+        if( memory.controlMode == AGENT_CONTROL_MODE::RUN_OUT && memory.steerDisturbFlag == true ){
+
+            memory.steerDisturbCount++;
+            if( memory.steerDisturbCount * controlCountMax * calInterval > 5.0){
+                // Dispose
+                agentStatus = 2;
+            }
+
+            state.yaw = memory.steerDisturbInit;
+            state.cosYaw = cos( state.yaw );
+            state.sinYaw = sin( state.yaw );
         }
+        else{
 
-        if( memory.doHeadwayDistanceControl == true ){
-            tV = 0.0;
+            float  dev = 0.0;
+            float    z = 0.0;
+            float xdir = 0.0;
+            float ydir = 0.0;
+            pRoad->GetDeviationFromPedestPath( memory.currentTargetPath, memory.currentTargetPathIndexInList,
+                                               state.x, state.y, dev, z, xdir, ydir,
+                                               memory.lateralShiftTarget );
+
+            float mxdir = xdir * 0.2 + state.cosYaw * 0.8;
+            float mydir = ydir * 0.2 + state.sinYaw * 0.8;
+
+            state.yaw = atan2( mydir, mxdir );
+            state.cosYaw = mxdir;
+            state.sinYaw = mydir;
         }
-
-        float dv = (tV - state.V);
-        float dvMax = 2.0 * calInterval;
-        if( dv > dvMax ){
-            dv = dvMax;
-        }
-        else if( dv < -dvMax ){
-            dv = -dvMax;
-        }
-        state.V += dv;
-        if( state.V < 0.0 ){
-            state.V = 0.0;
-        }
-
-        float  dev = 0.0;
-        float    z = 0.0;
-        float xdir = 0.0;
-        float ydir = 0.0;
-        pRoad->GetDeviationFromPedestPath( memory.currentTargetPath, memory.currentTargetPathIndexInList,
-                                           state.x, state.y, dev, z, xdir, ydir,
-                                           memory.lateralShiftTarget );
-
-//        qDebug() << "currentTargetPathIndexInList = " << memory.currentTargetPathIndexInList << " xdir=" << xdir << " ydir=" << ydir;
-
-        float mxdir = xdir * 0.2 + state.cosYaw * 0.8;
-        float mydir = ydir * 0.2 + state.sinYaw * 0.8;
-
-        state.yaw = atan2( mydir, mxdir );
-        state.cosYaw = mxdir;
-        state.sinYaw = mydir;
 
         state.z = 0.0;
     }
@@ -648,6 +769,7 @@ void Agent::SpeedControl()
     if( isScenarioObject == true ){
         deadZone = 0.0;
     }
+
     if( err_speed - deadZone >= 0.0 ){
         memory.speedControlState = 0;
         memory.axSpeedControl = param.accelControlGain;
@@ -664,15 +786,15 @@ void Agent::SpeedControl()
 
         if( memory.activeBrakeInVelocityControl == true ){
             if( memory.speedControlState == 0 || err_speed + deadZone > (-5.0) / 3.6 ){
-            memory.axSpeedControl = param.accelOffDeceleration * (-1.0);
+                memory.axSpeedControl = param.accelOffDeceleration * (-1.0);
+            }
+            else{
+                memory.axSpeedControl = param.accelControlGain * (-1.0);
+            }
         }
         else{
-            memory.axSpeedControl = param.accelControlGain * (-1.0);
-        }
-        }
-        else{
             memory.axSpeedControl = param.accelOffDeceleration * (-1.0);
-        memory.speedControlState = 1;
+            memory.speedControlState = 1;
         }
 
 
@@ -963,6 +1085,42 @@ void Agent::SpeedAdjustForCurve(Road *pRoad,int cIdx,float targetSpeed)
         int pidx = pRoad->pathId2Index.indexOf( memory.targetPathList[i] );
 
         if( fabs(pRoad->paths[pidx]->meanPathCurvature) < 0.0040 ){  // over R250, not adjust speed
+
+            //
+            // To adjust Speed for Speed Change to make Bottle-neck by Scenario
+            //
+            float checkForLargeSpeedChange = pRoad->paths[pidx]->speed85pt;
+
+            float vMean = 0.7692 * checkForLargeSpeedChange;  // Actual Speed = 65[km/h] when vMean = 50[km/h]
+            float vStd  = checkForLargeSpeedChange - vMean;   // Actual Speed is assumed to be about 1-sigma for Normal Distribution
+
+            float vDev = vStd * param.speedVariationFactor;
+
+            checkForLargeSpeedChange += vDev;
+
+            if( targetSpeed - checkForLargeSpeedChange > 8.33  ){
+
+                if( checkForLargeSpeedChange < memory.actualTargetSpeed ){
+
+                    float v2 = checkForLargeSpeedChange;
+                    float v1 = state.V;
+                    if( v2 < v1 ){
+                        float distToThatPoint = distToLowSpeed -  memory.distanceFromStartWPInCurrentPath;
+                        if( distToThatPoint < memory.requiredDistToStopFromTargetSpeed ){
+                            float aReq = (v2 * v2 - v1 * v1) * 0.5 / distToThatPoint;
+                            if( aReq < (-1.0) * param.accelControlGain * 0.7 ){
+
+                                memory.actualTargetSpeed = checkForLargeSpeedChange;
+                                memory.distanceAdjustLowSpeed = distToThatPoint;
+
+                                foundLowSpeed = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
             distToLowSpeed += pRoad->paths[pidx]->pathLength;
             continue;
         }

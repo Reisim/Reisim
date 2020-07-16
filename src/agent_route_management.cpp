@@ -12,6 +12,7 @@
 
 
 #include "agent.h"
+#include "simulationmanager.h"
 #include <QDebug>
 
 
@@ -68,6 +69,7 @@ void Agent::CheckPathList(Road* pRoad)
                 int currentPath = pRoad->GetNearestPathFromList( memory.targetPathList ,
                                                                  state.x,
                                                                  state.y,
+                                                                 state.z_path,
                                                                  state.yaw,
                                                                  tdev,txt,tyt,txd,tyd,ts );
                 if( currentPath < 0 ){
@@ -89,6 +91,15 @@ void Agent::CheckPathList(Road* pRoad)
                 SetTargetSpeedIndividual( pRoad->paths[pIdx]->speed85pt );
 
                 int tmpCurrentTargetNode = memory.currentTargetNode;
+
+
+                //
+                //   Path-List Type Scenario Objects escape here
+                //
+                if( isScenarioObject == true && memory.routeType == ROUTE_TYPE::PATH_LIST_TYPE ){
+                    return;
+                }
+
 
                 SetTargetNodeListByTargetPaths( pRoad );
 
@@ -210,7 +221,6 @@ void Agent::CheckPathList(Road* pRoad)
 void Agent::SetTargetNodeListByTargetPaths(Road* pRoad)
 {
 //    qDebug() << "[SetTargetNodeListByTargetPaths] ID = " << ID;
-
 
     memory.myNodeList.clear();
     memory.myInDirList.clear();

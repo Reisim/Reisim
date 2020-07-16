@@ -23,8 +23,8 @@ DEFINES += SFMT_MEXP="19937"
 #DEFINES += _SHOW_AGENT_NUM_APPEAR
 
 
-LIBS += C:\Qt5.12\Tools\mingw730_64\x86_64-w64-mingw32\lib\libws2_32.a
-LIBS += C:\Qt5.12\Tools\mingw730_64\x86_64-w64-mingw32\lib\libmpr.a
+LIBS += C:\Qt\Tools\mingw730_64\x86_64-w64-mingw32\lib\libws2_32.a
+LIBS += C:\Qt\Tools\mingw730_64\x86_64-w64-mingw32\lib\libmpr.a
 
 
 #

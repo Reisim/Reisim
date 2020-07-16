@@ -143,9 +143,29 @@ public:
 
     Road *road;
 
+    bool trackingMode;
+    int trackingObjID;
+    void PushEyeCoord(){
+        last_X_eye = X_eye;
+        last_Y_eye = Y_eye;
+        last_Z_eye = Z_eye;
+        last_cameraYaw = cameraYaw;
+        last_cameraPitch = cameraPitch;
+    }
+    void PopEyeCoord(){
+        X_eye = last_X_eye;
+        Y_eye = last_Y_eye;
+        Z_eye = last_Z_eye;
+        cameraYaw = last_cameraYaw;
+        cameraPitch = last_cameraPitch;
+        cameraQuat = QQuaternion(cos(cameraPitch*0.5), sin(cameraPitch*0.5) , 0.0 , 0.0 ) * QQuaternion(cos(cameraYaw*0.5), 0.0 , 0.0 , sin(cameraYaw*0.5));
+    }
+
+
 signals:
     void ShowAgentData(float x,float Y);
     void ChangeFontScale(int);
+    void DSMove(float x,float Y);
 
 
 protected:
@@ -167,6 +187,11 @@ private:
     float Y_trans;
     float Z_trans;
 
+    float last_X_eye;
+    float last_Y_eye;
+    float last_Z_eye;
+
+
     QVector2D mousePressPosition;
     float sx;
     float sy;
@@ -182,6 +207,9 @@ private:
 
     float cameraYaw;
     float cameraPitch;
+
+    float last_cameraYaw;
+    float last_cameraPitch;
 
     QVector<struct VehicleModel *> vehicleModels;
     QVector<struct PersonModel *> personModels;

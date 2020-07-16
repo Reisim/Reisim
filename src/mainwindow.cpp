@@ -103,8 +103,21 @@ MainWindow::MainWindow(QWidget *parent)
     snapshotBtn->setFixedSize( snapshotBtn->sizeHint() );
     connect(snapshotBtn,SIGNAL(clicked(bool)),this,SLOT(OutputRestartData()));
 
+    cbFixCameraToObj = new QCheckBox("Fix Camera to Object");
+    cbFixCameraToObj->setChecked(false);
+    connect(cbFixCameraToObj,SIGNAL(toggled(bool)),this,SLOT(FixCameraToObjChanged(bool)));
+
+    cameraFixToObjID = new QSpinBox();
+    cameraFixToObjID->setMaximum(0);
+    cameraFixToObjID->setMaximum(10000);
+    cameraFixToObjID->setValue(1);
+    cameraFixToObjID->setPrefix("ID:");
+    cameraFixToObjID->setFixedWidth(100);
+
+
     QHBoxLayout *controlLayout1 = new QHBoxLayout();
     QHBoxLayout *controlLayout2 = new QHBoxLayout();
+    QHBoxLayout *controlLayout3 = new QHBoxLayout();
 
     controlLayout1->addWidget( startBtn );
     controlLayout1->addWidget( pauseBtn );
@@ -125,9 +138,14 @@ MainWindow::MainWindow(QWidget *parent)
     controlLayout2->addWidget( fontScaler );
     controlLayout2->addStretch();
 
+    controlLayout3->addWidget( cbFixCameraToObj );
+    controlLayout3->addWidget( cameraFixToObjID );
+    controlLayout3->addStretch();
 
     controlLayout->addLayout( controlLayout1 );
     controlLayout->addLayout( controlLayout2 );
+    controlLayout->addLayout( controlLayout3 );
+
 
     //--------
     simulationTimeDisplay = new QLabel();
@@ -496,6 +514,27 @@ void MainWindow::StopGraphicUpdateChanged(bool v)
     emit SetStopGraphicUpdate(v);
 }
 
+
+void MainWindow::FixCameraToObjChanged(bool v)
+{
+    qDebug() << "FixCameraToObjChanged";
+
+    canvas->trackingMode = v;
+
+    if( v == true ){
+        canvas->trackingObjID = cameraFixToObjID->value();
+        qDebug() << "trackingObjID = " << canvas->trackingObjID;
+
+        canvas->PushEyeCoord();
+        qDebug() << "PushEyeCoord";
+    }
+    else{
+        canvas->PopEyeCoord();
+        qDebug() << "PopEyeCoord";
+    }
+}
+
+
 void MainWindow::SetFontScale(int s)
 {
     canvas->SetFontScale(s);
@@ -539,6 +578,10 @@ void MainWindow::keyPressEvent(QKeyEvent *e)
             }
 
             SimulationResume();
+        }
+        else if( key >= Qt::Key_0 && key <= Qt::Key_9 ){
+
+            emit SetDSMoveTarget( key - Qt::Key_0 );
         }
     }
 }

@@ -51,6 +51,7 @@ Vehicle::Vehicle()
     tireFR4CG  = NULL;
     tireRL4CG  = NULL;
     tireRR4CG  = NULL;
+    yawFiltered4CG = NULL;
 
     axBuf4BrakeLamp[0] = 0.0;
     axBuf4BrakeLamp[1] = 0.0;
@@ -449,6 +450,12 @@ LowPassFilter::LowPassFilter(int dim,float dt, float cutoffFrq,float dampingCoef
         b[i] = 0.0;
     }
 
+    SetParam(dim,dt,cutoffFrq,dampingCoef);
+}
+
+
+void LowPassFilter::SetParam(int dim, float dt, float cutoffFrq, float dampingCoef)
+{
     if( dim < 0 || dim > 2 ){
         return;
     }

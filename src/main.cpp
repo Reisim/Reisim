@@ -30,6 +30,11 @@
 #include <QMutex>
 #include <QWaitCondition>
 
+
+
+int get_logical_processor_info (int type);
+
+
 QMutex *mutex = NULL;
 QWaitCondition *cond = NULL;
 
@@ -77,6 +82,11 @@ int main(int argc, char *argv[])
     else{
         qDebug() << "Cannot open exe-log file: " << sysLogOutFile.fileName();
     }
+
+
+    // Get CoreCount
+    maxWorkerThread = get_logical_processor_info(4);
+    qDebug() << "Logical Core Count = " << maxWorkerThread;
 
 
     // Get Network Drive Info
@@ -159,7 +169,7 @@ int main(int argc, char *argv[])
     QApplication::setStyle(QStyleFactory::create("Fusion"));
 
     w.setWindowTitle("MDS02-Canopus | Re:sim");
-    w.setMinimumSize( QSize(800,600) );
+    w.setMinimumSize( QSize(800,800) );
     w.setWindowIcon( QIcon(":images/resim-icon.png") );
     w.show();
 
@@ -230,10 +240,12 @@ int main(int argc, char *argv[])
     QObject::connect( &w, SIGNAL(SetStopGraphicUpdate(bool)), sys, SLOT(SetStopGraphicUpdate(bool)) );
 
     QObject::connect( w.GetPointerGraphicCanvas(), SIGNAL(ShowAgentData(float,float)),sys, SLOT(ShowAgentData(float,float)) );
+    QObject::connect( w.GetPointerGraphicCanvas(), SIGNAL(DSMove(float,float)),sys, SLOT(DSMove(float,float)) );
 
     QObject::connect( &w, SIGNAL(SetTmpStpoTime(int,int,int)), sys, SLOT(SetTmpStopTime(int,int,int)) );
     QObject::connect( &w, SIGNAL(OutputRestartData(QString)), sys, SLOT(OutputRestartData(QString)) );
     QObject::connect( &w, SIGNAL(SetRestartFile(QString)), sys, SLOT(SetRestartFile(QString)) );
+    QObject::connect( &w, SIGNAL(SetDSMoveTarget(int)), sys, SLOT(SetDSMoveTarget(int)) );
 
     QObject::connect( sys, SIGNAL(UpdateSimulationTimeDisplay(QString)), &w, SLOT(UpdateSimulationTimeDisplay(QString)) );
     QObject::connect( sys, SIGNAL(SetAgentPointer(Agent**)), &w, SLOT(SetAgentPointerToCanvas(Agent**)) );
@@ -419,3 +431,156 @@ int main(int argc, char *argv[])
     return ret;
 }
 
+
+
+
+//
+//  Following : for getting Processor infomation
+//
+typedef BOOL (WINAPI *LPFN_GLPI)(
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION,
+    PDWORD);
+
+
+// Helper function to count set bits in the processor mask.
+DWORD CountSetBits(ULONG_PTR bitMask)
+{
+    DWORD LSHIFT = sizeof(ULONG_PTR)*8 - 1;
+    DWORD bitSetCount = 0;
+    ULONG_PTR bitTest = (ULONG_PTR)1 << LSHIFT;
+    DWORD i;
+
+    for (i = 0; i <= LSHIFT; ++i)
+    {
+        bitSetCount += ((bitMask & bitTest)?1:0);
+        bitTest/=2;
+    }
+
+    return bitSetCount;
+}
+
+int get_logical_processor_info (int type)
+{
+    int ret = -1;
+
+    LPFN_GLPI glpi;
+    BOOL done = FALSE;
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION buffer = NULL;
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION ptr = NULL;
+    DWORD returnLength = 0;
+    DWORD logicalProcessorCount = 0;
+    DWORD numaNodeCount = 0;
+    DWORD processorCoreCount = 0;
+    DWORD processorL1CacheCount = 0;
+    DWORD processorL2CacheCount = 0;
+    DWORD processorL3CacheCount = 0;
+    DWORD processorPackageCount = 0;
+    DWORD byteOffset = 0;
+    PCACHE_DESCRIPTOR Cache;
+
+    glpi = (LPFN_GLPI) GetProcAddress(
+                            GetModuleHandle(TEXT("kernel32")),
+                            "GetLogicalProcessorInformation");
+    if (NULL == glpi)
+    {
+        qDebug() << "\nGetLogicalProcessorInformation is not supported.\n";
+        return (1);
+    }
+
+    while (!done)
+    {
+        DWORD rc = glpi(buffer, &returnLength);
+
+        if (FALSE == rc)
+        {
+            if (GetLastError() == ERROR_INSUFFICIENT_BUFFER)
+            {
+                if (buffer)
+                    free(buffer);
+
+                buffer = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION)malloc(
+                        returnLength);
+
+                if (NULL == buffer)
+                {
+                    qDebug() << "\nError: Allocation failure\n";
+                    return (2);
+                }
+            }
+            else
+            {
+                qDebug() << "\nError << " << GetLastError();
+                return (3);
+            }
+        }
+        else
+        {
+            done = TRUE;
+        }
+    }
+
+    ptr = buffer;
+
+    while (byteOffset + sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION) <= returnLength)
+    {
+        switch (ptr->Relationship)
+        {
+        case RelationNumaNode:
+            // Non-NUMA systems report a single record of this type.
+            numaNodeCount++;
+            break;
+
+        case RelationProcessorCore:
+            processorCoreCount++;
+
+            // A hyperthreaded core supplies more than one logical processor.
+            logicalProcessorCount += CountSetBits(ptr->ProcessorMask);
+            break;
+
+        case RelationCache:
+            // Cache data is in ptr->Cache, one CACHE_DESCRIPTOR structure for each cache.
+            Cache = &ptr->Cache;
+            if (Cache->Level == 1)
+            {
+                processorL1CacheCount++;
+            }
+            else if (Cache->Level == 2)
+            {
+                processorL2CacheCount++;
+            }
+            else if (Cache->Level == 3)
+            {
+                processorL3CacheCount++;
+            }
+            break;
+
+        case RelationProcessorPackage:
+            // Logical processors share a physical package.
+            processorPackageCount++;
+            break;
+
+        default:
+            qDebug() << "\nError: Unsupported LOGICAL_PROCESSOR_RELATIONSHIP value.\n";
+            break;
+        }
+        byteOffset += sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
+        ptr++;
+    }
+
+    free(buffer);
+
+
+    switch(type){
+    case 1: ret = numaNodeCount; break;
+    case 2: ret = processorPackageCount; break;
+    case 3: ret = processorCoreCount; break;
+    case 4: ret = logicalProcessorCount; break;
+    case 5: ret = processorL1CacheCount; break;
+    case 6: ret = processorL2CacheCount; break;
+    case 7: ret = processorL3CacheCount; break;
+    default: ret = -1; break;
+    }
+
+
+    return ret;
+}

@@ -340,12 +340,12 @@ void Road::LoadRoadData(QString filename)
         }
         else if( tag == QString("Pedest-Path") ){
 
-            struct PedestPath* path = new struct PedestPath;
+            struct PedestPath* pedestpath = new struct PedestPath;
 
-            path->id = QString( divLine[1] ).trimmed().toInt();
-            path->scenarioObjectID = -1;
+            pedestpath->id = QString( divLine[1] ).trimmed().toInt();
+            pedestpath->scenarioObjectID = -1;
 
-            pedestPaths.append( path );
+            pedestPaths.append( pedestpath );
         }
         else if ( tag == QString("Pedest-Path Shape") ) {
 
@@ -643,6 +643,8 @@ void Road::LoadRoadData(QString filename)
             }
 
             odr->NextAppearTime = -1.0;
+
+            odr->onlyForScenarioVehicle = false;
 
             odRoute.append( odr );
         }
@@ -1065,9 +1067,9 @@ void Road::LoadRoadData(QString filename)
             struct RouteLaneData *rld = odRoute[i]->LCSupportLaneLists.at( j );
 
             int myWPin = -1;
-            for(int i=0;i<rld->laneList[0].size();++i){
+            for(int k=0;k<rld->laneList[0].size();++k){
 
-                int lIdx = pathId2Index.indexOf( rld->laneList[0][i] );
+                int lIdx = pathId2Index.indexOf( rld->laneList[0][k] );
                 if( paths[lIdx]->connectingNode != rld->goalNode ){
                     continue;
                 }
@@ -1083,8 +1085,8 @@ void Road::LoadRoadData(QString filename)
             struct RouteLaneData *nextrld = odRoute[i]->LCSupportLaneLists.at( j-1 );
 
             int targetWPin = -1;
-            for(int i=0;i<nextrld->laneList[0].size();++i){
-                int lIdx = pathId2Index.indexOf( nextrld->laneList[0][i] );
+            for(int k=0;k<nextrld->laneList[0].size();++k){
+                int lIdx = pathId2Index.indexOf( nextrld->laneList[0][k] );
                 if( paths[lIdx]->connectingNode != rld->goalNode ){
                     continue;
                 }
@@ -1103,15 +1105,15 @@ void Road::LoadRoadData(QString filename)
                 int laneNoDiff = 0;
 
                 int ndIdx = nodeId2Index.indexOf( rld->goalNode );
-                for(int i=0;i<nodes[ndIdx]->inBoundaryWPs.size();++i){
-                    if( nodes[ndIdx]->inBoundaryWPs[i]->wpId == myWPin ){
-                        laneNoDiff += nodes[ndIdx]->inBoundaryWPs[i]->laneNo;
+                for(int k=0;k<nodes[ndIdx]->inBoundaryWPs.size();++k){
+                    if( nodes[ndIdx]->inBoundaryWPs[k]->wpId == myWPin ){
+                        laneNoDiff += nodes[ndIdx]->inBoundaryWPs[k]->laneNo;
 
 //                        qDebug() << "    [m]laneNoDiff = " << laneNoDiff;
 
                     }
-                    if( nodes[ndIdx]->inBoundaryWPs[i]->wpId == targetWPin ){
-                        laneNoDiff -= nodes[ndIdx]->inBoundaryWPs[i]->laneNo;
+                    if( nodes[ndIdx]->inBoundaryWPs[k]->wpId == targetWPin ){
+                        laneNoDiff -= nodes[ndIdx]->inBoundaryWPs[k]->laneNo;
 
 //                        qDebug() << "    [t]laneNoDiff = " << laneNoDiff;
                     }
@@ -1353,8 +1355,12 @@ void Road::CalculatePathCurvature(Path *p)
     }
 
     p->meanPathCurvature = 0.0;
+    p->maxPathCurvature = 0.0;
     for(int i=0;i<p->curvature.size();++i){
         p->meanPathCurvature += p->curvature.at(i);
+        if( p->maxPathCurvature < fabs(p->curvature[i]) ){
+            p->maxPathCurvature = fabs(p->curvature[i]);
+        }
     }
     p->meanPathCurvature /= p->curvature.size();
 }
@@ -1450,6 +1456,10 @@ void Road::SetPathRelatedNodes()
 {
     qDebug() << "[Road::SetPathRelatedNodes]";
 
+    for(int i=0;i<paths.size();++i){
+        paths[i]->connectingNode = -1;
+    }
+
     for(int i=0;i<nodes.size();++i){
         for(int j=0;j<nodes[i]->pathLists.size();++j){
             for(int k=0;k<nodes[i]->pathLists[j]->pathList.size();++k){
@@ -1460,6 +1470,12 @@ void Road::SetPathRelatedNodes()
                     paths[pIdx]->connectingNodeInDir = nodes[i]->pathLists[j]->inDirect;
                 }
             }
+        }
+    }
+
+    for(int i=0;i<paths.size();++i){
+        if( paths[i]->connectingNode == -1 ){
+            qDebug() << "!!! path: id = " << paths[i]->id << " , connectingNode is not set. Check SEdit Data.";
         }
     }
 }
@@ -1798,6 +1814,8 @@ int Road::CreatePedestPathsforScenarioObject(int objectID,
         }
         ppath->id = maxID;
         ppath->scenarioObjectID = objectID;
+
+        ppath->meanArrivalTime = -1.0;
 
         pedestPaths.append( ppath );
         pedestPathID2Index.append( maxID );

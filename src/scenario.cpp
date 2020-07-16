@@ -100,6 +100,7 @@ void SimulationManager::DumpScenarioData()
                          << scenario[i]->scenarioItems[j]->appearTriggers->objectTigger[k]->x << ","
                          << scenario[i]->scenarioItems[j]->appearTriggers->objectTigger[k]->y;
                 qDebug() << "          Direction : " << scenario[i]->scenarioItems[j]->appearTriggers->objectTigger[k]->direction * 57.3;
+                qDebug() << "          Width     : " << scenario[i]->scenarioItems[j]->appearTriggers->objectTigger[k]->widthHalf;
                 qDebug() << "          Speed     : " << scenario[i]->scenarioItems[j]->appearTriggers->objectTigger[k]->speed * 3.6;
                 qDebug() << "          TTC       : " << scenario[i]->scenarioItems[j]->appearTriggers->objectTigger[k]->TTC;
             }
@@ -146,10 +147,57 @@ void SimulationManager::DumpScenarioData()
         qDebug() << "+--- Event";
         for(int j=0;j<scenario[i]->scenarioEvents.size();++j){
             qDebug() << "    +----- ID " << scenario[i]->scenarioEvents[j]->eventID;
-            qDebug() << "        Type " << scenario[i]->scenarioEvents[j]->eventType;
-            qDebug() << "        Kine " << scenario[i]->scenarioEvents[j]->eventKind;
-            qDebug() << "        Trigger Mode " << scenario[i]->scenarioEvents[j]->eventTrigger->mode;
-            qDebug() << "        Trigger FuncKey " << scenario[i]->scenarioEvents[j]->eventTrigger->func_keys;
+            qDebug() << "        Type " << (scenario[i]->scenarioEvents[j]->eventType == SCENARIO_EVENT_TYPE::SYSTEM_EVENT ? ": System Event" : ": Object Event");
+            if( scenario[i]->scenarioEvents[j]->eventType == SCENARIO_EVENT_TYPE::SYSTEM_EVENT ){
+                if( scenario[i]->scenarioEvents[j]->eventKind == 0 ){
+                    qDebug() << "        Kind : Warp" ;
+                }
+                else if( scenario[i]->scenarioEvents[j]->eventKind == 1 ){
+                    qDebug() << "        Kind : Change Traffic Signal";
+                }
+                else if( scenario[i]->scenarioEvents[j]->eventKind == 2 ){
+                    qDebug() << "        Kind : Change Speed Info";
+                }
+                else if( scenario[i]->scenarioEvents[j]->eventKind == 3 ){
+                    qDebug() << "        Kind : Send UDP Data";
+                }
+            }
+            else{
+                if( scenario[i]->scenarioEvents[j]->eventKind == 0 ){
+                    qDebug() << "        Kind : Appear" ;
+                }
+                else if( scenario[i]->scenarioEvents[j]->eventKind == 1 ){
+                    qDebug() << "        Kind : Control";
+                }
+                else if( scenario[i]->scenarioEvents[j]->eventKind == 2 ){
+                    qDebug() << "        Kind : Send UDP Data";
+                }
+                else if( scenario[i]->scenarioEvents[j]->eventKind == 3 ){
+                    qDebug() << "        Kind : Disappear";
+                }
+            }
+
+            if( scenario[i]->scenarioEvents[j]->eventTrigger->combination >= 0 ){
+                if( scenario[i]->scenarioEvents[j]->eventTrigger->mode == 0 ){
+                    qDebug() << "        Trigger Mode : Internal";
+                }
+                else{
+                    qDebug() << "        Trigger Mode : External";
+                    qDebug() << "        Trigger FuncKey : " << scenario[i]->scenarioEvents[j]->eventTrigger->func_keys;
+                }
+
+                if( scenario[i]->scenarioEvents[j]->eventTrigger->combination >= 0 ){
+                    for(int k=0;k<scenario[i]->scenarioEvents[j]->eventTrigger->objectTigger.size();++k){
+                        qDebug() << "           Trigger[" << k << "]: type = "
+                                 << scenario[i]->scenarioEvents[j]->eventTrigger->objectTigger[k]->triggerType;
+                    }
+                }
+            }
+            else{
+                qDebug() << "        Trigger Mode " << scenario[i]->scenarioEvents[j]->eventTrigger->mode;
+                qDebug() << "        Trigger FuncKey " << scenario[i]->scenarioEvents[j]->eventTrigger->func_keys;
+                qDebug() << "        Trigger Combination " << scenario[i]->scenarioEvents[j]->eventTrigger->combination;
+            }
         }
     }
 }
@@ -228,6 +276,16 @@ void SimulationManager::ClearScenarioData()
 
             scenario[i]->scenarioEvents[j]->eventIntData.clear();
             scenario[i]->scenarioEvents[j]->eventFloatData.clear();
+            scenario[i]->scenarioEvents[j]->eventBooleanData.clear();
+
+
+
+            if( scenario[i]->scenarioEvents[j]->wpRoute.size() > 0 ){
+                for(int k=0;k<scenario[i]->scenarioEvents[j]->wpRoute.size();++k){
+                    delete scenario[i]->scenarioEvents[j]->wpRoute[k];
+                }
+                scenario[i]->scenarioEvents[j]->wpRoute.clear();
+            }
 
             delete scenario[i]->scenarioEvents[j];
         }

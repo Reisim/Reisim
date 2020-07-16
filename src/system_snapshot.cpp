@@ -27,6 +27,15 @@ void SystemThread::OutputRestartData(QString filename)
             continue;
         }
 
+        if( agent[i]->isScenarioObject == true ){
+            continue;
+        }
+
+        if( agent[i]->isSInterfaceObject == true ){
+            continue;
+        }
+
+
         out << "A," << i << ","
             << agent[i]->ID << ","
             << agent[i]->agentKind << ","
@@ -63,7 +72,8 @@ void SystemThread::OutputRestartData(QString filename)
             << agent[i]->param.crossWaitPositionSafeyMargin << ","
             << agent[i]->param.minimumHeadwayDistanceAtStop << ","
             << agent[i]->param.pedestWaitPositionSafetyMargin << ","
-            << agent[i]->param.minimumPerceptibleDecelerationOfPreceding << "\n";
+            << agent[i]->param.minimumPerceptibleDecelerationOfPreceding << ","
+            << agent[i]->param.speedVariationFactor << "\n";
 
 
         out << agent[i]->vehicle.state.X << ","
@@ -98,7 +108,8 @@ void SystemThread::OutputRestartData(QString filename)
             << agent[i]->memory.LCStartRouteIndex << ","
             << agent[i]->memory.LCDirection << ","
             << agent[i]->memory.checkSideVehicleForLC << ","
-            << agent[i]->memory.LCCheckState << "\n";
+            << agent[i]->memory.LCCheckState << ","
+            << agent[i]->memory.destinationNode << "\n";
 
 
         out << agent[i]->memory.accel << ","
@@ -312,6 +323,11 @@ void SystemThread::OutputRestartData(QString filename)
 
 void SystemThread::SetRestartData()
 {
+    if( restartFile == QString() ){
+        return;
+    }
+
+
     qDebug() << "[SystemThread::SetRestartData]";
 
     QFile file(restartFile);
@@ -348,14 +364,16 @@ void SystemThread::SetRestartData()
 
         if( readLine.startsWith("Time-Stamp:") == true ){
 
-            QStringList timeStrDiv = readLine.remove("Time-Stamp:").trimmed().split(":");
+            if( DSMode == false ){
+                QStringList timeStrDiv = readLine.remove("Time-Stamp:").trimmed().split(":");
 
-            int day  = QString(timeStrDiv[0]).remove("[d]").trimmed().toInt();
-            int hour = QString(timeStrDiv[1]).remove("[h]").trimmed().toInt();
-            int mint = QString(timeStrDiv[2]).remove("[m]").trimmed().toInt();
-            float sec = QString(timeStrDiv[3]).remove("[s]").trimmed().toFloat();
+                int day  = QString(timeStrDiv[0]).remove("[d]").trimmed().toInt();
+                int hour = QString(timeStrDiv[1]).remove("[h]").trimmed().toInt();
+                int mint = QString(timeStrDiv[2]).remove("[m]").trimmed().toInt();
+                float sec = QString(timeStrDiv[3]).remove("[s]").trimmed().toFloat();
 
-            simManage->SetSimulationTime(day,hour,mint,sec);
+                simManage->SetSimulationTime(day,hour,mint,sec);
+            }
 
             lineNo++;
             continue;
@@ -386,12 +404,19 @@ void SystemThread::SetRestartData()
 
             cIdx = idx;
             agent[cIdx]->ID                     = ID;
-            agent[cIdx]->agentKind              = agentKind;
+            agent[cIdx]->agentKind              = agentKind + 1;
             agent[cIdx]->isScenarioObject       = isScenarioObject;
             agent[cIdx]->isBehaviorEmbeded      = isBehaviorEmbeded;
             agent[cIdx]->isSInterfaceObject     = isSInterfaceObject;
             agent[cIdx]->notAllowedAppear       = notAllowedAppear;
-            agent[cIdx]->calInterval            = calInterval;
+
+            if( DSMode == false ){
+                agent[cIdx]->calInterval = calInterval;
+            }
+            else{
+                agent[cIdx]->calInterval = simManage->GetCalculationInterval();
+            }
+
             agent[cIdx]->cognitionCountMax      = cognitionCountMax;
             agent[cIdx]->cognitionCount         = cognitionCount;
             agent[cIdx]->decisionMakingCountMax = decisionMakingCountMax;
@@ -450,6 +475,22 @@ void SystemThread::SetRestartData()
             agent[cIdx]->param.minimumHeadwayDistanceAtStop =  QString(valDiv[14]).trimmed().toFloat();
             agent[cIdx]->param.pedestWaitPositionSafetyMargin =  QString(valDiv[15]).trimmed().toFloat();
             agent[cIdx]->param.minimumPerceptibleDecelerationOfPreceding =  QString(valDiv[16]).trimmed().toFloat();
+
+            if( valDiv.size() >= 18 ){
+                agent[cIdx]->param.speedVariationFactor = QString(valDiv[17]).trimmed().toFloat();
+            }
+            else{
+                agent[cIdx]->param.speedVariationFactor = simManage->GetNormalDist(0.0,0.3);
+                if( agent[cIdx]->param.speedVariationFactor > 1.5 ){
+                    agent[cIdx]->param.speedVariationFactor = 1.5;
+                }
+                else if( agent[cIdx]->param.speedVariationFactor < -0.8 ){
+                    agent[cIdx]->param.speedVariationFactor = -0.8;
+                }
+
+                agent[cIdx]->param.latAccelAtTurn = ( 0.20 + agent[cIdx]->param.speedVariationFactor * 0.07) * 9.81;
+            }
+
 
             lineNo++;
             cPos = 3;
@@ -528,32 +569,314 @@ void SystemThread::SetRestartData()
                 agent[cIdx]->memory.checkSideVehicleForLC        = (QString(valDiv[14]).trimmed().toInt() == 1 ? true : false);
                 agent[cIdx]->memory.LCCheckState                 =  QString(valDiv[15]).trimmed().toInt();
             }
+            else{
+                agent[cIdx]->memory.LCSupportRouteLaneIndex      =  -1;
+                agent[cIdx]->memory.LCStartRouteIndex            =  -1;
+                agent[cIdx]->memory.LCDirection                  =  0;
+                agent[cIdx]->memory.checkSideVehicleForLC        =  false;
+                agent[cIdx]->memory.LCCheckState                 =  0;
+            }
+            if( valDiv.size() >= 17 ){
+                agent[cIdx]->memory.destinationNode = QString(valDiv[16]).trimmed().toInt();
+            }
+            else{
+                agent[cIdx]->memory.destinationNode = -1;
+            }
 
 
-            if( agent[cIdx]->agentKind < 100 ){
+            if( agent[cIdx]->agentKind < 100 ){                
 
                 int i = agent[cIdx]->memory.routeIndex;
-                int selIdx = agent[cIdx]->memory.routeLaneIndex ;
+                int selIdx = agent[cIdx]->memory.routeLaneIndex;
 
-                agent[cIdx]->memory.targetPathList = road->odRoute[i]->laneListsToDestination[selIdx];
+                if( i >= 0 && i < road->odRoute.size() &&
+                        road->odRoute[i]->laneListsToDestination.size() > 0 && selIdx < road->odRoute[i]->laneListsToDestination.size() ){  // old ver, to be deleted
 
-                agent[cIdx]->memory.targetPathLength.clear();
-                for(int j=0;j<agent[cIdx]->memory.targetPathList.size();++j){
-                    float len = road->GetPathLength( agent[cIdx]->memory.targetPathList[j] );
-                    agent[cIdx]->memory.targetPathLength.append( len );
+                    agent[cIdx]->memory.targetPathList = road->odRoute[i]->laneListsToDestination[selIdx];
+
+                    agent[cIdx]->memory.currentTargetPathIndexInList = -1;
+                    for(int n = agent[cIdx]->memory.targetPathList.size()-1 ; n>=0 ; n--){
+                        if( agent[cIdx]->memory.currentTargetPathIndexInList < 0 &&
+                                agent[cIdx]->memory.targetPathList[n] != agent[cIdx]->memory.currentTargetPath ){
+                            continue;
+                        }
+                        agent[cIdx]->memory.currentTargetPathIndexInList = n;
+                        break;
+                    }
+
+                    agent[cIdx]->memory.targetPathLength.clear();
+                    for(int nn=0;nn<agent[cIdx]->memory.targetPathList.size();++nn){
+                        float len = road->GetPathLength( agent[cIdx]->memory.targetPathList[nn] );
+                        agent[cIdx]->memory.targetPathLength.append( len );
+                    }
+
+                    agent[cIdx]->memory.laneMerge.clear();
+
+                    for(int k=0;k<road->odRoute[i]->mergeLanesInfo[selIdx].size();++k){
+
+                        QPoint pairData;
+                        pairData.setX( road->odRoute[i]->mergeLanesInfo[selIdx][k].x() );
+                        pairData.setY( road->odRoute[i]->mergeLanesInfo[selIdx][k].y() );
+
+                        agent[cIdx]->memory.laneMerge.append( pairData );
+                    }
                 }
+                else{  // new ver
 
-                agent[cIdx]->SetTargetNodeListByTargetPaths( road );
+                    bool isSet = false;
 
-                agent[cIdx]->memory.laneMerge.clear();
+                    // OD data can be difference for current and snapshot
+                    if( i >= 0 && i < road->odRoute.size() &&
+                            road->odRoute[i]->destinationNode == agent[cIdx]->memory.destinationNode ){
 
-                for(int k=0;k<road->odRoute[i]->mergeLanesInfo[selIdx].size();++k){
+                        int j = agent[cIdx]->memory.LCSupportRouteLaneIndex;
+                        if( j >= 0 && j < road->odRoute[i]->LCSupportLaneLists.size() &&
+                                selIdx >= 0 && selIdx < road->odRoute[i]->LCSupportLaneLists[j]->laneList.size() &&
+                                road->odRoute[i]->LCSupportLaneLists[j]->laneList[selIdx].indexOf( agent[cIdx]->memory.currentTargetPath ) >= 0 ){
 
-                    QPoint pairData;
-                    pairData.setX( road->odRoute[i]->mergeLanesInfo[selIdx][k].x() );
-                    pairData.setY( road->odRoute[i]->mergeLanesInfo[selIdx][k].y() );
+                            agent[cIdx]->memory.targetPathList = road->odRoute[i]->LCSupportLaneLists[j]->laneList[selIdx];
 
-                    agent[cIdx]->memory.laneMerge.append( pairData );
+                            agent[cIdx]->memory.currentTargetPathIndexInList = -1;
+                            for(int n = agent[cIdx]->memory.targetPathList.size()-1 ; n>=0 ; n--){
+                                if( agent[cIdx]->memory.currentTargetPathIndexInList < 0 &&
+                                        agent[cIdx]->memory.targetPathList[n] != agent[cIdx]->memory.currentTargetPath ){
+                                    continue;
+                                }
+                                agent[cIdx]->memory.currentTargetPathIndexInList = n;
+                                break;
+                            }
+
+                            agent[cIdx]->memory.targetPathLength.clear();
+                            for(int nn=0;nn<agent[cIdx]->memory.targetPathList.size();++nn){
+                                float len = road->GetPathLength( agent[cIdx]->memory.targetPathList[nn] );
+                                agent[cIdx]->memory.targetPathLength.append( len );
+                            }
+
+                            agent[cIdx]->memory.laneMerge.clear();
+
+                            int MLIidx = 0;
+                            for(int n=0;n<j;++n){
+                                MLIidx += road->odRoute[i]->LCSupportLaneLists[n]->laneList.size();
+                            }
+                            MLIidx += selIdx;
+
+                            for(int k=0;k<road->odRoute[i]->mergeLanesInfo[MLIidx].size();++k){
+
+                                QPoint pairData;
+                                pairData.setX( road->odRoute[i]->mergeLanesInfo[MLIidx][k].x() );
+                                pairData.setY( road->odRoute[i]->mergeLanesInfo[MLIidx][k].y() );
+
+                                agent[cIdx]->memory.laneMerge.append( pairData );
+                            }
+
+                            agent[cIdx]->SetTargetSpeedIndividual( road->paths[ road->pathId2Index.indexOf(agent[cIdx]->memory.currentTargetPath) ]->speed85pt );
+                            agent[cIdx]->SetTargetNodeListByTargetPaths( road );
+
+                            isSet = true;
+                        }
+                    }
+
+
+                    if( isSet == false ){
+
+                        // Try ro find the route contains current path
+                        QStringList validRoutes;
+                        QList<int> rIdx;
+                        for(int k=0;k<road->odRoute.size();++k){
+                            for(int l=0;l<road->odRoute[k]->LCSupportLaneLists.size();++l){
+                                for(int m=0;m<road->odRoute[k]->LCSupportLaneLists[l]->laneList.size();++m){
+                                    if( road->odRoute[k]->LCSupportLaneLists[l]->laneList[m].indexOf( agent[cIdx]->memory.currentTargetPath ) >= 0 ){
+                                        validRoutes.append( QString("%1,%2,%3").arg(k).arg(l).arg(m) );
+                                        rIdx.append(k);
+                                    }
+                                }
+                            }
+                        }
+
+                        if( validRoutes.size() == 0 ){
+                            // No route found, should disappear
+                            agent[cIdx]->agentStatus = 2;
+
+                            lineNo++;
+                            cPos = 5;
+                            continue;
+                        }
+
+                        // Try ro find the route for original destination
+                        for(int k=rIdx.size()-1;k>=0;--k){
+                            if( road->odRoute[rIdx[k]]->destinationNode != agent[cIdx]->memory.destinationNode ){
+                                rIdx.removeAt(k);
+                            }
+                        }
+
+                        if( rIdx.size() > 0 ){
+
+                            int n = rIdx.size();
+                            int k = (int)(simManage->rndGen.GenUniform() * n);
+                            if( k >= n ){
+                                k = n - 1;
+                            }
+
+                            int m = 0;
+                            for(int l=0;l<validRoutes.size();++l){
+                                if( QString(validRoutes[l]).startsWith(QString("%1,").arg(rIdx[k])) == true ){
+                                    if( m == k ){
+
+                                        agent[cIdx]->memory.routeIndex = rIdx[k];
+
+                                        QStringList div = QString(validRoutes[l]).split(",");
+
+                                        agent[cIdx]->memory.LCSupportRouteLaneIndex = QString( div[1] ).trimmed().toInt();
+                                        agent[cIdx]->memory.routeLaneIndex = QString( div[2] ).trimmed().toInt();
+
+
+                                        int kk = agent[cIdx]->memory.routeIndex;
+                                        int ll = agent[cIdx]->memory.LCSupportRouteLaneIndex;
+                                        int mm = agent[cIdx]->memory.routeLaneIndex;
+
+                                        if( agent[cIdx]->memory.LCSupportRouteLaneIndex == 0 ){
+                                            agent[cIdx]->memory.LCStartRouteIndex = -1;
+                                        }
+                                        else{
+                                            agent[cIdx]->memory.LCStartRouteIndex = road->odRoute[kk]->LCSupportLaneLists[ll]->gIndexInNodeList;
+                                        }
+
+                                        agent[cIdx]->memory.targetPathList = road->odRoute[kk]->LCSupportLaneLists[ll]->laneList[mm];
+
+                                        agent[cIdx]->memory.currentTargetPathIndexInList = -1;
+                                        for(int nn = agent[cIdx]->memory.targetPathList.size()-1 ; nn>=0 ; nn--){
+                                            if( agent[cIdx]->memory.currentTargetPathIndexInList < 0 &&
+                                                    agent[cIdx]->memory.targetPathList[nn] != agent[cIdx]->memory.currentTargetPath ){
+                                                continue;
+                                            }
+                                            agent[cIdx]->memory.currentTargetPathIndexInList = nn;
+                                            break;
+                                        }
+
+                                        agent[cIdx]->memory.targetPathLength.clear();
+                                        for(int nn=0;nn<agent[cIdx]->memory.targetPathList.size();++nn){
+                                            float len = road->GetPathLength( agent[cIdx]->memory.targetPathList[nn] );
+                                            agent[cIdx]->memory.targetPathLength.append( len );
+                                        }
+
+
+                                        agent[cIdx]->memory.laneMerge.clear();
+
+                                        int MLIidx = 0;
+                                        for(int nn=0;nn<ll;++nn){
+                                            MLIidx += road->odRoute[kk]->LCSupportLaneLists[nn]->laneList.size();
+                                        }
+                                        MLIidx += mm;
+
+                                        for(int nn=0;nn<road->odRoute[kk]->mergeLanesInfo[MLIidx].size();++nn){
+
+                                            QPoint pairData;
+                                            pairData.setX( road->odRoute[kk]->mergeLanesInfo[MLIidx][nn].x() );
+                                            pairData.setY( road->odRoute[kk]->mergeLanesInfo[MLIidx][nn].y() );
+
+                                            agent[cIdx]->memory.laneMerge.append( pairData );
+                                        }
+
+                                        agent[cIdx]->SetTargetSpeedIndividual( road->paths[ road->pathId2Index.indexOf(agent[cIdx]->memory.currentTargetPath) ]->speed85pt );
+                                        agent[cIdx]->SetTargetNodeListByTargetPaths( road );
+
+                                        isSet = true;
+
+                                        break;
+                                    }
+                                    else{
+                                        m++;
+                                    }
+                                }
+                            }
+
+                        }
+                        else{
+
+                            int n = validRoutes.size();
+                            if( n == 0 ){
+                                // No route found, should disappear
+                                agent[cIdx]->agentStatus = 2;
+
+                                lineNo++;
+                                cPos = 5;
+                                continue;
+                            }
+
+                            int k = (int)(simManage->rndGen.GenUniform() * n);
+                            if( k >= n ){
+                                k = n - 1;
+                            }
+
+                            QStringList div = QString(validRoutes[k]).split(",");
+
+                            int kk = QString( div[0] ).trimmed().toInt();
+                            int ll = QString( div[1] ).trimmed().toInt();
+                            int mm = QString( div[2] ).trimmed().toInt();
+
+                            agent[cIdx]->memory.destinationNode = road->odRoute[kk]->destinationNode;
+
+                            agent[cIdx]->memory.routeIndex = kk;
+                            agent[cIdx]->memory.LCSupportRouteLaneIndex = ll;
+                            agent[cIdx]->memory.routeLaneIndex = mm;
+
+                            if( ll == 0 ){
+                                agent[cIdx]->memory.LCStartRouteIndex = -1;
+                            }
+                            else{
+                                agent[cIdx]->memory.LCStartRouteIndex = road->odRoute[kk]->LCSupportLaneLists[ll]->gIndexInNodeList;
+                            }
+
+                            agent[cIdx]->memory.targetPathList = road->odRoute[kk]->LCSupportLaneLists[ll]->laneList[mm];
+
+                            agent[cIdx]->memory.currentTargetPathIndexInList = -1;
+                            for(int nn = agent[cIdx]->memory.targetPathList.size()-1 ; nn>=0 ; nn--){
+                                if( agent[cIdx]->memory.currentTargetPathIndexInList < 0 &&
+                                        agent[cIdx]->memory.targetPathList[nn] != agent[cIdx]->memory.currentTargetPath ){
+                                    continue;
+                                }
+                                agent[cIdx]->memory.currentTargetPathIndexInList = nn;
+                                break;
+                            }
+
+                            agent[cIdx]->memory.targetPathLength.clear();
+                            for(int nn=0;nn<agent[cIdx]->memory.targetPathList.size();++nn){
+                                float len = road->GetPathLength( agent[cIdx]->memory.targetPathList[nn] );
+                                agent[cIdx]->memory.targetPathLength.append( len );
+                            }
+
+
+                            agent[cIdx]->memory.laneMerge.clear();
+
+                            int MLIidx = 0;
+                            for(int nn=0;nn<ll;++nn){
+                                MLIidx += road->odRoute[kk]->LCSupportLaneLists[nn]->laneList.size();
+                            }
+                            MLIidx += mm;
+
+                            for(int nn=0;nn<road->odRoute[kk]->mergeLanesInfo[MLIidx].size();++nn){
+
+                                QPoint pairData;
+                                pairData.setX( road->odRoute[kk]->mergeLanesInfo[MLIidx][nn].x() );
+                                pairData.setY( road->odRoute[kk]->mergeLanesInfo[MLIidx][nn].y() );
+
+                                agent[cIdx]->memory.laneMerge.append( pairData );
+                            }
+
+                            agent[cIdx]->SetTargetSpeedIndividual( road->paths[ road->pathId2Index.indexOf(agent[cIdx]->memory.currentTargetPath) ]->speed85pt );
+                            agent[cIdx]->SetTargetNodeListByTargetPaths( road );
+
+                            isSet = true;
+                        }
+                    }
+
+                    if( isSet == false ){
+                        agent[cIdx]->agentStatus = 2;
+
+                        lineNo++;
+                        cPos = 5;
+                        continue;
+                    }
                 }
             }
 
@@ -883,7 +1206,8 @@ void SystemThread::SetRestartData()
             int origNode = QString(valDiv[2]).trimmed().toInt();
             int destNode = QString(valDiv[3]).trimmed().toInt();
 
-            if( road->odRoute[idx]->originNode == origNode &&
+            if( idx >= 0 && idx < road->odRoute.size() &&
+                    road->odRoute[idx]->originNode == origNode &&
                     road->odRoute[idx]->destinationNode == destNode ){
 
                 road->odRoute[idx]->meanArrivalTime = QString(valDiv[4]).trimmed().toFloat();
@@ -894,6 +1218,8 @@ void SystemThread::SetRestartData()
 
 
     file.close();
+
+    emit RedrawRequest();
 }
 
 

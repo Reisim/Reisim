@@ -65,6 +65,7 @@ signals:
     void SetTmpStpoTime(int,int,int);
     void OutputRestartData(QString);
     void SetRestartFile(QString);
+    void SetDSMoveTarget(int);
 
 
 public slots:
@@ -88,6 +89,7 @@ public slots:
     void ShowTSIDChanged(bool);
     void ExitProgram();
     void StopGraphicUpdateChanged(bool);
+    void FixCameraToObjChanged(bool);
     void SetFontScale(int);
     void OutputRestartData();
 
@@ -116,6 +118,9 @@ private:
     QCheckBox *cbStopGraphicUpdate;
     QSlider *fontScaler;
     QPushButton *snapshotBtn;
+
+    QCheckBox *cbFixCameraToObj;
+    QSpinBox *cameraFixToObjID;
 
     ConfigWindow *confWin;
 

@@ -18,43 +18,36 @@ void Agent::UpdateState(Road* pRoad)
 {
     if( agentKind < 100 ){
 
+        if( isSInterfaceObject == true ){
+            return;
+        }
+
+
         vehicle.SetVehicleInput( memory.accel, memory.brake, memory.steer );
         vehicle.UpdateState( calInterval );
 
-        if( isSInterfaceObject == false ){
-            state.accel = memory.accel;
-            state.brake = memory.brake;
-            state.steer = memory.steer * 57.3 * 8.0;   // Assume steering gear-ratio 8.0
-                                                       // The vehicle model is so simple that only as reference
 
-            state.accel_log = state.accel;
-            state.brake_log = state.brake;
-            state.steer_log = state.steer;
+        state.accel = memory.accel;
+        state.brake = memory.brake;
+        state.steer = memory.steer * 57.3 * 8.0;   // Assume steering gear-ratio 8.0
+                                                   // The vehicle model is so simple that only as reference
 
-            if( state.warpFlag == 0 ){
-                float dx = state.x - vehicle.state.X;
-                float dy = state.y - vehicle.state.Y;
-                float L = dx * dx + dy * dy;
-                if( L > 400.0 ){
-                    state.warpFlag = 1;
-                }
+        state.accel_log = state.accel;
+        state.brake_log = state.brake;
+        state.steer_log = state.steer;
+
+        if( state.warpFlag == 0 ){
+            float dx = state.x - vehicle.state.X;
+            float dy = state.y - vehicle.state.Y;
+            float L = dx * dx + dy * dy;
+            if( L > 400.0 ){
+                state.warpFlag = 1;
             }
         }
 
         state.x   = vehicle.state.X;
         state.y   = vehicle.state.Y;
         state.z   = vehicle.state.Z;
-
-        if( memory.currentTargetPath >= 0 ){
-            int pIdx = pRoad->pathId2Index.indexOf( memory.currentTargetPath );
-            if( pIdx >= 0 ){
-                float z = pRoad->paths[pIdx]->pos.first()->z();
-                float dz = (pRoad->paths[pIdx]->pos.last()->z() - z) * memory.distanceFromStartWPInCurrentPath / pRoad->paths[pIdx]->pathLength;
-                z += dz;
-                state.z = z;
-            }
-        }
-
 
         state.V   = vehicle.state.vx;
         state.yaw = vehicle.state.yawAngle;
@@ -64,6 +57,23 @@ void Agent::UpdateState(Road* pRoad)
         state.cosYaw = cos( state.yaw );
         state.sinYaw = sin( state.yaw );
 
+
+        state.z_path = 0.0;
+        if( memory.currentTargetPath >= 0 ){
+            int pIdx = pRoad->pathId2Index.indexOf( memory.currentTargetPath );
+            if( pIdx >= 0 ){
+                float z = pRoad->paths[pIdx]->pos.first()->z();
+                float dz = (pRoad->paths[pIdx]->pos.last()->z() - z) * memory.distanceFromStartWPInCurrentPath / pRoad->paths[pIdx]->pathLength;
+                z += dz;
+                state.z_path = z;
+            }
+        }
+
+
+        if( vehicle.yawFiltered4CG != NULL ){
+            vehicle.yawFiltered4CG->SetInput( state.yaw );
+            vehicle.yawFiltered4CG->Update();
+        }
 
         if( vehicle.suspentionFL4CG != NULL &&
             vehicle.suspentionFR4CG != NULL &&
@@ -76,6 +86,10 @@ void Agent::UpdateState(Road* pRoad)
             state.roll  = vehicle.state.roll;
 
             state.z   = vehicle.state.Z;
+            //qDebug() << "id = " << ID << " z = " << state.z;
+        }
+        else{
+            state.z = state.z_path;
         }
     }
     else if( agentKind >= 100){
@@ -83,22 +97,9 @@ void Agent::UpdateState(Road* pRoad)
         //
         //  state.V and state.yaw is directly changed at control part
         //
-        if( vehicle.axFiltered4CG != NULL && vehicle.ayFiltered4CG != NULL ){
-
-//            float c = cos( state.yaw );
-//            float s = sin( state.yaw );
-
-//            vehicle.axFiltered4CG->SetInput( c );
-//            vehicle.axFiltered4CG->Update();
-//            c = vehicle.axFiltered4CG->GetOutput();
-
-//            vehicle.ayFiltered4CG->SetInput( s );
-//            vehicle.ayFiltered4CG->Update();
-//            s = vehicle.ayFiltered4CG->GetOutput();
-
-//            state.yaw = atan2( s, c );
-
-            state.z   = vehicle.state.Z;
+        if( vehicle.yawFiltered4CG != NULL ){
+            vehicle.yawFiltered4CG->SetInput( state.yaw );
+            vehicle.yawFiltered4CG->Update();
         }
 
         state.cosYaw = cos( state.yaw );
@@ -108,6 +109,7 @@ void Agent::UpdateState(Road* pRoad)
 
         state.x += ds * state.cosYaw;
         state.y += ds * state.sinYaw;
+        state.z  = vehicle.state.Z;
 
         state.pitch = 0.0;
         state.roll  = 0.0;

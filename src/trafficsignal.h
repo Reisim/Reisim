@@ -57,6 +57,10 @@ public:
     void SetSignalStartTime(float simTimeFval);
     void ForceChangeDisplayTo(float simTimeFval,int targetIndex);
 
+    int GetTimeToDisplay(int signalDisplayIndex);
+    void ProceedTime(int hasteTime);
+    void SetDisplayOff(){ displayOff = true; }
+
     int id;
 
     char type;   // 'v' for vehicles
@@ -77,6 +81,7 @@ public:
     float lastUpdateTimeFVal;
     float remainingTimeToNextDisplay;
     float elapsedTimeCurrentDisplay;
+    float currentSimTime;
 
     int startOffset;
 
@@ -84,6 +89,8 @@ public:
 
     int flushState;
     float flushTimeCheck;
+
+    bool displayOff;
 };
 
 #endif // TRAFFICSIGNAL_H

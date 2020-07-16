@@ -55,6 +55,10 @@ public:
     QList<QList<int> *> evalIDs;
     int *pWorkingMode;
 
+    char *sendDataBuf;
+    int sendDataMaxSize;
+
+
 signals:
     void UpdateSimulationTimeDisplay(QString);
     void SetAgentPointer(Agent**);
@@ -87,10 +91,10 @@ public slots:
     void SimulationResume();
     void SetSpeedAdjustVal(int);
     void wrapExitProgram();
-    void SetSendData(char *,int,int *,int ,int ,int);
-    void SetSendDataForFuncExtend(char *,int,int *,int ,int ,QList<int>);
+    int SetSendData(int ,int ,int);
+    int SetSendDataForFuncExtend(int ,int ,QList<int>);
     void SetSimulationFrequency(int);
-    void SetTireHeight(int,float,float,float,float);
+    void SetTireHeight(int,int,float,float,float,float);
 
     void SetSInterObjData( char, int, struct AgentState *,struct SInterObjInfo * );
     void ForceChangeTSColor(int,int,float);
@@ -115,10 +119,14 @@ public slots:
 
     void ShowAgentData(float x,float y);
     void SetTmpStopTime(int hour,int min,int sec);
+    void DSMove(float x,float y);
+    void SetDSMoveTarget(int t){ DSMoveTarget = t; }
 
     void OutputRestartData(QString filename);
     void SetRestartFile(QString filename){ restartFile = filename; }
     void SetRestartData();
+
+
 
 private:
     volatile bool stopped;
@@ -163,6 +171,7 @@ private:
     QString restartFile;
 
     QMutex *mutexDSStateWrite;
+    int DSMoveTarget;
 };
 
 #endif // SYSTEMTHREAD_H

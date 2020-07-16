@@ -96,6 +96,10 @@ SystemThread::SystemThread(QObject *parent) :
     restartFile = QString();
 
     mutexDSStateWrite = new QMutex();
+    DSMoveTarget = -1;
+
+    sendDataBuf = NULL;
+    sendDataMaxSize = 0;
 }
 
 void SystemThread::Stop()
@@ -106,6 +110,8 @@ void SystemThread::Stop()
 void SystemThread::run()
 {
     qDebug() << "[SystemThread]Start thread";
+
+    g_DSTimingFlag = 0;
 
     int redrawIntervalCount = 0;
 
@@ -149,7 +155,7 @@ void SystemThread::run()
     }
 
 
-    if( restartFile != QString() ){
+    if( DSMode == false ){
 
         qDebug() << "----- Restart File supplied: ";
         qDebug() << "[File]" << restartFile;
@@ -157,8 +163,6 @@ void SystemThread::run()
         SetRestartData();
     }
 
-
-    g_DSTimingFlag = 0;
 
     emit RedrawRequest();
 
@@ -187,18 +191,18 @@ void SystemThread::run()
 
         //
         // if DS mode, synchronize execution
-        if( DSMode == true ){
 
+        //
+        //  Start agent calculation
+        if( DSMode == true ){
             mutex->lock();
             if( g_DSTimingFlag == 0 ){
                 cond->wait(mutex);
             }
             g_DSTimingFlag = 0;
             mutex->unlock();
-
         }
         else{
-
             if( speedAdjustVal <= 50 ){
                 int w = (51 - speedAdjustVal) * 2;
                 msleep( w );
@@ -248,9 +252,6 @@ void SystemThread::run()
 
         //qDebug() << simTime;
 
-        emit UpdateSimulationTimeDisplay(simTime);
-
-
 
         //
         // Generate agents
@@ -275,6 +276,54 @@ void SystemThread::run()
         //
         // Raise Event
         simManage->RaiseEvent( agent, maxAgent, road );
+
+
+        if( simManage->changeTSDisplayInfo.size() > 0 ){
+            for(int i=0;i<simManage->changeTSDisplayInfo.size();++i){
+
+                int TSID = simManage->changeTSDisplayInfo[i].x();
+                if( TSID >= 0 ){
+                    int SIdx = simManage->changeTSDisplayInfo[i].y();
+                    if( SIdx >= 0 ){
+                        int tsIdx = tsId2Index.indexOf( TSID );
+                        int incNode = trafficSignal[tsIdx]->relatedNode;
+
+                        int hastTime = trafficSignal[tsIdx]->GetTimeToDisplay( SIdx );
+                        qDebug() << "hastTime = " << hastTime;
+
+                        for(int j=0;j<numTrafficSignals;++j){
+                            if( trafficSignal[j]->relatedNode != incNode ){
+                                continue;
+                            }
+                            trafficSignal[j]->ProceedTime( hastTime );
+                        }
+                    }
+                    else{
+                        int tsIdx = tsId2Index.indexOf( TSID );
+                        int incNode = trafficSignal[tsIdx]->relatedNode;
+
+                        int hastTime = trafficSignal[tsIdx]->GetTimeToDisplay( SIdx );
+                        qDebug() << "hastTime = " << hastTime;
+
+                        for(int j=0;j<numTrafficSignals;++j){
+                            if( trafficSignal[j]->relatedNode != incNode ){
+                                continue;
+                            }
+                            trafficSignal[j]->SetDisplayOff();
+                        }
+                    }
+                }
+                else{
+                    int SIdx = simManage->changeTSDisplayInfo[i].y();
+                    if( SIdx < 0 ){
+                        for(int j=0;j<numTrafficSignals;++j){
+                            trafficSignal[j]->SetDisplayOff();
+                        }
+                    }
+                }
+            }
+            simManage->changeTSDisplayInfo.clear();
+        }
 
 #ifdef _PERFORMANCE_CHECK
         QueryPerformanceCounter(&end);
@@ -308,7 +357,7 @@ void SystemThread::run()
         QList<int> evalAgentQueue;
         QList<int> DSVehiclesQueue;
         for(int i=0;i<maxAgent;++i){
-            if( agent[i]->agentStatus == 0 ){
+            if( agent[i]->agentStatus != 1 ){
                 continue;
             }
             if( agent[i]->isSInterfaceObject == true ){
@@ -411,6 +460,7 @@ void SystemThread::run()
         // Update simulation time
         simManage->UpdateSimulationTime();
 
+        emit UpdateSimulationTimeDisplay(simTime);
 
 
         //
@@ -482,7 +532,7 @@ void SystemThread::run()
             QueryPerformanceCounter(&start);
 #endif
 
-        simManage->DisappearAgents( agent, maxAgent);
+        simManage->DisappearAgents( agent, maxAgent );
 
 #ifdef _PERFORMANCE_CHECK
         QueryPerformanceCounter(&end);
@@ -490,6 +540,42 @@ void SystemThread::run()
         calCount[3]++;
 #endif
 
+
+        if( DSMode == true ){
+
+            int maxAgentDataSend = udpThread->GetMaxAgentDataSend();
+            int maxTSDataSend = udpThread->GetMaxTSDataSend();
+
+            if( sendDataBuf == NULL ){
+
+                sendDataMaxSize = 125 * maxAgentDataSend + 13 * maxTSDataSend + 20 + 5;
+
+                sendDataBuf = new char [sendDataMaxSize + 2000];
+            }
+
+            QList<int> SIObjIDList;
+
+
+            int nSIObj = udpThread->GetSizeSInterfaceObjIDs();
+            for(int i=0;i<nSIObj;++i){
+
+                int SIObjID = udpThread->GetSInterfaceObjID(i);
+                SIObjIDList.append( SIObjID );
+
+                int sendSize = SetSendData(maxAgentDataSend,maxTSDataSend,SIObjID);
+                //qDebug() << "sendSize = " << sendSize;
+                if( sendSize > 0 ){
+                    udpThread->SendToUE4(SIObjID, sendDataBuf, sendSize );
+                }
+            }
+
+            if( udpThread->GetHasFuncExtender() == true ){
+                int sendSize = SetSendDataForFuncExtend(maxAgentDataSend,maxTSDataSend,SIObjIDList);
+                udpThread->SendToFE( sendDataBuf, sendSize );
+            }
+
+            udpThread->SendToSCore();
+        }
 
 
 #ifdef _PERFORMANCE_CHECK
@@ -503,6 +589,10 @@ void SystemThread::run()
 #endif
 
     }
+
+
+    delete [] sendDataBuf;
+
 
     logThread->SetStopFlag();
     logThread->CloseFile();
@@ -527,11 +617,9 @@ void SystemThread::SetSysFile(QString filename)
         connect( udpThread, SIGNAL(SimulationStart()), this, SLOT(SimulationStart()) );
         connect( udpThread, SIGNAL(SimulationStop()), this, SLOT(SimulationStop()) );
         connect( udpThread, SIGNAL(ExitProgram()), this, SLOT(wrapExitProgram()));
-        connect( udpThread, SIGNAL(RequestSetSendData(char*,int,int *,int,int,int)), this, SLOT(SetSendData(char*,int,int *,int,int,int)) );
-        connect( udpThread, SIGNAL(RequestSetSendDataForFuncExtend(char*,int,int *,int,int,QList<int>)), this, SLOT(SetSendDataForFuncExtend(char*,int,int *,int,int,QList<int>)) );
         connect( udpThread, SIGNAL(ReceiveContinueCommand()), this, SLOT(quit()) );
         connect( udpThread, SIGNAL(SetSimulationFrequency(int)), this, SLOT(SetSimulationFrequency(int)) );
-        connect( udpThread, SIGNAL(ReceiveTireHeight(int,float,float,float,float)), this, SLOT(SetTireHeight(int,float,float,float,float)) );
+        connect( udpThread, SIGNAL(ReceiveTireHeight(int,int,float,float,float,float)), this, SLOT(SetTireHeight(int,int,float,float,float,float)) );
         connect( udpThread, SIGNAL(ReceiveSInterObjData(char,int,AgentState*,struct SInterObjInfo *)), this, SLOT(SetSInterObjData(char,int,AgentState*,struct SInterObjInfo *)) );
         connect( udpThread, SIGNAL(ReceiveTSColorChange(int,int,float)),this,SLOT(ForceChangeTSColor(int,int,float)));
         connect( udpThread, SIGNAL(WarpVehicle(int,float,float,float)),this,SLOT(WarpVehicle(int,float,float,float)) );
@@ -550,6 +638,7 @@ void SystemThread::SetSysFile(QString filename)
         connect( udpThread, SIGNAL(SetLateralGainMultiplier(int,float)),this,SLOT(SetLateralGainMultiplier(int,float)) );
         connect( udpThread, SIGNAL(SetAgentGenerationNotAllowFlag(int,bool)),this,SLOT(SetAgentGenerationNotAllowFlag(int,bool)) );
         connect( udpThread, SIGNAL(ForceChangeSpeed(int,float)),this,SLOT(ForceChangeSpeed(int,float)) );
+        connect( udpThread, SIGNAL(SetRestartData()),this,SLOT(SetRestartData()) );
 
         if( logThread ){
             connect( udpThread, SIGNAL(FEDataReceived(int,QString)), logThread, SLOT(SetFuncExtenderLogData(int,QString)) );
@@ -557,6 +646,8 @@ void SystemThread::SetSysFile(QString filename)
 
         udpThread->SetMaxAgentNumber( maxAgent );
         udpThread->SetNumberTrafficSignal( trafficSignal.size() );
+
+        simManage->udpthread = udpThread;
     }
     else{
         udpThread->destroySocks();
@@ -718,22 +809,27 @@ void SystemThread::LoadScenarioFile()
         else if( tag == QString("End Condition") ){
             trigger = new struct ScenarioTriggers;
             trigger->mode = QString( divLine[1] ).trimmed().toInt();
-            trigger->byExternalTriggerFlag = 0;
+            trigger->byExternalTriggerFlag = false;
+            trigger->extTriggerFlagState = false;
+            trigger->byKeyTriggerFlag = false;
+            trigger->combination = -1;
         }
         else if( tag == QString("End Target") ){
             trigObj = new struct ObjectTriggerData;
             trigObj->targetObjectID = QString( divLine[1] ).trimmed().toInt();
         }
         else if( tag == QString("End Trigger Position") ){
-            if( divLine.size() >= 5 ){
+            if( divLine.size() >= 4 ){
                 trigObj->x         = QString( divLine[1] ).trimmed().toFloat();
                 trigObj->y         = QString( divLine[2] ).trimmed().toFloat();
-                trigObj->direction = QString( divLine[3] ).trimmed().toFloat() * 0.017452;
-                trigObj->speed     = QString( divLine[4] ).trimmed().toFloat() / 3.6;
+                trigObj->direction = QString( divLine[3] ).trimmed().toFloat() * (0.017452);
                 trigObj->cosDirect = cos( trigObj->direction );
                 trigObj->sinDirect = sin( trigObj->direction );
-                trigger->objectTigger.append( trigObj );
             }
+            if( divLine.size() >= 5 ){
+                trigObj->speed     = QString( divLine[4] ).trimmed().toFloat() / 3.6;
+            }
+            trigger->objectTigger.append( trigObj );
         }
         else if( tag == QString("End Time") ){
             if( divLine.size() >= 7 ){
@@ -752,6 +848,7 @@ void SystemThread::LoadScenarioFile()
             simManage->SetScenarioEndTrigger( currentScenarioID, trigger );
         }
         else if( tag == QString("Pedestrian ID") ){
+
             scenarioItem = new struct ScenarioItem;
             scenarioItem->type = 'p';
             scenarioItem->objectID = QString( divLine[1] ).trimmed().toInt();
@@ -761,6 +858,273 @@ void SystemThread::LoadScenarioFile()
             scenarioItem->status = 0;
 
             qDebug() << "[Tag:Pedestrian ID] objectID = " << scenarioItem->objectID;
+        }
+        if( tag == QString("Pedestrian Event Type") ){
+
+            scenarioEvent = new ScenarioEvents;
+
+            scenarioEvent->eventID = eventNo;
+            eventNo++;
+
+            scenarioEvent->eventType = SCENARIO_EVENT_TYPE::OBJECT_EVENT;
+            scenarioEvent->targetObjectID = scenarioItem->objectID;
+
+            scenarioEvent->eventState = 0;
+            scenarioEvent->eventTimeCount = 0;
+            scenarioEvent->eventTimeCount_sub = 0;
+
+            scenarioEvent->routeType = -1;
+            scenarioEvent->ndRoute = NULL;
+
+            // eventKind = 0 :  Appear
+            //             1 :  Control
+            //             2 :  Send UDP
+            //             3 :  Disappear
+            int ekval = QString(divLine[1]).trimmed().toInt();
+            if( ekval == 0 ){
+                scenarioEvent->eventKind = OBJECT_SCENARIO_ACTION_KIND::APPEAR_PEDESTRIAN;
+            }
+            else if( ekval == 1 ){
+                scenarioEvent->eventKind = OBJECT_SCENARIO_ACTION_KIND::CONTROL_PEDESTRIAN;
+            }
+            else if( ekval == 2 ){
+                scenarioEvent->eventKind = OBJECT_SCENARIO_ACTION_KIND::SEND_UDP_OBJECT;
+            }
+            else if( ekval == 3 ){
+                scenarioEvent->eventKind = OBJECT_SCENARIO_ACTION_KIND::DISAPPEAR;
+            }
+
+            trigger = new struct ScenarioTriggers;
+            trigger->mode = 0;
+
+            trigger->combination = 0;
+
+            trigger->byKeyTriggerFlag = false;
+            trigger->byExternalTriggerFlag = false;
+            trigger->extTriggerFlagState = false;
+
+            scenarioEvent->eventTrigger = trigger;
+
+            simManage->SetScenarioEvent( currentScenarioID, scenarioEvent );
+        }
+        else if( tag == QString("Pedestrian Event Trigger External") ){
+
+            int extTrig = QString(divLine[1]).trimmed().toInt();
+            if( extTrig >= 1 ){
+                trigger->byKeyTriggerFlag = true;
+                trigger->func_keys = extTrig;
+            }
+            if( divLine.size() >= 3 ){
+                trigger->byExternalTriggerFlag = ( QString(divLine[2]).trimmed().toInt() == 1 ? true : false );
+                trigger->extTriggerFlagState = false;
+            }
+        }
+        else if( tag == QString("Pedestrian Event Trigger Internal") ){
+
+            if( divLine.size() == 2 ){
+
+                if( trigger->mode != TRIGGER_TYPE::BY_KEYBOARD_FUNC_KEY ){
+                    trigger->mode = QString(divLine[1]).trimmed().toInt();
+                }
+            }
+            else if( divLine.size() >= 7 ){
+
+                trigger->combination = QString(divLine[1]).trimmed().toInt();
+
+                for(int i=2;i<divLine.size();++i){
+
+                    if( QString(divLine[i]).trimmed().toInt() == 1 ){
+
+                        trigObj = new struct ObjectTriggerData;
+
+                        if( i == 2 ){
+                            trigObj->triggerType = TRIGGER_TYPE::AT_ONCE;
+                        }
+                        else if( i == 3 ){
+                            trigObj->triggerType = TRIGGER_TYPE::TIME_TRIGGER;
+                        }
+                        else if( i == 4 ){
+                            trigObj->triggerType = TRIGGER_TYPE::POSITION_TRIGGER;
+                        }
+                        else if( i == 5 ){
+                            trigObj->triggerType = TRIGGER_TYPE::VELOCITY_TRIGGER;
+                        }
+                        else if( i == 6 ){
+                            trigObj->triggerType = TRIGGER_TYPE::TTC_TRIGGER;
+                        }
+                        else if( i == 7 ){
+                            trigObj->triggerType = TRIGGER_TYPE::BY_FUNCTION_EXTENDER;
+                        }
+
+                        trigObj->isTriggered = false;
+
+                        trigger->objectTigger.append( trigObj );
+                    }
+                }
+            }
+        }
+        else if( tag == QString("Pedestrian Event Trigger Position") ){
+
+            if( trigger->combination < 0 ){
+
+                trigObj = new struct ObjectTriggerData;
+                trigObj->targetObjectID = -1;
+                trigObj->targetEventID  = -1;
+                trigger->objectTigger.append( trigObj );
+                if( divLine.size() >= 4 ){
+                    trigObj->x         = QString(divLine[1]).trimmed().toFloat();
+                    trigObj->y         = QString(divLine[2]).trimmed().toFloat();
+                    trigObj->direction = QString(divLine[3]).trimmed().toFloat() * (0.017452);
+                    trigObj->cosDirect = cos( trigObj->direction );
+                    trigObj->sinDirect = sin( trigObj->direction );
+                    trigObj->widthHalf = 5.0;
+                }
+            }
+            else if( trigger->combination >= 0 ){
+
+                for(int i=0;i<trigger->objectTigger.size();++i){
+
+                    if( trigger->objectTigger[i]->triggerType == TRIGGER_TYPE::POSITION_TRIGGER ){
+
+                        if( divLine.size() >= 5 ){
+
+                            trigger->objectTigger[i]->x         = QString(divLine[1]).trimmed().toFloat();
+                            trigger->objectTigger[i]->y         = QString(divLine[2]).trimmed().toFloat();
+                            trigger->objectTigger[i]->direction = QString(divLine[3]).trimmed().toFloat() * (0.017452);
+                            trigger->objectTigger[i]->cosDirect = cos( trigger->objectTigger[i]->direction );
+                            trigger->objectTigger[i]->sinDirect = sin( trigger->objectTigger[i]->direction );
+                            trigger->objectTigger[i]->targetObjectID = QString(divLine[4]).trimmed().toInt();
+
+                            trigger->objectTigger[i]->widthHalf = 5.0;
+                            if( divLine.size() >= 6 ){
+                                trigger->objectTigger[i]->widthHalf = QString(divLine[5]).trimmed().toFloat();
+                            }
+
+                            trigger->objectTigger[i]->passCheckFlag = 0;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        else if( tag == QString("Pedestrian Event Trigger Speed") ){
+
+            if( trigger->combination < 0 ){
+
+                trigObj->speed = QString(divLine[1]).trimmed().toFloat() / 3.6;
+
+            }
+            else if( trigger->combination >= 0 ){
+
+                for(int i=0;i<trigger->objectTigger.size();++i){
+
+                    if( trigger->objectTigger[i]->triggerType == TRIGGER_TYPE::VELOCITY_TRIGGER ){
+
+                        if( divLine.size() >= 4 ){
+
+                            trigger->objectTigger[i]->speed = QString(divLine[1]).trimmed().toFloat();
+                            // triggerParam = velocity trigger lower or higher
+                            trigger->objectTigger[i]->triggerParam = QString(divLine[2]).trimmed().toInt();
+                            // triggerParam2 = velocity trigger target object ID
+                            trigger->objectTigger[i]->triggerParam2 = QString(divLine[3]).trimmed().toInt();
+
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        else if( tag == QString("Pedestrian Event Target ID") ){
+            trigObj->targetObjectID = QString(divLine[1]).trimmed().toInt();
+        }
+        else if( tag == QString("Pedestrian Event Trigger TTC") ){
+
+            if( trigger->combination >= 0 ){
+
+                for(int i=0;i<trigger->objectTigger.size();++i){
+
+                    if( trigger->objectTigger[i]->triggerType == TRIGGER_TYPE::TTC_TRIGGER ){
+
+                        if( divLine.size() >= 6 ){
+
+                            trigger->objectTigger[i]->TTC = QString(divLine[1]).trimmed().toFloat();
+                            // triggerParam = TTC cal Type
+                            trigger->objectTigger[i]->triggerParam = QString(divLine[2]).trimmed().toInt();
+                            // triggerParams = TTC cal Target Object ID
+                            trigger->objectTigger[i]->triggerParam2 = QString(divLine[3]).trimmed().toInt();
+                            // TTC cal Pos X
+                            trigger->objectTigger[i]->x = QString(divLine[4]).trimmed().toFloat();
+                            // TTC cal Pos Y
+                            trigger->objectTigger[i]->y = QString(divLine[5]).trimmed().toFloat();
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        else if( tag == QString("Pedestrian Event Trigger Time") ){
+
+            if( divLine.size() >= 4 ){
+
+                int etmode = QString(divLine[1]).trimmed().toInt();
+                float val1 = QString(divLine[2]).trimmed().toFloat();
+                float val2 = QString(divLine[3]).trimmed().toFloat();
+
+                if( trigger->combination < 0 ){
+
+                    if( etmode == 1 ){
+                        float r = simManage->GenUniform();
+                        val1 = val1 + r * (val2 - val1);
+                    }
+                    else if( etmode == 2 ){
+                        val1 = simManage->GetNormalDist(val1, val2);
+                    }
+
+                    if( val1 < 0.0 ){
+                        val1 = 0.0;
+                    }
+
+                    struct SimulationTime *t = new struct SimulationTime;
+
+                    t->day    = 0;
+                    t->hour   = val1 / 3600;
+                    t->min    = val1 / 60 - t->hour * 3600;
+                    t->msec   = val1 - t->min * 60 - t->hour * 3600;
+
+                    t->sec = (int)(t->msec);
+                    t->msec -= t->sec;
+
+                    trigger->timeTrigger = t;
+                    trigger->timeTriggerInSec = t->msec + t->sec + t->min * 60.0 + t->hour * 3600.0 + t->day * 86400.0;
+                }
+                else if( trigger->combination >= 0 ){
+
+                    for(int i=0;i<trigger->objectTigger.size();++i){
+
+                        if( trigger->objectTigger[i]->triggerType == TRIGGER_TYPE::TIME_TRIGGER ){
+
+                            trigger->objectTigger[i]->timeTriggerInSec = val1;
+
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        else if( tag == QString("Pedestrian Event Param Float") ){
+            for(int i=1;i<divLine.size();++i){
+                scenarioEvent->eventFloatData.append( QString(divLine[i]).trimmed().toFloat() );
+            }
+        }
+        else if( tag == QString("Pedestrian Event Param Integer") ){
+            for(int i=1;i<divLine.size();++i){
+                scenarioEvent->eventIntData.append( QString(divLine[i]).trimmed().toUInt() );
+            }
+        }
+        else if( tag == QString("Pedestrian Event Param Boolean") ){
+            for(int i=1;i<divLine.size();++i){
+                scenarioEvent->eventBooleanData.append( QString(divLine[i]).trimmed().toInt() == 1 ? true : false );
+            }
         }
         else if( tag == QString("Pedestrian Model ID") ){
             scenarioItem->objectModelID = QString( divLine[1] ).trimmed().toInt();
@@ -783,7 +1147,10 @@ void SystemThread::LoadScenarioFile()
             trigger->mode = QString( divLine[1] ).trimmed().toInt();
             trigger->ANDCondition = 0;
             trigger->func_keys = 0;
-            trigger->byExternalTriggerFlag = 0;
+            trigger->byExternalTriggerFlag = false;
+            trigger->extTriggerFlagState = false;
+            trigger->byKeyTriggerFlag = false;
+            trigger->combination = -1;
         }
         else if( tag == QString("Pedestrian Trigger Function Key") ){
             trigger->func_keys = QString( divLine[1] ).trimmed().toInt();
@@ -920,7 +1287,10 @@ void SystemThread::LoadScenarioFile()
             trigger->mode = QString( divLine[1] ).trimmed().toInt();
             trigger->ANDCondition = 0;
             trigger->func_keys = 0;
-            trigger->byExternalTriggerFlag = 0;
+            trigger->byExternalTriggerFlag = false;
+            trigger->extTriggerFlagState = false;
+            trigger->byKeyTriggerFlag = false;
+            trigger->combination = -1;
         }
         else if( tag == QString("Vehicle Trigger Function Key") ){
             trigger->func_keys = QString( divLine[1] ).trimmed().toInt();
@@ -1037,56 +1407,210 @@ void SystemThread::LoadScenarioFile()
             }
         }
         else if( tag == QString("Vehicle Event Type") ){
+
             scenarioEvent = new ScenarioEvents;
 
             scenarioEvent->eventID = eventNo;
             eventNo++;
 
             scenarioEvent->eventType = SCENARIO_EVENT_TYPE::OBJECT_EVENT;
-            scenarioEvent->eventState = 0;
             scenarioEvent->targetObjectID = scenarioItem->objectID;
 
-            scenarioEvent->eventKind = QString(divLine[1]).trimmed().toInt();
+            scenarioEvent->eventState = 0;
+            scenarioEvent->eventTimeCount = 0;
+            scenarioEvent->eventTimeCount_sub = 0;
 
-            trigger = new ScenarioTriggers;
+            scenarioEvent->routeType = -1;
+            scenarioEvent->ndRoute = NULL;
+
+            // eventKind = 0 :  Appear
+            //             1 :  Control
+            //             2 :  Send UDP
+            //             3 :  Disappear
+            int ekval = QString(divLine[1]).trimmed().toInt();
+            if( ekval == 0 ){
+                scenarioEvent->eventKind = OBJECT_SCENARIO_ACTION_KIND::APPEAR_VEHICLE;
+            }
+            else if( ekval == 1 ){
+                scenarioEvent->eventKind = OBJECT_SCENARIO_ACTION_KIND::CONTROL_VEHICLE;
+            }
+            else if( ekval == 2 ){
+                scenarioEvent->eventKind = OBJECT_SCENARIO_ACTION_KIND::SEND_UDP_OBJECT;
+            }
+            else if( ekval == 3 ){
+                scenarioEvent->eventKind = OBJECT_SCENARIO_ACTION_KIND::DISAPPEAR;
+            }
+
+            trigger = new struct ScenarioTriggers;
             trigger->mode = 0;
+
+            trigger->combination = 0;
+
+            trigger->byKeyTriggerFlag = false;
+            trigger->byExternalTriggerFlag = false;
+            trigger->extTriggerFlagState = false;
+
             scenarioEvent->eventTrigger = trigger;
 
             simManage->SetScenarioEvent( currentScenarioID, scenarioEvent );
         }
         else if( tag == QString("Vehicle Event Trigger External") ){
+
             int extTrig = QString(divLine[1]).trimmed().toInt();
             if( extTrig >= 1 ){
-                trigger->mode = TRIGGER_TYPE::BY_KEYBOARD_FUNC_KEY;
+                trigger->byKeyTriggerFlag = true;
                 trigger->func_keys = extTrig;
+            }
+            if( divLine.size() >= 3 ){
+                trigger->byExternalTriggerFlag = ( QString(divLine[2]).trimmed().toInt() == 1 ? true : false );
+                trigger->extTriggerFlagState = false;
             }
         }
         else if( tag == QString("Vehicle Event Trigger Internal") ){
-            if( trigger->mode != TRIGGER_TYPE::BY_KEYBOARD_FUNC_KEY ){
-                trigger->mode = QString(divLine[1]).trimmed().toInt();
+
+            if( divLine.size() == 2 ){
+
+                if( trigger->mode != TRIGGER_TYPE::BY_KEYBOARD_FUNC_KEY ){
+                    trigger->mode = QString(divLine[1]).trimmed().toInt();
+                }
             }
-            trigger->byExternalTriggerFlag = 0;
+            else if( divLine.size() >= 7 ){
+
+                trigger->combination = QString(divLine[1]).trimmed().toInt();
+
+                for(int i=2;i<divLine.size();++i){
+
+                    if( QString(divLine[i]).trimmed().toInt() == 1 ){
+
+                        trigObj = new struct ObjectTriggerData;
+
+                        if( i == 2 ){
+                            trigObj->triggerType = TRIGGER_TYPE::AT_ONCE;
+                        }
+                        else if( i == 3 ){
+                            trigObj->triggerType = TRIGGER_TYPE::TIME_TRIGGER;
+                        }
+                        else if( i == 4 ){
+                            trigObj->triggerType = TRIGGER_TYPE::POSITION_TRIGGER;
+                        }
+                        else if( i == 5 ){
+                            trigObj->triggerType = TRIGGER_TYPE::VELOCITY_TRIGGER;
+                        }
+                        else if( i == 6 ){
+                            trigObj->triggerType = TRIGGER_TYPE::TTC_TRIGGER;
+                        }
+                        else if( i == 7 ){
+                            trigObj->triggerType = TRIGGER_TYPE::BY_FUNCTION_EXTENDER;
+                        }
+
+                        trigObj->isTriggered = false;
+
+                        trigger->objectTigger.append( trigObj );
+                    }
+                }
+            }
         }
         else if( tag == QString("Vehicle Event Trigger Position") ){
-            trigObj = new struct ObjectTriggerData;
-            trigObj->targetObjectID = -1;
-            trigger->objectTigger.append( trigObj );
-            if( divLine.size() >= 5 ){
-                trigObj->x         = QString(divLine[1]).trimmed().toFloat();
-                trigObj->y         = QString(divLine[2]).trimmed().toFloat();
-                trigObj->direction = QString(divLine[4]).trimmed().toFloat() * 0.017452;
-                trigObj->cosDirect = cos( trigObj->direction );
-                trigObj->sinDirect = sin( trigObj->direction );
+
+            if( trigger->combination < 0 ){
+
+                trigObj = new struct ObjectTriggerData;
+                trigObj->targetObjectID = -1;
+                trigObj->targetEventID  = -1;
+                trigger->objectTigger.append( trigObj );
+                if( divLine.size() >= 4 ){
+                    trigObj->x         = QString(divLine[1]).trimmed().toFloat();
+                    trigObj->y         = QString(divLine[2]).trimmed().toFloat();
+                    trigObj->direction = QString(divLine[3]).trimmed().toFloat() * (0.017452);
+                    trigObj->cosDirect = cos( trigObj->direction );
+                    trigObj->sinDirect = sin( trigObj->direction );
+                    trigObj->widthHalf = 5.0;
+                }
+            }
+            else if( trigger->combination >= 0 ){
+
+                for(int i=0;i<trigger->objectTigger.size();++i){
+
+                    if( trigger->objectTigger[i]->triggerType == TRIGGER_TYPE::POSITION_TRIGGER ){
+
+                        if( divLine.size() >= 5 ){
+
+                            trigger->objectTigger[i]->x         = QString(divLine[1]).trimmed().toFloat();
+                            trigger->objectTigger[i]->y         = QString(divLine[2]).trimmed().toFloat();
+                            trigger->objectTigger[i]->direction = QString(divLine[3]).trimmed().toFloat() * (0.017452);
+                            trigger->objectTigger[i]->cosDirect = cos( trigger->objectTigger[i]->direction );
+                            trigger->objectTigger[i]->sinDirect = sin( trigger->objectTigger[i]->direction );
+                            trigger->objectTigger[i]->targetObjectID = QString(divLine[4]).trimmed().toInt();
+
+                            trigger->objectTigger[i]->widthHalf = 5.0;
+                            if( divLine.size() >= 6 ){
+                                trigger->objectTigger[i]->widthHalf = QString(divLine[5]).trimmed().toFloat();
+                            }
+
+                            trigger->objectTigger[i]->passCheckFlag = 0;
+                        }
+                        break;
+                    }
+                }
             }
         }
         else if( tag == QString("Vehicle Event Trigger Speed") ){
-            trigObj->speed = QString(divLine[1]).trimmed().toFloat() / 3.6;
+
+            if( trigger->combination < 0 ){
+
+                trigObj->speed = QString(divLine[1]).trimmed().toFloat() / 3.6;
+
+            }
+            else if( trigger->combination >= 0 ){
+
+                for(int i=0;i<trigger->objectTigger.size();++i){
+
+                    if( trigger->objectTigger[i]->triggerType == TRIGGER_TYPE::VELOCITY_TRIGGER ){
+
+                        if( divLine.size() >= 4 ){
+
+                            trigger->objectTigger[i]->speed = QString(divLine[1]).trimmed().toFloat();
+                            // triggerParam = velocity trigger lower or higher
+                            trigger->objectTigger[i]->triggerParam = QString(divLine[2]).trimmed().toInt();
+                            // triggerParam2 = velocity trigger target object ID
+                            trigger->objectTigger[i]->triggerParam2 = QString(divLine[3]).trimmed().toInt();
+
+                        }
+                        break;
+                    }
+                }
+            }
         }
         else if( tag == QString("Vehicle Event Trigger T2TP") ){
             trigObj->TTC = QString(divLine[1]).trimmed().toFloat();
         }
         else if( tag == QString("Vehicle Event Target ID") ){
             trigObj->targetObjectID = QString(divLine[1]).trimmed().toInt();
+        }
+        else if( tag == QString("Vehicle Event Trigger TTC") ){
+
+            if( trigger->combination >= 0 ){
+
+                for(int i=0;i<trigger->objectTigger.size();++i){
+
+                    if( trigger->objectTigger[i]->triggerType == TRIGGER_TYPE::TTC_TRIGGER ){
+
+                        if( divLine.size() >= 6 ){
+
+                            trigger->objectTigger[i]->TTC = QString(divLine[1]).trimmed().toFloat();
+                            // triggerParam = TTC cal Type
+                            trigger->objectTigger[i]->triggerParam = QString(divLine[2]).trimmed().toInt();
+                            // triggerParams = TTC cal Target Object ID
+                            trigger->objectTigger[i]->triggerParam2 = QString(divLine[3]).trimmed().toInt();
+                            // TTC cal Pos X
+                            trigger->objectTigger[i]->x = QString(divLine[4]).trimmed().toFloat();
+                            // TTC cal Pos Y
+                            trigger->objectTigger[i]->y = QString(divLine[5]).trimmed().toFloat();
+                        }
+                        break;
+                    }
+                }
+            }
         }
         else if( tag == QString("Vehicle Event Trigger Time") ){
 
@@ -1096,36 +1620,118 @@ void SystemThread::LoadScenarioFile()
                 float val1 = QString(divLine[2]).trimmed().toFloat();
                 float val2 = QString(divLine[3]).trimmed().toFloat();
 
-                if( etmode == 1 ){
-                    float r = simManage->GenUniform();
-                    val1 = val1 + r * (val2 - val1);
+                if( trigger->combination < 0 ){
+
+                    if( etmode == 1 ){
+                        float r = simManage->GenUniform();
+                        val1 = val1 + r * (val2 - val1);
+                    }
+                    else if( etmode == 2 ){
+                        val1 = simManage->GetNormalDist(val1, val2);
+                    }
+
+                    if( val1 < 0.0 ){
+                        val1 = 0.0;
+                    }
+
+                    struct SimulationTime *t = new struct SimulationTime;
+
+                    t->day    = 0;
+                    t->hour   = val1 / 3600;
+                    t->min    = val1 / 60 - t->hour * 3600;
+                    t->msec   = val1 - t->min * 60 - t->hour * 3600;
+
+                    t->sec = (int)(t->msec);
+                    t->msec -= t->sec;
+
+                    trigger->timeTrigger = t;
+                    trigger->timeTriggerInSec = t->msec + t->sec + t->min * 60.0 + t->hour * 3600.0 + t->day * 86400.0;
                 }
-                else if( etmode == 2 ){
-                    val1 = simManage->GetNormalDist(val1, val2);
+                else if( trigger->combination >= 0 ){
+
+                    for(int i=0;i<trigger->objectTigger.size();++i){
+
+                        if( trigger->objectTigger[i]->triggerType == TRIGGER_TYPE::TIME_TRIGGER ){
+
+                            trigger->objectTigger[i]->timeTriggerInSec = val1;
+
+                            break;
+                        }
+                    }
                 }
-
-                if( val1 < 0.0 ){
-                    val1 = 0.0;
-                }
-
-                struct SimulationTime *t = new struct SimulationTime;
-
-                t->day    = 0;
-                t->hour   = val1 / 3600;
-                t->min    = val1 / 60 - t->hour * 3600;
-                t->msec   = val1 - t->min * 60 - t->hour * 3600;
-
-                t->sec = (int)(t->msec);
-                t->msec -= t->sec;
-
-                trigger->timeTrigger = t;
-                trigger->timeTriggerInSec = t->msec + t->sec + t->min * 60.0 + t->hour * 3600.0 + t->day * 86400.0;
             }
         }
-        else if( tag == QString("Vehicle Event Params") ){
+        else if( tag == QString("Vehicle Event Param Float") ){
             for(int i=1;i<divLine.size();++i){
                 scenarioEvent->eventFloatData.append( QString(divLine[i]).trimmed().toFloat() );
             }
+        }
+        else if( tag == QString("Vehicle Event Param Integer") ){
+            for(int i=1;i<divLine.size();++i){
+                scenarioEvent->eventIntData.append( QString(divLine[i]).trimmed().toUInt() );
+            }
+        }
+        else if( tag == QString("Vehicle Event Param Boolean") ){
+            for(int i=1;i<divLine.size();++i){
+                scenarioEvent->eventBooleanData.append( QString(divLine[i]).trimmed().toInt() == 1 ? true : false );
+            }
+        }
+        else if( tag == QString("Vehicle Route Multi-Lanes") ){
+
+            int mlm = QString(divLine[1]).trimmed().toUInt();
+            if( mlm == 1 ){
+
+                scenarioEvent->ndRoute = new struct ODRouteData;
+
+                for(int i=1;i<divLine.size();++i){
+
+                    struct RouteElem* re = new struct RouteElem;
+
+                    re->node = QString(divLine[i]).trimmed().toUInt();
+
+                    scenarioEvent->ndRoute->routeToDestination.append( re );
+
+                    if( i == 1 ){
+                        scenarioEvent->ndRoute->originNode = re->node;
+                    }
+                    else if( i == divLine.size() - 1 ){
+                        scenarioEvent->ndRoute->destinationNode = re->node;
+                    }
+                }
+
+                scenarioEvent->ndRoute->onlyForScenarioVehicle = true;
+                scenarioEvent->ndRoute->relatedScenarioObjectID = scenarioEvent->targetObjectID;
+
+            }
+            else if( mlm == 2 ){
+
+                struct RouteLaneData *rld = new struct RouteLaneData;
+
+                rld->startNode = QString( divLine[1] ).trimmed().toInt();
+                rld->goalNode  = QString( divLine[2] ).trimmed().toInt();
+                rld->sIndexInNodeList = QString( divLine[3] ).trimmed().toInt();
+                rld->gIndexInNodeList = QString( divLine[4] ).trimmed().toInt();
+
+                rld->LCDirect = DIRECTION_LABEL::STRAIGHT;
+
+                scenarioEvent->ndRoute->LCSupportLaneLists.append( rld );
+
+            }
+            else if( mlm == 3 ){
+
+                struct RouteLaneData *rld = scenarioEvent->ndRoute->LCSupportLaneLists.last();
+
+                QList<int> lanelist;
+                for(int i=2;i<divLine.size();++i){
+
+                    int lane = QString(divLine[i]).trimmed().toInt();
+                    lanelist.append( lane );
+
+                }
+
+                rld->laneList.append( lanelist );
+            }
+
         }
         else if( tag == QString("Scenario Event ID") ){
 
@@ -1138,85 +1744,246 @@ void SystemThread::LoadScenarioFile()
             scenarioEvent->eventState = 0;
             scenarioEvent->targetObjectID = -1;
 
-            trigger = new ScenarioTriggers;
+            trigger = new struct ScenarioTriggers;
             trigger->mode = 0;
+            trigger->combination = -1;
+
             scenarioEvent->eventTrigger = trigger;
 
             simManage->SetScenarioEvent( currentScenarioID, scenarioEvent );
         }
         else if( tag == QString("Scenario Event Type") ){
-            scenarioEvent->eventKind = QString(divLine[1]).trimmed().toInt();
+
+            int val = QString(divLine[1]).trimmed().toInt();
+
+            // eventKind = 0 :  Warp
+            //             1 :  Change Traffic Signal
+            //             2 :  Change Speed Info
+            //             3 :  Send UDP data
+            if( val == 0 ){
+                scenarioEvent->eventKind = SYSTEM_SCENARIO_ACTION_KIND::WARP;
+            }
+            else if( val == 1 ){
+                scenarioEvent->eventKind = SYSTEM_SCENARIO_ACTION_KIND::CHANGE_TRAFFIC_SIGNAL_DISPLAY;
+            }
+            else if( val == 2 ){
+                scenarioEvent->eventKind = SYSTEM_SCENARIO_ACTION_KIND::CHANGE_SPEED_INFO;
+            }
+            else if( val == 3 ){
+                scenarioEvent->eventKind = SYSTEM_SCENARIO_ACTION_KIND::SEND_UDP_SYSTEM;
+            }
+
         }
         else if( tag == QString("Scenario Event Trigger External") ){
+
             int extTrig = QString(divLine[1]).trimmed().toInt();
             if( extTrig >= 1 ){
-                trigger->mode = TRIGGER_TYPE::BY_KEYBOARD_FUNC_KEY;
+                trigger->byKeyTriggerFlag = true;
                 trigger->func_keys = extTrig;
+            }
+            if( divLine.size() >= 3 ){
+                trigger->byExternalTriggerFlag = ( QString(divLine[2]).trimmed().toInt() == 1 ? true : false );
+                trigger->extTriggerFlagState = false;
             }
         }
         else if( tag == QString("Scenario Event Trigger Internal") ){
-            if( trigger->mode != TRIGGER_TYPE::BY_KEYBOARD_FUNC_KEY ){
-                trigger->mode = QString(divLine[1]).trimmed().toInt();
+
+            if( divLine.size() == 2 ){
+
+                if( trigger->mode != TRIGGER_TYPE::BY_KEYBOARD_FUNC_KEY ){
+                    trigger->mode = QString(divLine[1]).trimmed().toInt();
+                }
             }
-            trigger->byExternalTriggerFlag = 0;
+            else if( divLine.size() >= 7 ){
+
+                trigger->combination = QString(divLine[1]).trimmed().toInt();
+
+                for(int i=2;i<divLine.size();++i){
+
+                    if( QString(divLine[i]).trimmed().toInt() == 1 ){
+
+                        trigObj = new struct ObjectTriggerData;
+
+                        if( i == 2 ){
+                            trigObj->triggerType = TRIGGER_TYPE::AT_ONCE;
+                        }
+                        else if( i == 3 ){
+                            trigObj->triggerType = TRIGGER_TYPE::TIME_TRIGGER;
+                        }
+                        else if( i == 4 ){
+                            trigObj->triggerType = TRIGGER_TYPE::POSITION_TRIGGER;
+                        }
+                        else if( i == 5 ){
+                            trigObj->triggerType = TRIGGER_TYPE::VELOCITY_TRIGGER;
+                        }
+                        else if( i == 6 ){
+                            trigObj->triggerType = TRIGGER_TYPE::TTC_TRIGGER;
+                        }
+                        else if( i == 7 ){
+                            trigObj->triggerType = TRIGGER_TYPE::BY_FUNCTION_EXTENDER;
+                        }
+
+                        trigObj->isTriggered = false;
+
+                        trigger->objectTigger.append( trigObj );
+                    }
+                }
+            }
+
         }
         else if( tag == QString("Scenario Event Trigger Position") ){
-            trigObj = new struct ObjectTriggerData;
-            trigObj->targetObjectID = -1;
-            trigObj->targetEventID  = -1;
-            trigger->objectTigger.append( trigObj );
-            if( divLine.size() >= 4 ){
-                trigObj->x         = QString(divLine[1]).trimmed().toFloat();
-                trigObj->y         = QString(divLine[1]).trimmed().toFloat();
-                trigObj->direction = QString(divLine[1]).trimmed().toFloat() * 0.017452;
-                trigObj->cosDirect = cos( trigObj->direction );
-                trigObj->sinDirect = sin( trigObj->direction );
+
+            if( trigger->combination < 0 ){
+
+                trigObj = new struct ObjectTriggerData;
+                trigObj->targetObjectID = -1;
+                trigObj->targetEventID  = -1;
+                trigger->objectTigger.append( trigObj );
+                if( divLine.size() >= 4 ){
+                    trigObj->x         = QString(divLine[1]).trimmed().toFloat();
+                    trigObj->y         = QString(divLine[2]).trimmed().toFloat();
+                    trigObj->direction = QString(divLine[3]).trimmed().toFloat() * (0.017452);
+                    trigObj->cosDirect = cos( trigObj->direction );
+                    trigObj->sinDirect = sin( trigObj->direction );
+                    trigObj->widthHalf = 5.0;
+                }
+            }
+            else if( trigger->combination >= 0 ){
+
+                for(int i=0;i<trigger->objectTigger.size();++i){
+
+                    if( trigger->objectTigger[i]->triggerType == TRIGGER_TYPE::POSITION_TRIGGER ){
+
+                        if( divLine.size() >= 5 ){
+
+                            trigger->objectTigger[i]->x         = QString(divLine[1]).trimmed().toFloat();
+                            trigger->objectTigger[i]->y         = QString(divLine[2]).trimmed().toFloat();
+                            trigger->objectTigger[i]->direction = QString(divLine[3]).trimmed().toFloat() * (0.017452);
+                            trigger->objectTigger[i]->cosDirect = cos( trigger->objectTigger[i]->direction );
+                            trigger->objectTigger[i]->sinDirect = sin( trigger->objectTigger[i]->direction );
+                            trigger->objectTigger[i]->targetObjectID = QString(divLine[4]).trimmed().toInt();
+
+                            trigger->objectTigger[i]->widthHalf = 5.0;
+                            if( divLine.size() >= 6 ){
+                                trigger->objectTigger[i]->widthHalf = QString(divLine[5]).trimmed().toFloat();
+                            }
+
+                            trigger->objectTigger[i]->passCheckFlag = 0;
+                        }
+                        break;
+                    }
+                }
             }
         }
-        else if( tag == QString("Scenario Event Trigger Speed ") ){
-            trigObj->speed = QString(divLine[1]).trimmed().toFloat() / 3.6;
+        else if( tag == QString("Scenario Event Trigger Speed") ){
+
+            if( trigger->combination < 0 ){
+                trigObj->speed = QString(divLine[1]).trimmed().toFloat() / 3.6;
+            }
+            else{
+
+                for(int i=0;i<trigger->objectTigger.size();++i){
+
+                    if( trigger->objectTigger[i]->triggerType == TRIGGER_TYPE::VELOCITY_TRIGGER ){
+
+                        if( divLine.size() >= 4 ){
+
+                            trigger->objectTigger[i]->speed          = QString(divLine[1]).trimmed().toFloat() / 3.6;  // [km/h]->[m/s]
+                            trigger->objectTigger[i]->triggerParam   = QString(divLine[2]).trimmed().toInt();   // vtLowOrHigh
+                            trigger->objectTigger[i]->targetObjectID = QString(divLine[3]).trimmed().toInt();
+                        }
+                        break;
+                    }
+                }
+            }
         }
         else if( tag == QString("Scenario Event TTC") ){
-            trigObj->TTC = QString(divLine[1]).trimmed().toFloat();
+
+            if( trigger->combination < 0 ){
+                trigObj->TTC = QString(divLine[1]).trimmed().toFloat();
+            }
+            else{
+
+                for(int i=0;i<trigger->objectTigger.size();++i){
+
+                    if( trigger->objectTigger[i]->triggerType == TRIGGER_TYPE::TTC_TRIGGER ){
+
+                        if( divLine.size() >= 7 ){
+
+                            trigger->objectTigger[i]->TTC            = QString(divLine[1]).trimmed().toFloat();
+                            trigger->objectTigger[i]->targetObjectID = QString(divLine[2]).trimmed().toInt();
+                            trigger->objectTigger[i]->triggerParam   = QString(divLine[3]).trimmed().toInt();    // ttcCalType
+                            trigger->objectTigger[i]->triggerParam2  = QString(divLine[4]).trimmed().toInt();    // ttcCalObjectID
+                            trigger->objectTigger[i]->x              = QString(divLine[5]).trimmed().toFloat();
+                            trigger->objectTigger[i]->y              = QString(divLine[6]).trimmed().toFloat();
+                        }
+                        break;
+                    }
+                }
+            }
         }
         else if( tag == QString("Scenario Event Target Object ID") ){
-            trigObj->targetObjectID = QString(divLine[1]).trimmed().toInt();
+
+            if( trigger->combination < 0 ){
+                trigObj->targetObjectID = QString(divLine[1]).trimmed().toInt();
+            }
         }
         else if( tag == QString("Scenario Event Related Event ID") ){
-            trigObj->targetEventID = QString(divLine[1]).trimmed().toInt();
+
+            if( trigger->combination < 0 ){
+                trigObj->targetEventID = QString(divLine[1]).trimmed().toInt();
+            }
         }
         else if( tag == QString("Scenario Event Trigger Time") ){
 
-            if( divLine.size() >= 4 ){
+            if( trigger->combination < 0 ){
+                if( divLine.size() >= 4 ){
 
-                int etmode = QString(divLine[1]).trimmed().toInt();
-                float val1 = QString(divLine[2]).trimmed().toFloat();
-                float val2 = QString(divLine[3]).trimmed().toFloat();
+                    int etmode = QString(divLine[1]).trimmed().toInt();
+                    float val1 = QString(divLine[2]).trimmed().toFloat();
+                    float val2 = QString(divLine[3]).trimmed().toFloat();
 
-                if( etmode == 1 ){
-                    float r = simManage->GenUniform();
-                    val1 = val1 + r * (val2 - val1);
+                    if( etmode == 1 ){
+                        float r = simManage->GenUniform();
+                        val1 = val1 + r * (val2 - val1);
+                    }
+                    else if( etmode == 2 ){
+                        val1 = simManage->GetNormalDist(val1, val2);
+                    }
+
+                    if( val1 < 0.0 ){
+                        val1 = 0.0;
+                    }
+
+                    struct SimulationTime *t = new struct SimulationTime;
+
+                    t->day    = 0;
+                    t->hour   = val1 / 3600;
+                    t->min    = val1 / 60 - t->hour * 3600;
+                    t->msec   = val1 - t->min * 60 - t->hour * 3600;
+
+                    t->sec = (int)(t->msec);
+                    t->msec -= t->sec;
+
+                    trigger->timeTrigger = t;
+                    trigger->timeTriggerInSec = t->msec + t->sec + t->min * 60.0 + t->hour * 3600.0 + t->day * 86400.0;
                 }
-                else if( etmode == 2 ){
-                    val1 = simManage->GetNormalDist(val1, val2);
+            }
+            else{
+
+                if( divLine.size() >= 4 ){
+
+                    float val = QString(divLine[2]).trimmed().toFloat();
+
+                    for(int i=0;i<trigger->objectTigger.size();++i){
+
+                        if( trigger->objectTigger[i]->triggerType == TRIGGER_TYPE::TIME_TRIGGER ){
+
+                            trigger->objectTigger[i]->timeTriggerInSec = val;
+                            break;
+                        }
+                    }
                 }
-
-                if( val1 < 0.0 ){
-                    val1 = 0.0;
-                }
-
-                struct SimulationTime *t = new struct SimulationTime;
-
-                t->day    = 0;
-                t->hour   = val1 / 3600;
-                t->min    = val1 / 60 - t->hour * 3600;
-                t->msec   = val1 - t->min * 60 - t->hour * 3600;
-
-                t->sec = (int)(t->msec);
-                t->msec -= t->sec;
-
-                trigger->timeTrigger = t;
-                trigger->timeTriggerInSec = t->msec + t->sec + t->min * 60.0 + t->hour * 3600.0 + t->day * 86400.0;
             }
         }
         else if( tag == QString("Scenario Event Param Float") ){
@@ -1229,8 +1996,19 @@ void SystemThread::LoadScenarioFile()
                 scenarioEvent->eventIntData.append( QString(divLine[i]).trimmed().toInt() );
             }
         }
+        else if( tag == QString("Scenario Event Param Boolean") ){
+            for(int i=1;i<divLine.size();++i){
+                int val = QString(divLine[i]).trimmed().toInt();
+                scenarioEvent->eventBooleanData.append( ( val == 1 ? true : false) );
+            }
+        }
+
     }
     file.close();
+
+
+    // Set routes for scenario objects
+    simManage->SetScenarioObjectsRouteInfo();
 
 
     emit SetMaxNumberAgent( maxAgent );
@@ -1540,7 +2318,256 @@ void SystemThread::LoadRoadData(QString roadDataFile)
                 }
             }
         }
+
+        int numEvent = simManage->GetNumberScenarioEvent(i);
+        for(int j=0;j<numEvent;++j){
+
+            if( simManage->GetScenarioEventType(i,j) != SCENARIO_EVENT_TYPE::OBJECT_EVENT ){
+                continue;
+            }
+            if( simManage->GetScenarioEventKind(i,j) != OBJECT_SCENARIO_ACTION_KIND::APPEAR_VEHICLE ){
+                continue;
+            }
+
+            if( simManage->GetScenarioEventRouteType(i,j) == ROUTE_TYPE::NODE_LIST_TYPE ){
+
+                struct ODRouteData *rd = simManage->GetODRouteOfScenarioEvent(i,j);
+
+                qDebug() << "GetODRouteOfScenarioEvent: i = " << i << " j = " << j;
+                qDebug() << "onlyForScenarioVehicle = " << rd->onlyForScenarioVehicle;
+                qDebug() << "originNode = " << rd->originNode;
+                qDebug() << "destinationNode = " << rd->destinationNode;
+
+                road->odRoute.append( rd );
+
+
+                for(int k=0;k<rd->LCSupportLaneLists.size();++k){
+
+                    for(int l=0;l<rd->LCSupportLaneLists[k]->laneList.size();++l){
+
+                        QList<QPoint> pairData;
+
+                        rd->mergeLanesInfo.append( pairData );
+
+                        for(int m=0;m<rd->LCSupportLaneLists[k]->laneList[l].size()-1;++m){
+
+                            int pIdx = road->pathId2Index.indexOf( rd->LCSupportLaneLists[k]->laneList[l][m] );
+                            if( pIdx >= 0 ){
+                                if( road->paths[pIdx]->followingPaths.size() == 2 ){
+
+                                    int p1 = road->paths[pIdx]->followingPaths[0];
+                                    int p2 = road->paths[pIdx]->followingPaths[1];
+
+                                    if( p2 == rd->LCSupportLaneLists[k]->laneList[l][m+1] ){
+                                        int t = p2;
+                                        p2 = p1;
+                                        p1 = t;
+                                    }
+
+                                    int p1Idx = road->pathId2Index.indexOf( p1 );
+                                    int p2Idx = road->pathId2Index.indexOf( p2 );
+                                    if( p1Idx >= 0 && p2Idx >= 0 ){
+
+                                        if( road->paths[p1Idx]->connectingNodeInDir == road->paths[p2Idx]->connectingNodeInDir ){
+
+                                            QPoint mergeLanePair;
+                                            mergeLanePair.setX( p1 );
+                                            mergeLanePair.setY( p2 );
+
+                                            rd->mergeLanesInfo.last().append( mergeLanePair );
+                                        }
+                                    }
+                                }
+                            }
+                            else{
+                                qDebug() << "Invalid path found: id = " << rd->LCSupportLaneLists[k]->laneList[l][m] << " in LCSupportLaneLists[" << k << "]->laneList[" << l << "]";
+                                qDebug() << "No index found.";
+                                qDebug() << "odRoute: O = " << rd->originNode << " D = " << rd->destinationNode;
+                            }
+                        }
+                    }
+                }
+
+                for(int k=1;k<rd->LCSupportLaneLists.size();++k){
+
+                    struct RouteLaneData *rld = rd->LCSupportLaneLists.at( k );
+
+                    int myWPin = -1;
+                    for(int l=0;l<rld->laneList[0].size();++l){
+
+                        int lIdx = road->pathId2Index.indexOf( rld->laneList[0][l] );
+                        if( road->paths[lIdx]->connectingNode != rld->goalNode ){
+                            continue;
+                        }
+                        int twp = road->paths[lIdx]->endWpId;
+                        int twpIdx = road->wpId2Index.indexOf( twp );
+                        if( road->wps[twpIdx]->isNodeInWP == true ){
+                            myWPin = twp;
+                            break;
+                        }
+                    }
+
+                    struct RouteLaneData *nextrld = rd->LCSupportLaneLists.at( k-1 );
+
+                    int targetWPin = -1;
+                    for(int l=0;l<nextrld->laneList[0].size();++l){
+                        int lIdx = road->pathId2Index.indexOf( nextrld->laneList[0][l] );
+                        if( road->paths[lIdx]->connectingNode != rld->goalNode ){
+                            continue;
+                        }
+                        int twp = road->paths[lIdx]->endWpId;
+                        int twpIdx = road->wpId2Index.indexOf( twp );
+                        if( road->wps[twpIdx]->isNodeInWP == true ){
+                            targetWPin = twp;
+                            break;
+                        }
+                    }
+
+                    if( myWPin >= 0 && targetWPin >= 0 ){
+
+                        int laneNoDiff = 0;
+
+                        int ndIdx = road->nodeId2Index.indexOf( rld->goalNode );
+                        for(int l=0;l<road->nodes[ndIdx]->inBoundaryWPs.size();++l){
+                            if( road->nodes[ndIdx]->inBoundaryWPs[l]->wpId == myWPin ){
+                                laneNoDiff += road->nodes[ndIdx]->inBoundaryWPs[l]->laneNo;
+                            }
+                            if( road->nodes[ndIdx]->inBoundaryWPs[l]->wpId == targetWPin ){
+                                laneNoDiff -= road->nodes[ndIdx]->inBoundaryWPs[l]->laneNo;
+                            }
+                        }
+
+                        if( laneNoDiff > 0 ){
+                            rld->LCDirect = DIRECTION_LABEL::LEFT_CROSSING;
+                        }
+                        else{
+                            rld->LCDirect = DIRECTION_LABEL::RIGHT_CROSSING;
+                        }
+
+                    }
+                }
+
+            }
+            else if( simManage->GetScenarioEventRouteType(i,j) == ROUTE_TYPE::PATH_LIST_TYPE ){
+
+                int numWP = simManage->GetNumberWPDataOfScenarioEvent(i,j);
+                if( numWP == 0 ){
+                    continue;
+                }
+
+                int objectID = simManage->GetScenarioEventObjectID(i,j);
+
+                for(int k=0;k<numWP;++k){
+                    struct ScenarioWPRoute *wpdata = simManage->GetWPDataOfScenarioEvent(i,j,k);
+
+                    int id = road->CreateWPforScenarioObject( wpdata->x,
+                                                              wpdata->y,
+                                                              wpdata->z,
+                                                              wpdata->direct,
+                                                              objectID,
+                                                              k,
+                                                              wpdata->speedInfo);
+                    wpdata->wpID = id;
+                }
+                road->CreatePathsforScenarioObject(objectID);
+
+                QList<int> tp;
+                for(int k=0;k<road->paths.size();++k){
+                    if( road->paths[k]->scenarioObjectID != objectID ){
+                        continue;
+                    }
+                    else{
+                        tp.prepend( road->paths[k]->id );
+                    }
+                }
+
+                simManage->SetTargetPathToScenarioEvent(i,j,tp);
+            }
+
+        }
+
+        for(int j=0;j<numEvent;++j){
+
+            if( simManage->GetScenarioEventType(i,j) != SCENARIO_EVENT_TYPE::OBJECT_EVENT ){
+                continue;
+            }
+            if( simManage->GetScenarioEventKind(i,j) != OBJECT_SCENARIO_ACTION_KIND::APPEAR_PEDESTRIAN ){
+                continue;
+            }
+
+            if( simManage->GetScenarioEventRouteType(i,j) == ROUTE_TYPE::PEDEST_PATH_LIST_TYPE ){
+
+                int numWP = simManage->GetNumberWPDataOfScenarioEvent(i,j);
+                if( numWP == 0 ){
+                    continue;
+                }
+
+                int objectID = simManage->GetScenarioEventObjectID(i,j);
+
+                int maxPedestPathID = -1;
+                for(int k=0;k<road->pedestPaths.size();++k){
+                    if( maxPedestPathID < road->pedestPaths[k]->id ){
+                        maxPedestPathID = road->pedestPaths[k]->id;
+                    }
+                }
+                maxPedestPathID++;
+
+                struct PedestPath* path = new struct PedestPath;
+
+                path->id = maxPedestPathID;
+                path->scenarioObjectID = objectID;
+
+                road->pedestPaths.append( path );
+                road->pedestPathID2Index.append( path->id );
+
+                for(int k=0;k<numWP;++k){
+
+                    struct PedestPathShapeInfo *si = new struct PedestPathShapeInfo;
+
+                    struct ScenarioWPRoute *wpdata = simManage->GetWPDataOfScenarioEvent(i,j,k);
+
+                    si->pos.setX( wpdata->x );
+                    si->pos.setY( wpdata->y );
+                    si->pos.setZ( wpdata->z );
+                    si->width = 1.5;
+
+                    si->distanceToNextPos = 0.0;
+                    si->angleToNextPos = 0.0;
+                    si->cosA = 1.0;
+                    si->sinA = 0.0;
+
+                    si->isCrossWalk = false;
+                    si->controlPedestSignalID = -1;
+                    si->runOutDirect = 0;
+                    si->runOutProb = 0.0;
+
+
+                    road->pedestPaths.last()->shape.append( si );
+                }
+
+                for(int k=0;k<road->pedestPaths.last()->shape.size()-1;++k){
+
+                    float dx = road->pedestPaths.last()->shape[k+1]->pos.x() - road->pedestPaths.last()->shape[k]->pos.x();
+                    float dy = road->pedestPaths.last()->shape[k+1]->pos.y() - road->pedestPaths.last()->shape[k]->pos.y();
+
+                    float len = sqrt( dx * dx + dy * dy );
+                    float dir = atan2( dy, dx );
+
+                    road->pedestPaths.last()->shape[k]->distanceToNextPos = len;
+                    road->pedestPaths.last()->shape[k]->angleToNextPos = dir;
+                    road->pedestPaths.last()->shape[k]->cosA = cos(dir);
+                    road->pedestPaths.last()->shape[k]->sinA = sin(dir);
+
+                    if( k == road->pedestPaths.last()->shape.size() - 2 ){
+                        road->pedestPaths.last()->shape[k+1]->angleToNextPos = dir;
+                        road->pedestPaths.last()->shape[k+1]->cosA = cos(dir);
+                        road->pedestPaths.last()->shape[k+1]->sinA = sin(dir);
+                    }
+                }
+            }
+        }
     }
+
     road->SetPathConnection();
 
     road->CheckPedestPathConnection();
@@ -1642,99 +2669,214 @@ void SystemThread::SetSpeedAdjustVal(int val)
 }
 
 
-void SystemThread::SetSendData(char *sendData, int maxSize,int *pos,int maxAgentSend,int maxTSSend,int pivotID)
+int SystemThread::SetSendData(int maxAgentSend,int maxTSSend,int pivotID)
 {
+
+    // set agent and TS data to UE4
+    memset( sendDataBuf, 0, sendDataMaxSize );
+
+    sendDataBuf[0] = 'R';
+    sendDataBuf[1] = 'S';
+    sendDataBuf[2] = 'd';
+
+    int at = 3;
+
     int numAgentSend = 0;
 
     QList<int> sendIDList;
 
-
     // count number of data
+
+    float intervalDist = 50.0;
+    int countByDistance[20];   // 50[m] * 20 = 1000[m]
+    for(int i=0;i<20;++i){
+        countByDistance[i] = 0;
+    }
+    QList<int> objListByDistance[20];
+
+    QList<int> calDist;
+
+    objListByDistance[0].append( pivotID );
+
+
+    float xPivot = agent[pivotID]->state.x;
+    float yPivot = agent[pivotID]->state.y;
+
+    if( isnan(xPivot) || isnan(yPivot) ){
+        qDebug() << "[FATAL] xPivot or yPivot is not a number.";
+        return 0;
+    }
+
+
+//    qDebug() << "xPivot = " << xPivot << " yPivot = " << yPivot;
+
+
+    numAgentSend = 0;
     for(int i=0;i<maxAgent;++i){
-        if( agent[i]->agentStatus == 0 ){
+
+        calDist.append( -1 );
+
+        int agentStatus = agent[i]->agentStatus;
+        if( agentStatus != 1 ){
             continue;
         }
-        if( agent[i]->isSInterfaceObject == true ){
+
+        if( i == pivotID ){
             continue;
         }
 
-        if( numAgentSend < maxAgentSend ){
-            sendIDList.append(i);
+        float xTest = agent[i]->state.x;
+        float yTest = agent[i]->state.y;
+        float rx = xTest - xPivot;
+        float ry = yTest - yPivot;
+        float D = sqrt(rx * rx + ry * ry);
+        if( D > 1000 ){
+            continue;
         }
 
-        numAgentSend++;
+        int idx = (int)(D / intervalDist);
+        if( idx >=20 ){
+            idx = 19;
+        }
+        else if( idx < 0){
+            idx = 0;
+        }
+
+        objListByDistance[idx].append( i );
+
+        calDist[i] = idx;
+
+        countByDistance[idx]++;
     }
 
-    bool shouldSelect = false;
-    if( numAgentSend > maxAgentSend ){
-        shouldSelect = true;
+//    for(int i=0;i<20;++i){
+//        qDebug() << "[" << i << "]objListByDistance=" << objListByDistance[i] << ", N="<< countByDistance[i];
+//    }
+
+
+
+    int totalNum = 0;
+    int thrIdx = 0;
+    for(int i=0;i<20;++i){
+        thrIdx = i;
+        if( totalNum < maxAgentSend && totalNum + countByDistance[i] >= maxAgentSend ){
+            break;
+        }
+        else{
+            totalNum += countByDistance[i];
+        }
     }
 
 
-    if( shouldSelect == true ){
+//    qDebug() << "thrIdx = " << thrIdx;
+//    QString dbgStr = QString("countByDistance=");
+//    for(int i=0;i<20;++i){
+//        dbgStr += QString(" %1").arg( countByDistance[i] );
+//    }
+//    qDebug() << dbgStr;
 
-        int countByDistance[20];   // 50[m] * 20 = 1000[m]
-        for(int i=0;i<20;++i){
-            countByDistance[i] = 0;
+
+    int nVKind = road->vehicleKind.size();
+    int nPKind = road->pedestrianKind.size();
+    int numSpawn = 10;
+    char *UE4ObjectIDUseFlag = new char[ (nVKind + nPKind) * numSpawn + 1 ];
+    memset( UE4ObjectIDUseFlag, 0, sizeof( (nVKind + nPKind) * numSpawn + 1) );
+
+
+    numAgentSend = 0;
+    sendIDList.clear();
+
+    for(int i=0;i<=thrIdx;++i){
+        for(int j=0;j<objListByDistance[i].size();++j){
+            int aIdx = objListByDistance[i][j];
+            if( aIdx == pivotID ){
+                continue;
+            }
+            int objID = agent[aIdx]->UE4ObjectID[pivotID];
+            if( objID >= 0 ){
+                UE4ObjectIDUseFlag[objID] = 1;
+            }
         }
-
-        QList<int> calDist;
-        calDist.reserve(maxAgent);
+    }
 
 
-        numAgentSend = 0;
-        for(int i=0;i<maxAgent;++i){
+//    qDebug() << "UE4ObjectIDUseFlag:";
+//    for(int i=0;i<nVKind + nPKind;++i){
+//        QString dbgStr = QString("");
+//        for(int j=0;j<numSpawn;++j){
+//            dbgStr += QString(" %1").arg( (UE4ObjectIDUseFlag[i*numSpawn+j] == 1 ? 1 : 0 ) );
+//        }
+//        qDebug() << dbgStr;
+//    }
 
-            calDist[i] = -1;
 
-            if( agent[i]->agentStatus == 0 ){
+
+    for(int i=0;i<=thrIdx;++i){
+        for(int j=0;j<objListByDistance[i].size();++j){
+
+            int aIdx = objListByDistance[i][j];
+
+            // Reject SInterface Object
+            if( aIdx == pivotID ){
+                agent[aIdx]->UE4ObjectID[pivotID] = pivotID;
                 continue;
             }
-            if( agent[i]->isSInterfaceObject == true ){
-                continue;
-            }
-            if( i == pivotID ){
-                continue;
-            }
 
-            float rx = agent[i]->state.x - agent[pivotID]->state.x;
-            float ry = agent[i]->state.y - agent[pivotID]->state.y;
-            float D = sqrt(rx * rx + ry * ry);
+            int mIdx = agent[aIdx]->vehicle.GetVehicleModelID();
 
-            int idx = (int)(D / 50.0);
-            if( idx >=20 ){
-                idx = 19;
+            int nK = 0;
+            if( agent[aIdx]->agentKind >= 100 ){
+                nK = nVKind;
             }
 
-            calDist[i] = idx;
-
-            countByDistance[idx]++;
-        }
-
-        int totalNum = 0;
-        int thrIdx = 0;
-        for(int i=0;i<20;++i){
-            if( totalNum < maxAgentSend && totalNum + countByDistance[i] >= maxAgentSend ){
-                thrIdx = i;
-                break;
+            if( agent[aIdx]->UE4ObjectID[pivotID] < 0 ){
+                for(int k=0;k<numSpawn;++k){
+                    int objID = numSpawn * (nK + mIdx) + k;
+                    if( UE4ObjectIDUseFlag[objID] == 0 ){
+                        agent[aIdx]->UE4ObjectID[pivotID] = objID;
+                        UE4ObjectIDUseFlag[objID] = 1;
+                        calDist[aIdx] = -1;
+                        //qDebug() << " set " << objID;
+                        break;
+                    }
+                }
             }
             else{
-                totalNum += countByDistance[i];
+                //qDebug() << " remain " << agent[aIdx]->UE4ObjectID[pivotID];
+                calDist[aIdx] = -1;
+            }
+
+            if( agent[aIdx]->UE4ObjectID[pivotID] < 0 ){
+
+                for(int k=thrIdx;k>i;k--){
+                    for(int l=0;l<objListByDistance[k].size();++l){
+                        int tIdx = objListByDistance[k][l];
+                        if( agent[tIdx]->UE4ObjectID[pivotID] >= numSpawn * (nK + mIdx) &&
+                                agent[tIdx]->UE4ObjectID[pivotID] < numSpawn*(nK + mIdx + 1) ){
+
+                            //qDebug() << "tIdx=" << tIdx << " UE4=" << agent[tIdx]->UE4ObjectID[pivotID] << " -> aIdx" << aIdx;
+
+                            agent[aIdx]->UE4ObjectID[pivotID] = agent[tIdx]->UE4ObjectID[pivotID];
+                            agent[tIdx]->UE4ObjectID[pivotID] = -1;
+
+                            calDist[aIdx] = -1;
+                            break;
+                        }
+                    }
+                }
             }
         }
+    }
 
+    for(int i=0;i<=thrIdx;++i){
+        for(int j=0;j<objListByDistance[i].size();++j){
 
-        numAgentSend = 0;
-        sendIDList.clear();
-
-        for(int i=0;i<maxAgent;++i){
-
-            if( calDist[i] < 0 || calDist[i] > thrIdx ){
+            int aIdx = objListByDistance[i][j];
+            if( agent[aIdx]->UE4ObjectID[pivotID] < 0 ){
                 continue;
             }
-
             if( numAgentSend < maxAgentSend ){
-                sendIDList.append( i );
+                sendIDList.append( aIdx );
                 numAgentSend++;
             }
             else{
@@ -1743,15 +2885,44 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos,int maxAgent
         }
     }
 
+    for(int i=0;i<maxAgent;++i){
+        if( agent[i]->agentStatus != 1 ){
+            continue;
+        }
+        if( i == pivotID ){
+            continue;
+        }
 
-    int at = *pos;
+        if( calDist[i] > 0.0 ){
+            agent[i]->UE4ObjectID[pivotID] = -1;
+        }
+    }
 
-    memcpy(&(sendData[at]), &numAgentSend, sizeof(int));   // 3
+    delete [] UE4ObjectIDUseFlag;
+
+    numAgentSend = sendIDList.size();
+
+
+    memcpy(&(sendDataBuf[at]), &numAgentSend, sizeof(int));   // 3
     at += sizeof(int);
 
     float tempFVal = 0.0;
     int   tempIVal = 0;
     char  tempCVal = 0;
+
+    int maxSize = 125 * maxAgentSend + 13 * maxTSSend + 20 + 5;
+
+
+//    qDebug() << "numAgentSend = " << numAgentSend;
+//    for(int n=0;n<numAgentSend;++n){
+//        int i = sendIDList[n];
+//        if( i == pivotID ){
+//            qDebug() << "  ID = " << agent[i]->ID << " CG=" << agent[i]->UE4ObjectID[ pivotID ];
+//        }
+//        else{
+//            qDebug() << "  ID = " << agent[i]->ID << " CG=" << (agent[i]->UE4ObjectID[ pivotID ] +10);
+//        }
+//    }
 
 
     for(int n=0;n<numAgentSend;++n){
@@ -1761,67 +2932,87 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos,int maxAgent
         if( at + 125 < maxSize ){
 
             tempCVal = 'a';
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 7
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 7
             at += sizeof(char);
 
-            tempIVal = agent[i]->ID;
-            memcpy(&(sendData[at]), &tempIVal, sizeof(int));   // 8
+
+            //tempIVal = agent[i]->ID;
+            if( i == pivotID ){
+                tempIVal = pivotID;
+                agent[i]->UE4ObjectID[ pivotID ] = pivotID;
+            }
+            else{
+                tempIVal = agent[i]->UE4ObjectID[ pivotID ] + 10;
+            }
+
+
+//            if( agent[i]->agentKind >= 100 ){
+//                qDebug() << "A" << agent[i]->ID << " : " << tempIVal;
+//            }
+
+            memcpy(&(sendDataBuf[at]), &tempIVal, sizeof(int));   // 8
             at += sizeof(int);
 
             tempFVal = agent[i]->state.x;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 12
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 12
             at += sizeof(float);
 
             tempFVal = agent[i]->state.y * (-1.0);
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 16
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 16
             at += sizeof(float);
 
-            tempFVal = agent[i]->state.z;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 20
+//            tempFVal = agent[i]->state.z;
+            tempFVal = agent[i]->state.z_path;
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 20
             at += sizeof(float);
 
             tempFVal = agent[i]->state.roll;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 24
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 24
             at += sizeof(float);
 
             tempFVal = agent[i]->state.pitch;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 28
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 28
             at += sizeof(float);
 
             tempFVal = agent[i]->state.yaw * (-1.0);
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 32
+
+            if( i != pivotID && agent[i]->vehicle.yawFiltered4CG != NULL ){
+                tempFVal = agent[i]->vehicle.yawFiltered4CG->GetOutput() * (-1.0);
+            }
+
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 32
             at += sizeof(float);
 
             tempFVal = agent[i]->state.V;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 36
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 36
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.ax;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 40
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 40
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.yawRate;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 44
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 44
             at += sizeof(float);
 
             tempFVal = agent[i]->memory.lateralDeviationFromTargetPath;   // latDev
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 48
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 48
             at += sizeof(float);
 
             tempFVal = agent[i]->memory.lateralDeviationFromTargetPathAtPreviewPoint;   // latDev at aim point
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 52
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 52
             at += sizeof(float);
 
             tempCVal = 0;     // engineKeyState
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 56
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 56
             at += sizeof(char);
 
             tempCVal = 0;     // gearPosition
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 57
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 57
             at += sizeof(char);
 
             tempIVal = 0;     // Tachometer
-            memcpy(&(sendData[at]), &tempIVal, sizeof(int));   // 58
+            memcpy(&(sendDataBuf[at]), &tempIVal, sizeof(int));   // 58
             at += sizeof(int);
 
             tempCVal = 0;     // lightFlag1
@@ -1842,11 +3033,11 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos,int maxAgent
 
 //            qDebug() << "Brake = " << agent[i]->vehicle.GetBrakeLampState() << " send = " << (int)tempCVal;
 
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 62
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 62
             at += sizeof(char);
 
             tempCVal = 0;     // lightFlag2
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 63
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 63
             at += sizeof(char);
 
             if( agent[i]->agentKind < 100 ){
@@ -1855,7 +3046,7 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos,int maxAgent
             else{
                 tempFVal = 0.0;
             }
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 64
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 64
             at += sizeof(float);
 
             if( agent[i]->agentKind < 100 ){
@@ -1864,7 +3055,7 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos,int maxAgent
             else{
                 tempFVal = 0.0;
             }
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 68
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 68
             at += sizeof(float);
 
             if( agent[i]->agentKind < 100 ){
@@ -1873,7 +3064,7 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos,int maxAgent
             else{
                 tempFVal = 0.0;
             }
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 72
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 72
             at += sizeof(float);
 
             if( agent[i]->agentKind < 100 ){
@@ -1882,71 +3073,71 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos,int maxAgent
             else{
                 tempFVal = 0.0;
             }
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 76
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 76
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.tireRotAngle;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 80
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 80
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.steer * (-57.3 / 6.0) ;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 84
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 84
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.tireRotAngle;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 88
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 88
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.steer * (-57.3 / 6.0);
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 92
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 92
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.tireRotAngle;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 96
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 96
             at += sizeof(float);
 
             tempFVal = 0.0;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 100
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 100
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.tireRotAngle;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 104
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 104
             at += sizeof(float);
 
             tempFVal = 0.0;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 108
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 108
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.relZBody;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 112
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 112
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.relRollBody;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 116
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 116
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.relPitchBody;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 120
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 120
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.relYBody;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 124
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 124
             at += sizeof(float);
 
             tempCVal = 0;     // optionalFlag1
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 128
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 128
             at += sizeof(char);
 
             tempCVal = 0;     // optionalFlag2
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 129
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 129
             at += sizeof(char);
 
             tempCVal = 0;     // optionalFlag3
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 130
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 130
             at += sizeof(char);
 
-            tempCVal = 0;     // optionalFlag4
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 132
+            tempCVal = 1;     // optionalFlag4
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 131
             at += sizeof(char);
         }
     }
@@ -1972,20 +3163,22 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos,int maxAgent
         }
 
         QList<int> calDist;
-        calDist.reserve(numTrafficSignals);
 
         for(int i=0;i<numTrafficSignals;++i){
 
-            float rx = trafficSignal[i]->xTS - agent[pivotID]->state.x;
-            float ry = trafficSignal[i]->yTS - agent[pivotID]->state.y;
+            float rx = trafficSignal[i]->xTS - xPivot;
+            float ry = trafficSignal[i]->yTS - yPivot;
             float D = sqrt(rx * rx + ry * ry);
 
             int idx = (int)(D / 50.0);
             if( idx >=20 ){
                 idx = 19;
             }
+            else if( idx < 0 ){
+                idx = 0;
+            }
 
-            calDist[i] = idx;
+            calDist.append( idx );
 
             countByDistance[idx]++;
         }
@@ -1993,8 +3186,8 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos,int maxAgent
         int totalNum = 0;
         int thrIdx = 0;
         for(int i=0;i<20;++i){
+            thrIdx = i;
             if( totalNum < maxTSSend && totalNum + countByDistance[i] >= maxTSSend ){
-                thrIdx = i;
                 break;
             }
             else{
@@ -2021,61 +3214,65 @@ void SystemThread::SetSendData(char *sendData, int maxSize,int *pos,int maxAgent
 
     }
 
+    numTStSend = sendTSList.size();
 
-    memcpy(&(sendData[at]), &numTStSend, sizeof(int));
+    memcpy(&(sendDataBuf[at]), &numTStSend, sizeof(int));
     at += sizeof(int);
 
     for(int n=0;n<numTStSend;++n){
 
         int i = sendTSList[n];
 
-        memcpy(&(sendData[at]), &(trafficSignal[i]->id), sizeof(int));
+        memcpy(&(sendDataBuf[at]), &(trafficSignal[i]->id), sizeof(int));
         at += sizeof(int);
 
-        sendData[at] = trafficSignal[i]->type;
+        sendDataBuf[at] = trafficSignal[i]->type;
         at += sizeof(char);
 
         int display = trafficSignal[i]->GetCurrentDisplayInfo();
-        memcpy(&(sendData[at]), &display, sizeof(int));
+        memcpy(&(sendDataBuf[at]), &display, sizeof(int));
         at += sizeof(int);
 
         float remainTime = trafficSignal[i]->remainingTimeToNextDisplay;
-        memcpy(&(sendData[at]), &remainTime, sizeof(float));
+        memcpy(&(sendDataBuf[at]), &remainTime, sizeof(float));
         at += sizeof(float);
     }
 
-
-    *pos = at;
-
-    //qDebug() << "data size = " << at;
+    return at;
 }
 
 
-void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos,int maxAgentSend,int maxTSSend,QList<int> pivotIDs)
+int SystemThread::SetSendDataForFuncExtend(int maxAgentSend,int maxTSSend,QList<int> pivotIDs)
 {
+    // set agent and TS data to UE4
+    memset( sendDataBuf, 0, sendDataMaxSize );
+
+    sendDataBuf[0] = 'R';
+    sendDataBuf[1] = 'S';
+    sendDataBuf[2] = 'd';
+
+    int at = 3;
+
     int numAgentSend = 0;
 
     QList<int> sendIDList;
-    sendIDList.reserve( maxAgentSend );
 
     // count number of data
+
     for(int i=0;i<maxAgent;++i){
-        if( agent[i]->agentStatus == 0 ){
+        if( agent[i]->agentStatus != 1 ){
             continue;
         }
-        if( numAgentSend < maxAgentSend ){
-            sendIDList[numAgentSend] = i;
-        }
 
+        if( numAgentSend < maxAgentSend ){
+           sendIDList.append(i);
+        }
         numAgentSend++;
     }
 
-    bool shouldSelect = false;
-    if( numAgentSend > maxAgentSend ){
-        shouldSelect = true;
-    }
+//    qDebug() << "numAgentSend = " << numAgentSend << " maxAgentSend = " << maxAgentSend;
 
-    if( shouldSelect == true ){
+    if( numAgentSend > maxAgentSend ){
 
         int countByDistance[20];   // 50[m] * 20 = 1000[m]
         for(int i=0;i<20;++i){
@@ -2083,14 +3280,13 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
         }
 
         QList<int> calDist;
-        calDist.reserve(maxAgent);
 
         numAgentSend = 0;
         for(int i=0;i<maxAgent;++i){
 
-            calDist[i] = -1;
+            calDist.append( -1 );
 
-            if( agent[i]->agentStatus == 0 ){
+            if( agent[i]->agentStatus != 1 ){
                 continue;
             }
 
@@ -2105,13 +3301,22 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
                 float rx = agent[i]->state.x - agent[pivotIDs[j]]->state.x;
                 float ry = agent[i]->state.y - agent[pivotIDs[j]]->state.y;
                 float D = sqrt(rx * rx + ry * ry);
+                if( D > 1000.0 ){
+                    continue;
+                }
                 int tidx = (int)(D / 50.0);
                 if( tidx >=20 ){
                     tidx = 19;
                 }
+                else if( tidx < 0 ){
+                    tidx = 0;
+                }
                 if( idx < 0 || idx > tidx ){
                     idx = tidx;
                 }
+            }
+            if( idx < 0 ){
+                continue;
             }
 
             calDist[i] = idx;
@@ -2122,8 +3327,8 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
         int totalNum = 0;
         int thrIdx = 0;
         for(int i=0;i<20;++i){
+            thrIdx = i;
             if( totalNum < maxAgentSend && totalNum + countByDistance[i] >= maxAgentSend ){
-                thrIdx = i;
                 break;
             }
             else{
@@ -2131,7 +3336,13 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
             }
         }
 
+//        qDebug() << "thrIdx = " << thrIdx;
+//        for(int i=0;i<thrIdx;++i){
+//            qDebug() << " countByDistance[" << i << "] = " << countByDistance[i];
+//        }
+
         numAgentSend = 0;
+        sendIDList.clear();
 
         for(int i=0;i<maxAgent;++i){
 
@@ -2140,7 +3351,7 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
             }
 
             if( numAgentSend < maxAgentSend ){
-                sendIDList[numAgentSend] = i;
+                sendIDList.append( i );
                 numAgentSend++;
             }
             else{
@@ -2149,17 +3360,18 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
         }
     }
 
+    numAgentSend = sendIDList.size();
+//    qDebug() << "sendIDList = " << sendIDList;
 
 
-    int at = *pos;
-
-    memcpy(&(sendData[at]), &numAgentSend, sizeof(int));   // 3
+    memcpy(&(sendDataBuf[at]), &numAgentSend, sizeof(int));   // 3
     at += sizeof(int);
 
     float tempFVal = 0.0;
     int   tempIVal = 0;
     char  tempCVal = 0;
 
+    int maxSize = 125 * maxAgentSend + 13 * maxTSSend + 20 + 5;
 
     for(int n=0;n<numAgentSend;++n){
 
@@ -2168,67 +3380,67 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
         if( at + 125 < maxSize ){
 
             tempCVal = 'a';
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 7
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 7
             at += sizeof(char);
 
             tempIVal = agent[i]->ID;
-            memcpy(&(sendData[at]), &tempIVal, sizeof(int));   // 8
+            memcpy(&(sendDataBuf[at]), &tempIVal, sizeof(int));   // 8
             at += sizeof(int);
 
             tempFVal = agent[i]->state.x;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 12
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 12
             at += sizeof(float);
 
             tempFVal = agent[i]->state.y * (-1.0);
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 16
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 16
             at += sizeof(float);
 
             tempFVal = agent[i]->state.z;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 20
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 20
             at += sizeof(float);
 
             tempFVal = agent[i]->state.roll;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 24
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 24
             at += sizeof(float);
 
             tempFVal = agent[i]->state.pitch;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 28
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 28
             at += sizeof(float);
 
             tempFVal = agent[i]->state.yaw * (-1.0);
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 32
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 32
             at += sizeof(float);
 
             tempFVal = agent[i]->state.V;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 36
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 36
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.ax;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 40
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 40
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.yawRate;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 44
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 44
             at += sizeof(float);
 
             tempFVal = agent[i]->memory.lateralDeviationFromTargetPath;   // latDev
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 48
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 48
             at += sizeof(float);
 
             tempFVal = agent[i]->memory.lateralDeviationFromTargetPathAtPreviewPoint;   // latDev at aim point
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 52
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 52
             at += sizeof(float);
 
             tempCVal = 0;     // engineKeyState
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 56
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 56
             at += sizeof(char);
 
             tempCVal = 0;     // gearPosition
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 57
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 57
             at += sizeof(char);
 
             tempIVal = 0;     // Tachometer
-            memcpy(&(sendData[at]), &tempIVal, sizeof(int));   // 58
+            memcpy(&(sendDataBuf[at]), &tempIVal, sizeof(int));   // 58
             at += sizeof(int);
 
             tempCVal = 0;     // lightFlag1
@@ -2249,11 +3461,11 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
 
 //            qDebug() << "Brake = " << agent[i]->vehicle.GetBrakeLampState() << " send = " << (int)tempCVal;
 
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 62
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 62
             at += sizeof(char);
 
             tempCVal = 0;     // lightFlag2
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 63
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 63
             at += sizeof(char);
 
             if( agent[i]->agentKind < 100 ){
@@ -2262,7 +3474,7 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
             else{
                 tempFVal = 0.0;
             }
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 64
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 64
             at += sizeof(float);
 
             if( agent[i]->agentKind < 100 ){
@@ -2271,7 +3483,7 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
             else{
                 tempFVal = 0.0;
             }
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 68
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 68
             at += sizeof(float);
 
             if( agent[i]->agentKind < 100 ){
@@ -2280,7 +3492,7 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
             else{
                 tempFVal = 0.0;
             }
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 72
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 72
             at += sizeof(float);
 
             if( agent[i]->agentKind < 100 ){
@@ -2289,71 +3501,74 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
             else{
                 tempFVal = 0.0;
             }
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 76
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 76
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.tireRotAngle;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 80
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 80
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.steer * (-57.3 / 6.0) ;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 84
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 84
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.tireRotAngle;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 88
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 88
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.steer * (-57.3 / 6.0);
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 92
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 92
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.tireRotAngle;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 96
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 96
             at += sizeof(float);
 
             tempFVal = 0.0;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 100
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 100
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.tireRotAngle;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 104
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 104
             at += sizeof(float);
 
             tempFVal = 0.0;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 108
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 108
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.relZBody;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 112
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 112
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.relRollBody;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 116
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 116
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.relPitchBody;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 120
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 120
             at += sizeof(float);
 
             tempFVal = agent[i]->vehicle.state.relYBody;
-            memcpy(&(sendData[at]), &tempFVal, sizeof(float));   // 124
+            memcpy(&(sendDataBuf[at]), &tempFVal, sizeof(float));   // 124
             at += sizeof(float);
 
             tempCVal = 0;     // optionalFlag1
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 128
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 128
             at += sizeof(char);
 
             tempCVal = 0;     // optionalFlag2
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 129
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 129
             at += sizeof(char);
 
             tempCVal = 0;     // optionalFlag3
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 130
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 130
             at += sizeof(char);
 
-            tempCVal = 0;     // optionalFlag4
-            memcpy(&(sendData[at]), &tempCVal, sizeof(char));   // 132
+            tempCVal = 'v';     // optionalFlag4
+            if( agent[i]->agentStatus >= 100 ){
+                tempCVal = 'p';
+            }
+            memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 131
             at += sizeof(char);
         }
     }
@@ -2362,13 +3577,12 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
     int numTStSend = 0;
 
     QList<int> sendTSList;
-    sendTSList.reserve( maxTSSend );
 
     if( numTrafficSignals <= maxTSSend ){
 
         numTStSend = numTrafficSignals;
         for(int i=0;i<numTrafficSignals;++i){
-            sendTSList[i] = i;
+            sendTSList.append( i );
         }
 
     }
@@ -2380,9 +3594,10 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
         }
 
         QList<int> calDist;
-        calDist.reserve(numTrafficSignals);
 
         for(int i=0;i<numTrafficSignals;++i){
+
+            calDist.append( -1 );
 
             int idx = -1;
             for(int j=0;j<pivotIDs.size();++j){
@@ -2392,6 +3607,9 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
                 int tidx = (int)(D / 50.0);
                 if( tidx >=20 ){
                     tidx = 19;
+                }
+                else if( tidx < 0 ){
+                    tidx = 0;
                 }
                 if( idx < 0 || idx > tidx ){
                     idx = tidx;
@@ -2406,8 +3624,10 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
         int totalNum = 0;
         int thrIdx = 0;
         for(int i=0;i<20;++i){
+
+            thrIdx = i;
+
             if( totalNum < maxTSSend && totalNum + countByDistance[i] >= maxTSSend ){
-                thrIdx = i;
                 break;
             }
             else{
@@ -2416,6 +3636,7 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
         }
 
         numTStSend = 0;
+        sendTSList.clear();
 
         for(int i=0;i<numTrafficSignals;++i){
 
@@ -2424,7 +3645,7 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
             }
 
             if( numTStSend < maxTSSend ){
-                sendTSList[numTStSend] = i;
+                sendTSList.append( i );
                 numTStSend++;
             }
             else{
@@ -2433,32 +3654,32 @@ void SystemThread::SetSendDataForFuncExtend(char *sendData, int maxSize,int *pos
         }
     }
 
-    memcpy(&(sendData[at]), &numTStSend, sizeof(int));
+    numTStSend = sendTSList.size();
+
+    memcpy(&(sendDataBuf[at]), &numTStSend, sizeof(int));
     at += sizeof(int);
 
     for(int n=0;n<numTStSend;++n){
 
         int i = sendTSList[n];
 
-        memcpy(&(sendData[at]), &(trafficSignal[i]->id), sizeof(int));
+        memcpy(&(sendDataBuf[at]), &(trafficSignal[i]->id), sizeof(int));
         at += sizeof(int);
 
-        sendData[at] = trafficSignal[i]->type;
+        sendDataBuf[at] = trafficSignal[i]->type;
         at += sizeof(char);
 
         int display = trafficSignal[i]->GetCurrentDisplayInfo();
-        memcpy(&(sendData[at]), &display, sizeof(int));
+        memcpy(&(sendDataBuf[at]), &display, sizeof(int));
         at += sizeof(int);
 
         float remainTime = trafficSignal[i]->remainingTimeToNextDisplay;
-        memcpy(&(sendData[at]), &remainTime, sizeof(float));
+        memcpy(&(sendDataBuf[at]), &remainTime, sizeof(float));
         at += sizeof(float);
     }
 
 
-    *pos = at;
-
-    //qDebug() << "data size = " << at;
+    return at;
 }
 
 
@@ -2471,11 +3692,23 @@ void SystemThread::SetSimulationFrequency(int hz)
 }
 
 
-void SystemThread::SetTireHeight(int id, float zFL, float zFR, float zRL, float zRR)
+
+
+void SystemThread::SetTireHeight(int SInterObjID, int id, float zFL, float zFR, float zRL, float zRR)
 {
+    if( SInterObjID < 0 || SInterObjID >= 10 ){
+        return;
+    }
+
     int idx = -1;
     for(int i=0;i<maxAgent;++i){
-        if( agent[i]->ID == id ){
+        if( agent[i]->agentStatus != 1 ){
+            continue;
+        }
+        if( agent[i]->agentKind >= 100 ){
+            continue;
+        }
+        if( agent[i]->UE4ObjectID[SInterObjID] + 10 == id ){
             idx = i;
             break;
         }
@@ -2535,6 +3768,8 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
 {
     mutexDSStateWrite->lock();
 
+    //qDebug() << "SetSInterObjData: id = " << id;
+
     if( type == 'v' || type == 'm' ){
         agent[id]->agentKind = 0;
     }
@@ -2577,6 +3812,14 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
 
     agent[id]->agentStatus = 1;
 
+    //qDebug() << "SetSInterObjData : id = " << id;
+
+    //qDebug() << " x = " << agent[id]->state.x;
+    //qDebug() << " y = " << agent[id]->state.y;
+
+
+
+
     if( agent[id]->vehicle.GetVehicleModelID() < 0 ){
         float wheelbase = so->lf + so->lr;
         int vModelID = simManage->GetVehicleShapeByWheelbase( wheelbase, road );
@@ -2587,6 +3830,10 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
         agent[id]->vHalfLength = agent[id]->vehicle.GetVehicleLength() * 0.5;
         agent[id]->vHalfWidth  = agent[id]->vehicle.GetVehicleWidth()  * 0.5;
     }
+
+    agent[id]->vehicle.param.Lf = so->lr;
+    agent[id]->vehicle.param.Lr = so->lr;
+
 
     if( so->brakeLamp == true ){
         agent[id]->vehicle.SetBrakeLampState( 1 );
@@ -2621,8 +3868,43 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
     }
 
 
+    int pathId = -1;
+
     float deviation,xt,yt,xd,yd,s;
-    int pathId = road->GetNearestPath( as->x, as->y, as->yaw, deviation, xt, yt, xd, yd, s );
+
+    int oldTargetPath = agent[id]->memory.currentTargetPath;
+    if( oldTargetPath >= 0 ){
+
+        int tpID = road->GetDeviationFromPath( oldTargetPath,
+                                               agent[id]->state.x, agent[id]->state.y, agent[id]->state.yaw,
+                                               deviation, xt, yt, xd, yd, s );
+
+        if( tpID == oldTargetPath && fabs(deviation) < 1.5 ){
+            pathId = tpID;
+        }
+        else{
+            if( winkerVal == 0 && agent[id]->memory.targetPathList.size() > 1 ){
+
+                for(int i=agent[id]->memory.targetPathList.size()-1;i>=0;i--){
+
+                    tpID = road->GetDeviationFromPath( agent[id]->memory.targetPathList[i],
+                                                           as->x, as->y, as->yaw,
+                                                           deviation, xt, yt, xd, yd, s );
+
+                    if( tpID != agent[id]->memory.targetPathList[i] || isnan(deviation) == true || fabs(deviation) > 1.0  ){
+                        continue;
+                    }
+
+                    pathId = agent[id]->memory.targetPathList[i];
+                    break;
+                }
+            }
+        }
+    }
+
+    if( pathId < 0 ){
+        pathId = road->GetNearestPath( as->x, as->y, as->yaw, deviation, xt, yt, xd, yd, s );
+    }
 
 //    qDebug() << "S-Interface Object: near path = " << pathId;
 
@@ -2632,6 +3914,7 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
     agent[id]->memory.distanceToZeroSpeed = as->V * as->V * 0.5f / (0.3 * 9.81) + 5.0;
     agent[id]->memory.requiredDistToStopFromTargetSpeed = 150.0;
     agent[id]->memory.nextTurnNode = -1;
+
 
     if( pathId < 0 ){
 
@@ -2711,10 +3994,11 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
                         int fidx = road->pathId2Index.indexOf(tpath);
 
                         float tmpCurvature = fabs(road->paths[fidx]->meanPathCurvature);
+                        float tmpMaxCurvature = fabs(road->paths[fidx]->maxPathCurvature);
 
-                        if( minIdx < 0 || minCurvature > tmpCurvature ){
+                        if( minIdx < 0 || (minCurvature > tmpCurvature && minCurvature > tmpMaxCurvature) ){
                             minIdx = j;
-                            minCurvature = tmpCurvature;
+                            minCurvature = (tmpCurvature < tmpMaxCurvature ? tmpMaxCurvature : tmpCurvature);
                         }
 
                     }
@@ -2734,6 +4018,13 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
         }
 
         agent[id]->memory.currentTargetPathIndexInList = agent[id]->memory.targetPathList.indexOf( agent[id]->memory.currentTargetPath );
+
+
+        agent[id]->memory.targetPathLength.clear();
+        for(int n=0;n<agent[id]->memory.targetPathList.size();++n){
+            float len = road->GetPathLength( agent[id]->memory.targetPathList[n] );
+            agent[id]->memory.targetPathLength.append( len );
+        }
 
 
         //
@@ -2770,6 +4061,11 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
             agent[id]->memory.previewPointPath = agent[id]->memory.targetPathList[i];
             break;
         }
+
+
+//        qDebug() << "targetPathList = " << agent[id]->memory.targetPathList;
+//        qDebug() << "currentTargetPath = " << agent[id]->memory.currentTargetPath << " dev= " << agent[id]->memory.lateralDeviationFromTargetPath;
+//        qDebug() << "previewPointPath = " << agent[id]->memory.previewPointPath << " dev= " << agent[id]->memory.lateralDeviationFromTargetPathAtPreviewPoint;
 
 
         //
@@ -2885,7 +4181,6 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
         agent[id]->memory.distanceToStopPoint = dist - agent[id]->memory.distanceFromStartWPInCurrentPath;
 
     }
-
     mutexDSStateWrite->unlock();
 }
 
@@ -3056,9 +4351,10 @@ void SystemThread::CopyPathData(int fromAID, int toAID)
         float tdev,txt,tyt,txd,tyd,ts;
         float xi = agent[toAID]->state.x;
         float yi = agent[toAID]->state.y;
+        float zi = agent[toAID]->state.z_path;
         float YAi = agent[toAID]->state.yaw;
         int currentPath = road->GetNearestPathFromList( agent[toAID]->memory.targetPathList,
-                                                        xi, yi, YAi,
+                                                        xi, yi, zi, YAi,
                                                         tdev,txt,tyt,txd,tyd,ts );
         if( currentPath < 0 ){
             qDebug() << "[Warning]----------------------------------";
@@ -3192,6 +4488,8 @@ void SystemThread::EmbedAgentBehavior(int id, float *data, int sizeData)
     agent[id]->state.steer = data[7];
 
     agent[id]->agentStatus = 1;
+
+    //qDebug() << "EmbedAgentBehavior : id = " << id;
 
 
     if( data[8] > 0.05 ){
@@ -3429,6 +4727,7 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  targetPathList = " << agent[nearID]->memory.targetPathList;
     qDebug() << "  currentPath = " << agent[nearID]->memory.currentTargetPath;
     qDebug() << "  currentTargetPathIndexInList = " << agent[nearID]->memory.currentTargetPathIndexInList;
+    qDebug() << "  destinationNode = " << agent[nearID]->memory.destinationNode;
     qDebug() << "  myNodeList = " << agent[nearID]->memory.myNodeList;
     qDebug() << "  myInDirList = " << agent[nearID]->memory.myInDirList;
     qDebug() << "  myOutDirList = " << agent[nearID]->memory.myOutDirList;
@@ -3487,6 +4786,7 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "decisionMakingCountMax = " << agent[nearID]->decisionMakingCountMax;
     qDebug() << "controlCount = " << agent[nearID]->controlCount;
     qDebug() << "controlCountMax = " << agent[nearID]->controlCountMax;
+    qDebug() << "calInterval = " << agent[nearID]->calInterval;
 
 }
 
@@ -3496,5 +4796,34 @@ void SystemThread::SetTmpStopTime(int hour,int min,int sec)
     tmpStopHour   = hour;
     tmpStopMin    = min;
     tmpStopSecond = sec;
+}
+
+
+void SystemThread::DSMove(float x, float y)
+{
+    // This function is valid only for DS Mode
+    if( DSMode == false ){
+        return;
+    }
+
+    qDebug() << "[SystemThread::DSMove] DSMoveTarget = " << DSMoveTarget;
+
+    float deviation,xt,yt,xd,yd,s;
+    int pathId = road->GetNearestPath( x, y, 0.0, deviation, xt, yt, xd, yd, s, true );
+
+    float angle = 0.0;
+    if( pathId >= 0 ){
+        angle = atan2( (-1.0) * yd, xd ) * 57.3;
+    }
+
+    qDebug() << "pathId = " << pathId << " angle = " << angle;
+
+    y *= (-1.0);  // Coordinate Transform from Re:sim to UE4
+
+
+    if( udpThread != NULL ){
+
+        udpThread->SendDSMoveCommand( DSMoveTarget, x, y, angle );
+    }
 }
 

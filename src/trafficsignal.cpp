@@ -30,12 +30,15 @@ TrafficSignal::TrafficSignal()
     currentDisplayIndex = -1;
     nextUpdateTimeFVal = 0.0;
     lastUpdateTimeFVal = 0.0;
+    currentSimTime     = 0.0;
 
     remainingTimeToNextDisplay = 0.0;
     elapsedTimeCurrentDisplay  = 0.0;
 
     flushState = 0;
     flushTimeCheck = 0.0;
+
+    displayOff = false;
 }
 
 
@@ -103,12 +106,19 @@ int TrafficSignal::GetCurrentDisplayInfo()
             }
         }
     }
+
+    if( displayOff == true ){
+        ret = 0;
+    }
+
     return ret;
 }
 
 
 void TrafficSignal::CheckDisplayInfoUpdate(float cSimTimFVal)
 {
+    currentSimTime = cSimTimFVal;
+
     if( currentDisplayIndex >= 0 && currentDisplayIndex < displayPattern.size() ){
         if( displayPattern[currentDisplayIndex]->duration < 0.0 ){  // if duration is negative, no update
             return;
@@ -143,6 +153,8 @@ void TrafficSignal::CheckDisplayInfoUpdate(float cSimTimFVal)
 void TrafficSignal::SetSignalStartTime(float simTimeFval)
 {
     //qDebug() << "[TrafficSignal::SetSignalStartTime] : id = " << id << " simTimeFval = " << simTimeFval;
+
+    currentSimTime = simTimeFval;
 
     int duration = 0;
     currentDisplayIndex = 0;
@@ -193,3 +205,56 @@ void TrafficSignal::ForceChangeDisplayTo(float simTimeFval,int targetIndex)
     elapsedTimeCurrentDisplay  = 0.0;
 }
 
+
+int TrafficSignal::GetTimeToDisplay(int signalDisplayIndex)
+{
+    int t = remainingTimeToNextDisplay;
+
+    for(int i=1;i<=displayPattern.size();++i ){
+
+        int idx = (i + currentDisplayIndex) % displayPattern.size();
+
+        if( idx == signalDisplayIndex ){
+            break;
+        }
+        else{
+            t += displayPattern[idx]->duration;
+        }
+    }
+    return t;
+}
+
+
+void TrafficSignal::ProceedTime(int hasteTime)
+{
+    if( hasteTime > remainingTimeToNextDisplay ){
+        hasteTime -= remainingTimeToNextDisplay;
+        currentDisplayIndex++;
+        if( currentDisplayIndex >= displayPattern.size() ){
+            currentDisplayIndex = 0;
+        }
+    }
+    else{
+        remainingTimeToNextDisplay -= hasteTime;
+        nextUpdateTimeFVal = currentSimTime + remainingTimeToNextDisplay;
+        lastUpdateTimeFVal = nextUpdateTimeFVal - displayPattern[currentDisplayIndex]->duration;
+        return;
+    }
+
+    while(1){
+        if( hasteTime <= displayPattern[currentDisplayIndex]->duration  ){
+            break;
+        }
+        else{
+            hasteTime -= displayPattern[currentDisplayIndex]->duration;
+            currentDisplayIndex++;
+            if( currentDisplayIndex >= displayPattern.size() ){
+                currentDisplayIndex = 0;
+            }
+        }
+    }
+
+    remainingTimeToNextDisplay = displayPattern[currentDisplayIndex]->duration - hasteTime;
+    nextUpdateTimeFVal = currentSimTime + remainingTimeToNextDisplay;
+    lastUpdateTimeFVal = nextUpdateTimeFVal - displayPattern[currentDisplayIndex]->duration;
+}

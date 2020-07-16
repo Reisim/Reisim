@@ -23,6 +23,9 @@
 #include "road.h"
 #include "trafficsignal.h"
 
+#include "udpthread.h"
+
+
 
 enum TRIGGER_TYPE
 {
@@ -32,13 +35,16 @@ enum TRIGGER_TYPE
     POSITION_SPEED_TRIGGER,
     BY_FUNCTION_EXTENDER,
     POSITION_TIME_TRIGGER,
-    BY_KEYBOARD_FUNC_KEY
+    BY_KEYBOARD_FUNC_KEY,
+    VELOCITY_TRIGGER,
+    TTC_TRIGGER
 };
 
 enum ROUTE_TYPE
 {
     NODE_LIST_TYPE,
     PATH_LIST_TYPE,
+    PEDEST_PATH_LIST_TYPE
 };
 
 enum SCENARIO_EVENT_TYPE
@@ -70,6 +76,23 @@ enum OBJECT_EVENT_KIND
     VEHICLE_LAMPS
 };
 
+enum SYSTEM_SCENARIO_ACTION_KIND
+{
+    WARP,
+    CHANGE_TRAFFIC_SIGNAL_DISPLAY,
+    CHANGE_SPEED_INFO,
+    SEND_UDP_SYSTEM
+};
+
+enum OBJECT_SCENARIO_ACTION_KIND
+{
+    APPEAR_VEHICLE,
+    APPEAR_PEDESTRIAN,
+    CONTROL_VEHICLE,
+    CONTROL_PEDESTRIAN,
+    SEND_UDP_OBJECT,
+    DISAPPEAR
+};
 
 struct SimulationTime
 {
@@ -86,27 +109,46 @@ struct SimulationTime
 
 struct ObjectTriggerData
 {
+    int triggerType;
     int targetObjectID;
-    float x;
+    int targetEventID;    // Not used
+
+    float timeTriggerInSec;  // for Time Trigger
+
+    float x;          // for Position Trigger
     float y;
-    float direction;  // [rad
-    float speed;      // [m/s]
-    float TTC;        // [sec]
-    int targetEventID;
+    float direction;  // [rad]
     float cosDirect;
     float sinDirect;
+    float widthHalf;
+    int passCheckFlag;
+
+    float speed;      // for velocity trigger [m/s]
+    float TTC;        // for TTC trigger [sec]
+    int triggerParam; // if triggerType = velocity trigger, triggerParam = vtLowOrHigh
+                      // if triggerType = TTC trigger, triggerParam = ttcCalType
+    int triggerParam2;// if triggerType = TTC trigger, triggerParam2 = ttcCalObjectID
+
+    bool isTriggered;
 };
 
 
 struct ScenarioTriggers
 {
     int mode;
+
+    bool byExternalTriggerFlag;  // set by FE
+    bool extTriggerFlagState;
+
+    bool byKeyTriggerFlag;
     int func_keys;
+
     struct SimulationTime* timeTrigger;
     float timeTriggerInSec;
-    QVector<struct ObjectTriggerData*> objectTigger;
     bool ANDCondition;
-    bool byExternalTriggerFlag;
+
+    int combination;
+    QList<struct ObjectTriggerData*> objectTigger;
 };
 
 
@@ -170,10 +212,16 @@ struct ScenarioEvents
     int targetObjectID;  // Target Object ID for Object Event
 
     int eventKind;       // What kind of Event
-    QVector<int> eventIntData;
-    QVector<float> eventFloatData;
+    QList<int> eventIntData;
+    QList<float> eventFloatData;
+    QList<bool> eventBooleanData;
 
     struct ScenarioTriggers* eventTrigger;   // Event Triggers
+
+    int routeType;
+    struct ODRouteData* ndRoute;
+    QList<struct ScenarioWPRoute*> wpRoute;
+    QList<int> targetPathList;
 
     int eventState;
     int eventTimeCount;
@@ -200,8 +248,8 @@ struct ScenarioData
     struct ScenarioTriggers* endTrigger;
     bool repeat;
     int status;
-    QVector<struct ScenarioItem*> scenarioItems;
-    QVector<struct ScenarioEvents*> scenarioEvents;
+    QList<struct ScenarioItem*> scenarioItems;
+    QList<struct ScenarioEvents*> scenarioEvents;
 };
 
 
@@ -216,6 +264,7 @@ public:
     float GetSimulationTimeInSec();
     void SetSimulationTime(int day,int hour,int minit,float sec);
     int GetSimulationTimeSecondAsInt();
+    float GetCalculationInterval(){ return simTime.dt; }
 
     void UpdateSimulationTime();
     void SetFrequency(int);
@@ -249,6 +298,17 @@ public:
         }
     }
 
+    void SetScenarioObjectsRouteInfo();
+    int GetNumberScenarioEvent(int sId){ return scenario[sId]->scenarioEvents.size(); }
+    int GetScenarioEventType(int sId,int itemId){ return scenario[sId]->scenarioEvents[itemId]->eventType; }
+    int GetScenarioEventKind(int sId,int itemId){ return scenario[sId]->scenarioEvents[itemId]->eventKind; }
+    int GetScenarioEventObjectID(int sId,int itemId){ return scenario[sId]->scenarioEvents[itemId]->targetObjectID; }
+    int GetScenarioEventRouteType(int sId,int itemId){ return scenario[sId]->scenarioEvents[itemId]->routeType; }
+    int GetNumberWPDataOfScenarioEvent(int sId,int itemId){ return scenario[sId]->scenarioEvents[itemId]->wpRoute.size(); }
+    struct ScenarioWPRoute* GetWPDataOfScenarioEvent(int sId,int itemId,int idx){ return scenario[sId]->scenarioEvents[itemId]->wpRoute[idx]; }
+    void SetTargetPathToScenarioEvent(int sId,int itemId,QList<int> tp){ scenario[sId]->scenarioEvents[itemId]->targetPathList = tp; }
+    struct ODRouteData* GetODRouteOfScenarioEvent(int sId,int itemId){ return scenario[sId]->scenarioEvents[itemId]->ndRoute; }
+
     void CheckScenarioState();
 
     double GenUniform(){ return rndGen.GenUniform(); }
@@ -263,11 +323,14 @@ public:
 
     RandomGenerator rndGen;
 
+    UDPThread *udpthread;
+
+    QList<QPoint> changeTSDisplayInfo;
 
 private:
     struct SimulationTime simTime;
 
-    QVector<struct ScenarioData *> scenario;
+    QList<struct ScenarioData *> scenario;
     int currentScenarioID;
 
     bool DSMode;

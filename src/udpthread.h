@@ -28,9 +28,6 @@
 #include <windows.h>
 
 
-
-
-
 struct SendUDPSocks
 {
     QUdpSocket sock;
@@ -72,15 +69,34 @@ public:
     void setupSockets();
     int  getNumberTrafficSignal(){ return numberTrafficSignal; }
 
+    void SendDSMoveCommand(int targetID,float x,float y,float psi);
+    void SendScenarioData(QString ipAddr, int port, char *sendBuf, int dataSize);
+
+    void SetAgentCalFinished(){ agentCalFinished = true; }
+
+
+    int GetMaxAgentDataSend(){ return maxAgentDataSend; }
+    int GetMaxTSDataSend(){ return maxTSDataSend; }
+    int GetSizeSInterfaceObjIDs(){ return SInterfaceObjIDs.size(); }
+    int GetSInterfaceObjID(int idx){ return SInterfaceObjIDs[idx]; }
+    bool GetHasFuncExtender(){ return HasFuncExtender; }
+
+    void SendToUE4(int SInterObjID, char *buf, int size);
+    void SendToFE(char *buf, int size);
+    void SendToSCore();
+
+
+    struct AgentState asv;
+    struct SInterObjInfo sov;
+
+
 signals:
     void SimulationStart();
     void SimulationStop();
     void ExitProgram();
-    void RequestSetSendData(char*,int,int *,int,int,int);
-    void RequestSetSendDataForFuncExtend(char*,int,int *,int,int,QList<int>);
     void ReceiveContinueCommand();
     void SetSimulationFrequency(int);
-    void ReceiveTireHeight(int,float,float,float,float);
+    void ReceiveTireHeight(int,int,float,float,float,float);
     void ReceiveSInterObjData( char, int, struct AgentState *,struct SInterObjInfo *);
     void ReceiveTSColorChange(int,int,float);
     void WarpVehicle(int,float,float,float);
@@ -100,6 +116,7 @@ signals:
     void SetLateralGainMultiplier(int,float);
     void SetAgentGenerationNotAllowFlag(int, bool);
     void ForceChangeSpeed(int,float);
+    void SetRestartData();
 
 
 public slots:
@@ -129,7 +146,12 @@ private:
     int syncSigCount;
 
     QList<int> SInterfaceObjIDs;
+    QList<bool> recvFromSinterfaceObjFlag;
+
     bool HasFuncExtender;
+
+    bool agentCalFinished;
+    bool SInterfaceDataEmbeded;
 };
 
 #endif // UDPTHREAD_H

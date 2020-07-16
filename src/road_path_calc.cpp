@@ -14,7 +14,7 @@
 #include "road.h"
 #include <QDebug>
 
-int Road::GetNearestPathFromList(QList<int> &pathList,float xp, float yp, float yawAngle, float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP)
+int Road::GetNearestPathFromList(QList<int> &pathList,float xp, float yp, float zp,float yawAngle, float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP)
 {
     int ret = -1;
 
@@ -39,6 +39,15 @@ int Road::GetNearestPathFromList(QList<int> &pathList,float xp, float yp, float 
                                        dev, txt, tyt, txd, tyd, ts );
 
         if( id == paths[i]->id ){
+
+            // check z
+            float z1 = paths[i]->pos.first()->z();
+            float z2 = paths[i]->pos.last()->z();
+            float zt = z1 + (ts / paths[i]->pathLength) * (z2 - z1);
+            if( fabs(zt - zp) > 3.0 ){
+                continue;
+            }
+
             if( ret < 0 ){
                 ret = id;
                 deviation = dev;
@@ -65,7 +74,66 @@ int Road::GetNearestPathFromList(QList<int> &pathList,float xp, float yp, float 
 }
 
 
-int Road::GetNearestPath(float xp, float yp,float yawAngle,float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP)
+int Road::GetNearestPathFromListWithZ(QList<int> &pathList, float xp, float yp, float yawAngle, float &deviation, float &xt, float &yt, float &zt, float &xderiv, float &yderiv, float &distFromStartWP)
+{
+    int ret = -1;
+
+    for(int n=0;n<pathList.size();++n){
+
+        int i = pathId2Index.indexOf( pathList[n] );
+        if( i < 0 ){
+            continue;
+        }
+
+        if( paths[i]->xmin > xp || paths[i]->xmax < xp ){
+            continue;
+        }
+
+        if( paths[i]->ymin > yp || paths[i]->ymax < yp ){
+            continue;
+        }
+
+        float dev,txt,tyt,txd,tyd,ts;
+        int id = GetDeviationFromPath( paths[i]->id,
+                                       xp, yp, yawAngle,
+                                       dev, txt, tyt, txd, tyd, ts );
+
+        if( id == paths[i]->id ){
+
+            // check z
+            float z1 = paths[i]->pos.first()->z();
+            float z2 = paths[i]->pos.last()->z();
+            float zp = z1 + (ts / paths[i]->pathLength) * (z2 - z1);
+
+            if( ret < 0 ){
+                ret = id;
+                deviation = dev;
+                xt = txt;
+                yt = tyt;
+                zt = zp;
+                xderiv = txd;
+                yderiv = tyd;
+                distFromStartWP = ts;
+            }
+            else{
+                if( fabs(dev) < deviation ){
+                    ret = id;
+                    deviation = dev;
+                    xt = txt;
+                    yt = tyt;
+                    zt = zp;
+                    xderiv = txd;
+                    yderiv = tyd;
+                    distFromStartWP = ts;
+                }
+            }
+        }
+    }
+    return ret;
+}
+
+
+int Road::GetNearestPath(float xp, float yp,float yawAngle,float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP,bool negrectYawAngleInfo )
 {
     int ret = -1;
 
@@ -79,15 +147,20 @@ int Road::GetNearestPath(float xp, float yp,float yawAngle,float &deviation,floa
             continue;
         }
 
+        if( paths[i]->scenarioObjectID >= 0 ){
+            continue;
+        }
+
         float dev,txt,tyt,txd,tyd,s;
         int id = GetDeviationFromPath( paths[i]->id,
                                        xp, yp, yawAngle,
-                                       dev, txt, tyt, txd, tyd, s );
+                                       dev, txt, tyt, txd, tyd, s,
+                                       negrectYawAngleInfo );
 
         if( id == paths[i]->id ){
             if( ret < 0 ){
                 ret = id;
-                deviation = dev;
+                deviation = fabs(dev);
                 xt = txt;
                 yt = tyt;
                 xderiv = txd;
@@ -97,7 +170,7 @@ int Road::GetNearestPath(float xp, float yp,float yawAngle,float &deviation,floa
             else{
                 if( fabs(dev) < deviation ){
                     ret = id;
-                    deviation = dev;
+                    deviation = fabs(dev);
                     xt = txt;
                     yt = tyt;
                     xderiv = txd;
