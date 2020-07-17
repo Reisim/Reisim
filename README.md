@@ -30,7 +30,7 @@ See [quick_start.pdf](https://github.com/Reisim/Reisim/blob/master/quick_start.p
 
 [User's manual](https://github.com/Reisim/Reisim/blob/master/Resim-Manual.pdf) is also available.
 
-User SEdit, Simulation data Editor for Re:sim, to create the simulation data.
+To create the simulation data, use SEdit, Simulation data Editor for Re:sim, also open-source program you can find [here](https://github.com/Reisim/SEdit).
 
 <img width="960" alt="sedit-image1" src="https://user-images.githubusercontent.com/60654261/81361271-deb70380-9118-11ea-932d-7efaa4afb109.png">
 
