@@ -82,12 +82,25 @@ void Agent::CheckPathList(Road* pRoad)
                         qDebug() << "           Path " << memory.targetPathList[j];
                     }
                     qDebug() << "   x = " << state.x << " y = " << state.y << "  ip = " << ip;
+                    qDebug() << "   Dispose this agent.";
                     return;
+
                 }
 
                 memory.currentTargetPath = currentPath;
+                memory.distanceFromStartWPInCurrentPath = 0.0;
 
                 int pIdx = pRoad->pathId2Index.indexOf( currentPath );
+
+                //qDebug() << "Call SetTargetSpeedIndividual: ID = " << ID << " Path=" << currentPath << " idx=" << pIdx << " chk=" << pRoad->paths[pIdx]->id << " V85=" << pRoad->paths[pIdx]->speed85pt;
+                if( isScenarioObject == true ){
+                    if( pRoad->paths[pIdx]->speed85pt == pRoad->paths[pIdx]->speedInfo ){
+                        refSpeedMode = 1;
+                    }
+                    else{
+                        refSpeedMode = 0;
+                    }
+                }
                 SetTargetSpeedIndividual( pRoad->paths[pIdx]->speed85pt );
 
                 int tmpCurrentTargetNode = memory.currentTargetNode;
@@ -102,6 +115,15 @@ void Agent::CheckPathList(Road* pRoad)
 
 
                 SetTargetNodeListByTargetPaths( pRoad );
+
+
+//                qDebug() << "tmpCurrentTargetNode = " << tmpCurrentTargetNode << " memory.currentTargetNode = " << memory.currentTargetNode;
+//                qDebug() << "memory.LCStartRouteIndex = " << memory.LCStartRouteIndex;
+//                qDebug() << "routeToDestination = " << pRoad->odRoute[memory.routeIndex]->routeToDestination[memory.LCStartRouteIndex]->node;
+//                for(int i=0;i<pRoad->odRoute[memory.routeIndex]->routeToDestination.size();++i){
+//                    qDebug() << " node = " << pRoad->odRoute[memory.routeIndex]->routeToDestination[i]->node;
+//                }
+
 
                 if( tmpCurrentTargetNode != memory.currentTargetNode &&
                         memory.LCStartRouteIndex >= 0 &&
@@ -158,12 +180,14 @@ void Agent::CheckPathList(Road* pRoad)
                         memory.LCDirection = pRoad->odRoute[memory.routeIndex]->LCSupportLaneLists[memory.LCSupportRouteLaneIndex]->LCDirect;
                     }
 
-                    if( vehicle.GetWinerState() == 0 ){
-                        if( memory.LCDirection == DIRECTION_LABEL::LEFT_CROSSING ){
-                            vehicle.SetWinker( 1 );
-                        }
-                        else if( memory.LCDirection == DIRECTION_LABEL::RIGHT_CROSSING ){
-                            vehicle.SetWinker( 2 );
+                    if( memory.LCbyEventMode != 2 ){
+                        if( vehicle.GetWinerState() == 0 ){
+                            if( memory.LCDirection == DIRECTION_LABEL::LEFT_CROSSING ){
+                                vehicle.SetWinker( 1 );
+                            }
+                            else if( memory.LCDirection == DIRECTION_LABEL::RIGHT_CROSSING ){
+                                vehicle.SetWinker( 2 );
+                            }
                         }
                     }
 
@@ -176,6 +200,88 @@ void Agent::CheckPathList(Road* pRoad)
                 }
             }
 
+        }
+        else{
+
+            // This is in case when warp to different lane
+            if( memory.targetPathList.indexOf( memory.currentTargetPath ) < 0 ){
+
+                int i = memory.routeIndex;
+
+                if( pRoad->odRoute[i]->LCSupportLaneLists.size() > 0 ){    // new version
+
+                    for(int j=0;j<pRoad->odRoute[i]->LCSupportLaneLists.size();++j){
+
+                        int numLaneLists = pRoad->odRoute[i]->LCSupportLaneLists[j]->laneList.size();
+                        QList<int> validLanes;
+                        for(int k=0;k<numLaneLists;++k){
+                            if( pRoad->odRoute[i]->LCSupportLaneLists[j]->laneList[k].indexOf(memory.currentTargetPath) >= 0 ){
+                                validLanes.append(k);
+                            }
+                        }
+                        if( validLanes.size() == 0 ){
+                            continue;
+                        }
+
+                        numLaneLists = validLanes.size();
+
+                        int selIdx = 0;
+                        if( numLaneLists > 1 ){
+                            float rnd = rndGen.GenUniform();
+                            float H = 1.0 / (float)numLaneLists;
+                            for(int k=0;k<numLaneLists;++k){
+                                if( rnd >= k * H && rnd < (k+1) * H ){
+                                    selIdx = k;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if( pRoad->odRoute[i]->LCSupportLaneLists.size() > 1 ){
+                            memory.LCStartRouteIndex = pRoad->odRoute[i]->LCSupportLaneLists[j]->gIndexInNodeList;
+                        }
+                        else{
+                            memory.LCStartRouteIndex = -1;
+                        }
+
+                        selIdx = validLanes[selIdx];
+
+                        memory.LCSupportRouteLaneIndex = j;
+                        memory.routeLaneIndex = selIdx;
+                        memory.targetPathList = pRoad->odRoute[i]->LCSupportLaneLists[j]->laneList[selIdx];
+
+                        memory.laneMerge.clear();
+
+                        int MLIidx = 0;
+                        for(int k=0;k<memory.LCSupportRouteLaneIndex;++k){
+                            MLIidx += pRoad->odRoute[i]->LCSupportLaneLists[k]->laneList.size();
+                        }
+                        MLIidx += memory.routeLaneIndex;
+
+                        for(int k=0;k<pRoad->odRoute[i]->mergeLanesInfo[MLIidx].size();++k){
+
+                            QPoint pairData;
+                            pairData.setX( pRoad->odRoute[i]->mergeLanesInfo[MLIidx][k].x() );
+                            pairData.setY( pRoad->odRoute[i]->mergeLanesInfo[MLIidx][k].y() );
+
+                            memory.laneMerge.append( pairData );
+                        }
+
+                        break;
+                    }
+                }
+
+                memory.targetPathLength.clear();
+                for(int j=0;j<memory.targetPathList.size();++j){
+
+                    float len = pRoad->GetPathLength( memory.targetPathList[j] );
+                    memory.targetPathLength.append( len );
+
+                    if( memory.targetPathList[j] == memory.currentTargetPath ){
+                        memory.currentTargetPathIndexInList = j;
+                    }
+                }
+            }
         }
     }
     else if( agentKind >= 100 ){
@@ -195,9 +301,45 @@ void Agent::CheckPathList(Road* pRoad)
 
         int sIdx = memory.currentTargetPathIndexInList;
 
+
+        // Determine Run Out
+        if( memory.runOutChecked == false ){
+            if( pRoad->pedestPaths[idx]->shape[sIdx]->runOutProb > 0.0 ){
+                double rnd = GenUniform();
+                double threshold = pRoad->pedestPaths[idx]->shape[sIdx]->runOutProb;
+                if( rnd < threshold ){
+                    memory.exeRunOut = true;
+                    memory.runOutState = 0;
+
+                    rnd = GenUniform();
+
+                    memory.runOutPosInPedestPath = pRoad->pedestPaths[idx]->shape[sIdx]->distanceToNextPos * rnd;
+
+                    if( pRoad->pedestPaths[idx]->shape[sIdx]->runOutDirect == 1 ){
+                        memory.runOutDir = state.yaw + 90.0 * 0.0174532;
+                    }
+                    else{
+                        memory.runOutDir = state.yaw -90.0 * 0.0174532;
+                    }
+
+                    memory.cosRunOutDir = cos(memory.runOutDir);
+                    memory.sinRunOutDir = sin(memory.runOutDir);
+                }
+            }
+            memory.runOutChecked = true;
+        }
+
+
         float dx = state.x - pRoad->pedestPaths[idx]->shape[sIdx]->pos.x();
         float dy = state.y - pRoad->pedestPaths[idx]->shape[sIdx]->pos.y();
         float S = dx * (pRoad->pedestPaths[idx]->shape[sIdx]->cosA) + dy * (pRoad->pedestPaths[idx]->shape[sIdx]->sinA);
+
+
+        // If at Run Out Point
+        if( memory.exeRunOut == true && memory.runOutState == 0 && S > memory.runOutPosInPedestPath ){
+            memory.runOutState = 1;
+        }
+
 
 //        qDebug() << "S = " << S << " Dist = " << pRoad->pedestPaths[idx]->shape[sIdx]->distanceToNextPos;
 
@@ -212,6 +354,9 @@ void Agent::CheckPathList(Road* pRoad)
             }
             else{
                 memory.currentTargetPathIndexInList++;
+                memory.runOutChecked = false;
+                memory.exeRunOut = false;
+                memory.runOutState = 0;
             }
         }
     }
@@ -262,6 +407,7 @@ void Agent::SetTargetNodeListByTargetPaths(Road* pRoad)
     }
 
     memory.currentTargetNode = pRoad->paths[pIdx]->connectingNode;
+    memory.currentTargetNodeInDirect = pRoad->paths[pIdx]->connectingNodeInDir;
 
     int cNdInDir = pRoad->paths[pIdx]->connectingNodeInDir;
 
@@ -277,6 +423,14 @@ void Agent::SetTargetNodeListByTargetPaths(Road* pRoad)
     for(int i=0;i<memory.myNodeList.size();++i){
         if( memory.myNodeList[i] == memory.currentTargetNode && memory.myInDirList[i] == cNdInDir ){
             memory.currentTargetNodeIndexInNodeList = i;
+            memory.currentTargetNodeOutDirect = memory.myOutDirList[i];
+            int ndIdx = pRoad->nodeId2Index.indexOf( memory.currentTargetNode );
+            for(int j=0;j<pRoad->nodes[ndIdx]->nCross;++j){
+                if( pRoad->GetDirectionLabel( memory.myNodeList.at(i), memory.myInDirList.at(i), pRoad->nodes[ndIdx]->legIDs[j] ) == DIRECTION_LABEL::ONCOMING ){
+                    memory.currentTargetNodeOncomingDirect = pRoad->nodes[ndIdx]->legIDs[j];
+                    break;
+                }
+            }
         }
         if( memory.currentTargetNodeIndexInNodeList >= 0 ){
             if( memory.myTurnDirectionList.at(i) == DIRECTION_LABEL::LEFT_CROSSING ||
@@ -368,3 +522,238 @@ void Agent::SetTargetNodeListByTargetPaths(Road* pRoad)
 
 }
 
+
+void Agent::ProcessLaneChangeRequest(Road *road, int LCdir, int LCmode,float moveLatDist)
+{
+    qDebug() << "[ProcessLaneChangeRequest]";
+
+    if( LCdir != DIRECTION_LABEL::LEFT_CROSSING && LCdir != DIRECTION_LABEL::RIGHT_CROSSING ){
+        return;
+    }
+
+    int kk = memory.routeIndex;
+    int ll = memory.LCSupportRouteLaneIndex;
+    int mm = memory.routeLaneIndex;
+
+    qDebug() << "routeIndex = " << kk;
+    qDebug() << "LCSupportRouteLaneIndex = " << ll;
+    qDebug() << "routeLaneIndex = " << mm;
+    qDebug() << "laneList.size = " << road->odRoute[kk]->LCSupportLaneLists[ll]->laneList.size();
+
+    QList<int> candidateList;
+    QList<float> tdevList;
+
+    for(int i=0;i<road->odRoute[kk]->LCSupportLaneLists[ll]->laneList.size();++i){
+
+//        if( i == mm ){
+//            continue;
+//        }
+
+        float tdev,txt,tyt,txd,tyd,ts;
+        int objPathInLCPath = road->GetNearestPathFromList( road->odRoute[kk]->LCSupportLaneLists[ll]->laneList[i],
+                                                            state.x,
+                                                            state.y,
+                                                            state.z_path,
+                                                            state.yaw,
+                                                            tdev, txt, tyt, txd, tyd, ts);
+
+        qDebug() << "i = " << i << " objPathInLCPath = " << objPathInLCPath << " tdev = " << tdev;
+
+        if( objPathInLCPath >= 0 ){
+            if( LCdir == DIRECTION_LABEL::RIGHT_CROSSING && tdev > 1.0 ){
+                candidateList.append( i );
+                tdevList.append( tdev );
+            }
+            else if( LCdir == DIRECTION_LABEL::LEFT_CROSSING && tdev < -1.0 ){
+                candidateList.append( i );
+                tdevList.append( tdev );
+            }
+        }
+    }
+
+    qDebug() << "candidateList = " << candidateList;
+    qDebug() << "tdevList = " << tdevList;
+
+    if( candidateList.size() == 0 ){
+        return;
+    }
+
+    int LCTargetLane = -1;
+    if( candidateList.size() > 1 ){
+
+        float minTDev = fabs(tdevList[0]);
+        if( moveLatDist > 0.0 ){
+            minTDev = moveLatDist;
+        }
+        else{
+            for(int j=1;j<tdevList.size();++j){
+                if( minTDev > fabs(tdevList[j]) ){
+                    minTDev = fabs(tdevList[j]);
+                }
+            }
+        }
+
+        qDebug() << "minTDev = " << minTDev;
+
+        QList<int> finalCandidate;
+        for(int j=0;j<tdevList.size();++j){
+            if( fabs(minTDev - fabs(tdevList[j])) < 1.0 ){
+                finalCandidate.append( candidateList[j] );
+            }
+        }
+
+        qDebug() << "finalCandidate = " << finalCandidate;
+
+
+        int numLaneLists = finalCandidate.size();
+
+        int selIdx = 0;
+        if( numLaneLists > 1 ){
+            float rnd = rndGen.GenUniform();
+            float H = 1.0 / (float)numLaneLists;
+            for(int k=0;k<numLaneLists;++k){
+                if( rnd >= k * H && rnd < (k+1) * H ){
+                    selIdx = k;
+                    break;
+                }
+            }
+        }
+
+        qDebug() << "selIdx = " << selIdx;
+
+
+        LCTargetLane = finalCandidate[selIdx];
+    }
+    else{
+        LCTargetLane = candidateList[0];
+    }
+
+    qDebug() << "LCTargetLane = " << LCTargetLane;
+
+    if( LCTargetLane < 0 ){
+        return;
+    }
+
+    memory.routeLaneIndex = LCTargetLane;
+    memory.laneChangeTargetPathList = road->odRoute[kk]->LCSupportLaneLists[ll]->laneList[LCTargetLane];
+
+    qDebug() << "laneChangeTargetPathList = " << memory.laneChangeTargetPathList;
+
+
+    memory.laneChangePathLength.clear();
+    for(int k=0;k<memory.laneChangeTargetPathList.size();++k){
+        float len = road->GetPathLength( memory.laneChangeTargetPathList[k] );
+        memory.laneChangePathLength.append( len );
+    }
+
+    if( LCmode == 0 ){
+
+        // Check Risk of Side Lane
+        memory.checkSideVehicleForLC = true;
+        memory.LCCheckState          = 1;
+        memory.LCInfoGetCount        = 0;
+
+    }
+    else{
+
+        // Execute Lane change immediately
+        memory.checkSideVehicleForLC = true;
+        memory.LCCheckState          = 3;
+        memory.LCInfoGetCount        = 0;
+
+        memory.targetPathList.clear();
+        memory.targetPathList = memory.laneChangeTargetPathList;
+
+        //qDebug() << "targetPathList = " << memory.targetPathList;
+
+        memory.targetPathLength.clear();
+        for(int j=0;j<memory.targetPathList.size();++j){
+
+            float len = road->GetPathLength( memory.targetPathList[j] );
+            memory.targetPathLength.append( len );
+
+            if( memory.targetPathList[j] == memory.currentTargetPath ){
+                memory.currentTargetPathIndexInList = j;
+            }
+        }
+
+
+        float tdev,txt,tyt,txd,tyd,ts;
+        int currentPath = road->GetNearestPathFromList( memory.targetPathList,
+                                                         state.x,
+                                                         state.y,
+                                                         state.z_path,
+                                                         state.yaw,
+                                                         tdev, txt, tyt, txd, tyd, ts );
+
+        //qDebug() << "searched currentPath = " << currentPath;
+
+        if( currentPath >= 0 ){
+
+            memory.currentTargetPath = currentPath;
+            memory.lateralDeviationFromTargetPath = tdev;
+
+            int pIdx = road->pathId2Index.indexOf( currentPath );
+            if( isScenarioObject == true ){
+                if( road->paths[pIdx]->speed85pt == road->paths[pIdx]->speedInfo ){
+                    refSpeedMode = 1;
+                }
+                else{
+                    refSpeedMode = 0;
+                }
+            }
+            SetTargetSpeedIndividual( road->paths[pIdx]->speed85pt );
+
+            SetTargetNodeListByTargetPaths( road );
+
+        }
+        else{
+            qDebug() << "Lane-Change : exchange targetPathList";
+            qDebug() << "Agent[" << ID << "]: Cannot determine nearest path from targetPathList;" << memory.targetPathList;
+        }
+
+        memory.laneMerge.clear();
+
+        int i = memory.routeIndex;
+        int selIdx = 0;
+        for(int j=0;j<memory.LCSupportRouteLaneIndex;++j){
+            selIdx += road->odRoute[i]->LCSupportLaneLists[j]->laneList.size();
+        }
+        selIdx += memory.routeLaneIndex;
+
+        if( selIdx < road->odRoute[i]->mergeLanesInfo.size() ){
+            for(int k=0;k<road->odRoute[i]->mergeLanesInfo[selIdx].size();++k){
+
+                QPoint pairData;
+                pairData.setX( road->odRoute[i]->mergeLanesInfo[selIdx][k].x() );
+                pairData.setY( road->odRoute[i]->mergeLanesInfo[selIdx][k].y() );
+
+                memory.laneMerge.append( pairData );
+            }
+        }
+        else{
+            qDebug() << "Agent[" << ID << "]: Cannot determine mergeLanesInfo index";
+            qDebug() << "  selIdx = " << selIdx << " size = " << road->odRoute[i]->mergeLanesInfo.size();
+        }
+
+        memory.LCCheckState = 4;
+        memory.LCSteerMax = 0.0;
+        memory.checkSideVehicleForLC = false;
+
+        controlCount = controlCountMax;                 // to immediately process at control
+    }
+
+    memory.LCDirection = LCdir;
+    memory.LCbyEventMode = LCmode;
+
+    if( LCmode < 2 && vehicle.GetWinerState() == 0 ){
+        if( memory.LCDirection == DIRECTION_LABEL::LEFT_CROSSING ){
+            vehicle.SetWinker( 1 );
+        }
+        else if( memory.LCDirection == DIRECTION_LABEL::RIGHT_CROSSING ){
+            vehicle.SetWinker( 2 );
+        }
+    }
+
+    qDebug() << "End of ProcessLaneChangeRequest.";
+}

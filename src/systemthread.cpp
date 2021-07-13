@@ -26,6 +26,8 @@ extern QMutex *mutex;
 extern QWaitCondition *cond;
 
 int g_DSTimingFlag = 0;
+int g_SInterEmbedFlag = 0;
+int g_simulationCount = 0;
 
 extern QMutex *mutex_sync;
 extern QWaitCondition *cond_sync;
@@ -44,6 +46,7 @@ extern QList<int> statusWorkerThread;
 extern bool allWorkerThreadFinshed;
 extern QWaitCondition *condSimMain;
 
+bool invalidXPivotData = false;
 
 
 SystemThread::SystemThread(QObject *parent) :
@@ -100,6 +103,12 @@ SystemThread::SystemThread(QObject *parent) :
 
     sendDataBuf = NULL;
     sendDataMaxSize = 0;
+
+    expIDText = QString();
+
+    nSIObject = 0;
+    asv = NULL;
+    sov = NULL;
 }
 
 void SystemThread::Stop()
@@ -132,6 +141,10 @@ void SystemThread::run()
         QString filename = logOutputFolder;
         if( filename.endsWith("/") == false ){
             filename += QString("/");
+        }
+        if( expIDText.isNull() == false ){
+            filename += expIDText + QString("_");
+            logThread->SetExpID( expIDText );
         }
         filename += logFileName;
 
@@ -182,12 +195,33 @@ void SystemThread::run()
 #endif
 
 
+    if( DSMode == true ){
+
+        nSIObject = udpThread->GetSizeSInterfaceObjIDs();
+        asv = new struct AgentState [nSIObject];
+        sov = new struct SInterObjInfo [nSIObject];
+        if( !asv || !sov ){
+            qDebug() << "!!!";
+            qDebug() << "!!!----- Failed to allocate AgentState and SInterObjInfo";
+            qDebug() << "!!!";
+        }
+        else{
+            for(int i=0;i<nSIObject;++i){
+                sov[i].objID = -1;
+                sov[i].objType = -1;
+            }
+        }
+
+    }
+
+
     stopped = false;
     while( stopped == false ){
 
         if( simulationState == SIMULATION_STATE::PAUSED ){
             continue;
         }
+
 
         //
         // if DS mode, synchronize execution
@@ -521,9 +555,9 @@ void SystemThread::run()
         if( DSMode == true ){
             for(int i=0;i<DSVehiclesQueue.size();++i){
                 int id = DSVehiclesQueue[i];
-                mutexDSStateWrite->lock();
+                //mutexDSStateWrite->lock();
                 agent[id]->BackupMemory();
-                mutexDSStateWrite->unlock();
+                //mutexDSStateWrite->unlock();
             }
         }
 
@@ -544,6 +578,8 @@ void SystemThread::run()
         if( DSMode == true ){
 
             int maxAgentDataSend = udpThread->GetMaxAgentDataSend();
+            int maxAgentDataSendToFE = udpThread->GetMaxAgentDataSendToFE();
+
             int maxTSDataSend = udpThread->GetMaxTSDataSend();
 
             if( sendDataBuf == NULL ){
@@ -553,27 +589,63 @@ void SystemThread::run()
                 sendDataBuf = new char [sendDataMaxSize + 2000];
             }
 
+
+            //
+            //  Wait until all S-Interface Object data is recieved
+            //
+            mutex->lock();
+            if( g_SInterEmbedFlag == 0 ){
+                cond->wait(mutex);
+            }
+            g_SInterEmbedFlag = 0;
+            mutex->unlock();
+
+
+            //
+            //  Embed S-Interface Object Data
+            //
+            for(int i=0;i<nSIObject;++i){
+                char type = 'v';
+                if( sov[i].objType >= 100 ){
+                    type = 'p';
+                }
+                SetSInterObjData( type, sov[i].objID, &(asv[i]), &(sov[i]) );
+            }
+
+
+            //
+            //  Send data to UE4
+            //
+
             QList<int> SIObjIDList;
 
-
-            int nSIObj = udpThread->GetSizeSInterfaceObjIDs();
-            for(int i=0;i<nSIObj;++i){
+            for(int i=0;i<nSIObject;++i){
 
                 int SIObjID = udpThread->GetSInterfaceObjID(i);
                 SIObjIDList.append( SIObjID );
 
                 int sendSize = SetSendData(maxAgentDataSend,maxTSDataSend,SIObjID);
-                //qDebug() << "sendSize = " << sendSize;
+//                qDebug() << "sendSize = " << sendSize;
                 if( sendSize > 0 ){
                     udpThread->SendToUE4(SIObjID, sendDataBuf, sendSize );
                 }
             }
 
+
+            //
+            //  Send data to FE
+            //
             if( udpThread->GetHasFuncExtender() == true ){
-                int sendSize = SetSendDataForFuncExtend(maxAgentDataSend,maxTSDataSend,SIObjIDList);
-                udpThread->SendToFE( sendDataBuf, sendSize );
+                int sendSize = SetSendDataForFuncExtend(maxAgentDataSendToFE,maxTSDataSend,SIObjIDList);
+                if( sendSize > 0 ){
+                    udpThread->SendToFE( sendDataBuf, sendSize );
+                }
             }
 
+
+            //
+            //  Send syncronization signal to Score
+            //
             udpThread->SendToSCore();
         }
 
@@ -617,17 +689,22 @@ void SystemThread::SetSysFile(QString filename)
         connect( udpThread, SIGNAL(SimulationStart()), this, SLOT(SimulationStart()) );
         connect( udpThread, SIGNAL(SimulationStop()), this, SLOT(SimulationStop()) );
         connect( udpThread, SIGNAL(ExitProgram()), this, SLOT(wrapExitProgram()));
+        connect( udpThread, SIGNAL(RedrawRequest()), this, SLOT(wrapRedrawRequest()));
         connect( udpThread, SIGNAL(ReceiveContinueCommand()), this, SLOT(quit()) );
         connect( udpThread, SIGNAL(SetSimulationFrequency(int)), this, SLOT(SetSimulationFrequency(int)) );
-        connect( udpThread, SIGNAL(ReceiveTireHeight(int,int,float,float,float,float)), this, SLOT(SetTireHeight(int,int,float,float,float,float)) );
-        connect( udpThread, SIGNAL(ReceiveSInterObjData(char,int,AgentState*,struct SInterObjInfo *)), this, SLOT(SetSInterObjData(char,int,AgentState*,struct SInterObjInfo *)) );
+        connect( udpThread, SIGNAL(ReceiveTireHeight(int,int,float,float,float,float)), this, SLOT(SetTireHeight(int,int,float,float,float,float)) );        
+        connect( udpThread, SIGNAL(ReceiveSInterInitState(char,int,float,float,float,float,float)), this, SLOT(SetSInterInitState(char,int,float,float,float,float,float)) );
+        connect( udpThread, SIGNAL(ReceiveSInterObjData(char,int,AgentState*,struct SInterObjInfo *)), this, SLOT(SetSInterObjDataToBuffer(char,int,AgentState*,struct SInterObjInfo *)) );
         connect( udpThread, SIGNAL(ReceiveTSColorChange(int,int,float)),this,SLOT(ForceChangeTSColor(int,int,float)));
         connect( udpThread, SIGNAL(WarpVehicle(int,float,float,float)),this,SLOT(WarpVehicle(int,float,float,float)) );
+        connect( udpThread, SIGNAL(WarpVehicleAdjustPosToLane(int,float,float,float)),this,SLOT(WarpVehicleAdjustPosToLane(int,float,float,float)) );
         connect( udpThread, SIGNAL(DisposeAgent(int)),this,SLOT(DisposeAgent(int)) );
         connect( udpThread, SIGNAL(AppearAgent(int)),this,SLOT(AppearAgent(int)) );
         connect( udpThread, SIGNAL(EmbedBehavior(int,float*,int)),this,SLOT(EmbedAgentBehavior(int,float*,int)) );
         connect( udpThread, SIGNAL(ChangeReferenceSpeed(int,float)),this,SLOT(ChangeReferenceSpeed(int,float)) );
         connect( udpThread, SIGNAL(CopyPathData(int,int)),this,SLOT(CopyPathData(int,int)) );
+        connect( udpThread, SIGNAL(RequestLaneChange(int,int,int)),this,SLOT(RequestLaneChange(int,int,int)) );
+        connect( udpThread, SIGNAL(RequestAssignedLaneChange(int,int,int,float)),this,SLOT(RequestAssignedLaneChange(int,int,int,float)) );
         connect( udpThread, SIGNAL(ChangeControlModeStopAt(int,float,float)),this,SLOT(ChangeControlModeStopAt(int,float,float)) );
         connect( udpThread, SIGNAL(ChangeControlModeHeadwayControl(int,float,float,float,float,int)),this,SLOT(ChangeControlModeHeadwayControl(int,float,float,float,float,int)) );
         connect( udpThread, SIGNAL(ChangeControlModeAgent(int)),this,SLOT(ChangeControlModeAgent(int)) );
@@ -639,6 +716,16 @@ void SystemThread::SetSysFile(QString filename)
         connect( udpThread, SIGNAL(SetAgentGenerationNotAllowFlag(int,bool)),this,SLOT(SetAgentGenerationNotAllowFlag(int,bool)) );
         connect( udpThread, SIGNAL(ForceChangeSpeed(int,float)),this,SLOT(ForceChangeSpeed(int,float)) );
         connect( udpThread, SIGNAL(SetRestartData()),this,SLOT(SetRestartData()) );
+        connect( udpThread, SIGNAL(ChangeSpeedProfile(int,QList<float>,QList<float>)),this,SLOT(ChangeSpeedProfile(int,QList<float>,QList<float>)) );
+        connect( udpThread, SIGNAL(DirectAssignAcceleration(int,float)),this,SLOT(DirectAssignAcceleration(int,float)) );
+        connect( udpThread, SIGNAL(SetTargetSpeedMode(int,int)),this,SLOT(SetTargetSpeedMode(int,int)) );
+        connect( udpThread, SIGNAL(ChangeRoadLaneSpeedLimit(QList<int>, QList<float>)),this,SLOT(ChangeRoadLaneSpeedLimit(QList<int>, QList<float>)) );
+        connect( udpThread, SIGNAL(ChangeVelocityControlParameters(float,float,float,float,float,int,QList<int>)),this,SLOT(ChangeVelocityControlParameters(float,float,float,float,float,int,QList<int>)) );
+        connect( udpThread, SIGNAL(ChangeLaneAssignedVelocityControlParameters(float,float,float,float,float,QList<int>)),this,SLOT(ChangeLaneAssignedVelocityControlParameters(float,float,float,float,float,QList<int>)) );
+        connect( udpThread, SIGNAL(ChangeMoveSpeedPedestrian(QList<float>)),this,SLOT(ChangeMoveSpeedPedestrian(QList<float>)) );
+        connect( udpThread, SIGNAL(OverwriteAgentParameter(int,int,float)),this,SLOT(OverwriteAgentParameter(int,int,float)) );
+        connect( udpThread, SIGNAL(ChangeOptionalImageParams(QList<float>)),this,SLOT(ChangeOptionalImageParams(QList<float>)) );
+
 
         if( logThread ){
             connect( udpThread, SIGNAL(FEDataReceived(int,QString)), logThread, SLOT(SetFuncExtenderLogData(int,QString)) );
@@ -665,6 +752,13 @@ void SystemThread::wrapExitProgram()
 
     this->exit();
 }
+
+
+void SystemThread::wrapRedrawRequest()
+{
+    emit RedrawRequest();
+}
+
 
 void SystemThread::SetDSmode()
 {
@@ -1683,7 +1777,7 @@ void SystemThread::LoadScenarioFile()
 
                 scenarioEvent->ndRoute = new struct ODRouteData;
 
-                for(int i=1;i<divLine.size();++i){
+                for(int i=2;i<divLine.size();++i){
 
                     struct RouteElem* re = new struct RouteElem;
 
@@ -1691,7 +1785,7 @@ void SystemThread::LoadScenarioFile()
 
                     scenarioEvent->ndRoute->routeToDestination.append( re );
 
-                    if( i == 1 ){
+                    if( i == 2 ){
                         scenarioEvent->ndRoute->originNode = re->node;
                     }
                     else if( i == divLine.size() - 1 ){
@@ -1707,10 +1801,10 @@ void SystemThread::LoadScenarioFile()
 
                 struct RouteLaneData *rld = new struct RouteLaneData;
 
-                rld->startNode = QString( divLine[1] ).trimmed().toInt();
-                rld->goalNode  = QString( divLine[2] ).trimmed().toInt();
-                rld->sIndexInNodeList = QString( divLine[3] ).trimmed().toInt();
-                rld->gIndexInNodeList = QString( divLine[4] ).trimmed().toInt();
+                rld->startNode = QString( divLine[2] ).trimmed().toInt();
+                rld->goalNode  = QString( divLine[3] ).trimmed().toInt();
+                rld->sIndexInNodeList = QString( divLine[4] ).trimmed().toInt();
+                rld->gIndexInNodeList = QString( divLine[5] ).trimmed().toInt();
 
                 rld->LCDirect = DIRECTION_LABEL::STRAIGHT;
 
@@ -1897,13 +1991,9 @@ void SystemThread::LoadScenarioFile()
                 }
             }
         }
-        else if( tag == QString("Scenario Event TTC") ){
+        else if( tag == QString("Scenario Event Trigger TTC") ){
 
-            if( trigger->combination < 0 ){
-                trigObj->TTC = QString(divLine[1]).trimmed().toFloat();
-            }
-            else{
-
+            if( trigger->combination >= 0 ){
                 for(int i=0;i<trigger->objectTigger.size();++i){
 
                     if( trigger->objectTigger[i]->triggerType == TRIGGER_TYPE::TTC_TRIGGER ){
@@ -1921,6 +2011,14 @@ void SystemThread::LoadScenarioFile()
                     }
                 }
             }
+
+        }
+        else if( tag == QString("Scenario Event TTC") ){
+
+            if( trigger->combination < 0 ){
+                trigObj->TTC = QString(divLine[1]).trimmed().toFloat();
+            }
+
         }
         else if( tag == QString("Scenario Event Target Object ID") ){
 
@@ -2661,7 +2759,6 @@ void SystemThread::SimulationStop()
 }
 
 
-
 void SystemThread::SetSpeedAdjustVal(int val)
 {
     //qDebug() << "[SystemThread::SetSpeedAdjustVal] val = " << val;
@@ -2687,8 +2784,8 @@ int SystemThread::SetSendData(int maxAgentSend,int maxTSSend,int pivotID)
 
     // count number of data
 
-    float intervalDist = 50.0;
-    int countByDistance[20];   // 50[m] * 20 = 1000[m]
+    float intervalDist = 20.0;
+    int countByDistance[20];   // 20[m] * 20 = 400[m]
     for(int i=0;i<20;++i){
         countByDistance[i] = 0;
     }
@@ -2703,7 +2800,8 @@ int SystemThread::SetSendData(int maxAgentSend,int maxTSSend,int pivotID)
     float yPivot = agent[pivotID]->state.y;
 
     if( isnan(xPivot) || isnan(yPivot) ){
-        qDebug() << "[FATAL] xPivot or yPivot is not a number.";
+        qDebug() << "[FATAL] xPivot or yPivot is not a number. pivotID = " << pivotID;
+        invalidXPivotData = true;
         return 0;
     }
 
@@ -2730,7 +2828,7 @@ int SystemThread::SetSendData(int maxAgentSend,int maxTSSend,int pivotID)
         float rx = xTest - xPivot;
         float ry = yTest - yPivot;
         float D = sqrt(rx * rx + ry * ry);
-        if( D > 1000 ){
+        if( D > 450 ){
             continue;
         }
 
@@ -2776,11 +2874,17 @@ int SystemThread::SetSendData(int maxAgentSend,int maxTSSend,int pivotID)
 //    qDebug() << dbgStr;
 
 
-    int nVKind = road->vehicleKind.size();
-    int nPKind = road->pedestrianKind.size();
-    int numSpawn = 10;
-    char *UE4ObjectIDUseFlag = new char[ (nVKind + nPKind) * numSpawn + 1 ];
-    memset( UE4ObjectIDUseFlag, 0, sizeof( (nVKind + nPKind) * numSpawn + 1) );
+    int numSpawn = road->numActorForUE4Model;
+    int maxUE4ID = road->maxActorInUE4;
+
+    static char *UE4ObjectIDUseFlag = NULL;
+    if( !UE4ObjectIDUseFlag ){
+       UE4ObjectIDUseFlag = new char[ maxUE4ID ];
+    }
+
+    for(int i=0;i<maxUE4ID;++i){
+        UE4ObjectIDUseFlag[i] = 0;
+    }
 
 
     numAgentSend = 0;
@@ -2822,27 +2926,49 @@ int SystemThread::SetSendData(int maxAgentSend,int maxTSSend,int pivotID)
                 continue;
             }
 
-            int mIdx = agent[aIdx]->vehicle.GetVehicleModelID();
-
-            int nK = 0;
-            if( agent[aIdx]->agentKind >= 100 ){
-                nK = nVKind;
+            // Send agentID if the vehicle is old-version scenario vehicle
+            if( agent[aIdx]->isScenarioObject == true && agent[aIdx]->isOldScenarioType == true ){
+                agent[aIdx]->UE4ObjectID[pivotID] = aIdx;
+                calDist[aIdx] = -1;
+                continue;
             }
 
+
+            int baseID = 0;
+            if( agent[aIdx]->objIDForUE4 < 0 ){
+                if( agent[aIdx]->objTypeForUE4 == 0 ){       // Vehicle
+                    baseID = 10 + agent[aIdx]->objNoForUE4 * numSpawn;
+                }
+                else if( agent[aIdx]->objTypeForUE4 == 1 ){  // Pedestrian
+                    baseID = 500 + agent[aIdx]->objNoForUE4 * numSpawn;
+                }
+                else if( agent[aIdx]->objTypeForUE4 == 2 ){  // Bicycle
+                    baseID = 580 + agent[aIdx]->objNoForUE4 * numSpawn;
+                }
+                else{
+                    baseID = 0;
+                }
+            }
+            else{
+                baseID = agent[aIdx]->objIDForUE4;
+            }
+
+
             if( agent[aIdx]->UE4ObjectID[pivotID] < 0 ){
+
                 for(int k=0;k<numSpawn;++k){
-                    int objID = numSpawn * (nK + mIdx) + k;
+
+                    int objID = baseID + k;
+
                     if( UE4ObjectIDUseFlag[objID] == 0 ){
                         agent[aIdx]->UE4ObjectID[pivotID] = objID;
                         UE4ObjectIDUseFlag[objID] = 1;
                         calDist[aIdx] = -1;
-                        //qDebug() << " set " << objID;
                         break;
                     }
                 }
             }
             else{
-                //qDebug() << " remain " << agent[aIdx]->UE4ObjectID[pivotID];
                 calDist[aIdx] = -1;
             }
 
@@ -2851,8 +2977,8 @@ int SystemThread::SetSendData(int maxAgentSend,int maxTSSend,int pivotID)
                 for(int k=thrIdx;k>i;k--){
                     for(int l=0;l<objListByDistance[k].size();++l){
                         int tIdx = objListByDistance[k][l];
-                        if( agent[tIdx]->UE4ObjectID[pivotID] >= numSpawn * (nK + mIdx) &&
-                                agent[tIdx]->UE4ObjectID[pivotID] < numSpawn*(nK + mIdx + 1) ){
+                        if( agent[tIdx]->UE4ObjectID[pivotID] >= baseID &&
+                                agent[tIdx]->UE4ObjectID[pivotID] < baseID + numSpawn ){
 
                             //qDebug() << "tIdx=" << tIdx << " UE4=" << agent[tIdx]->UE4ObjectID[pivotID] << " -> aIdx" << aIdx;
 
@@ -2898,7 +3024,6 @@ int SystemThread::SetSendData(int maxAgentSend,int maxTSSend,int pivotID)
         }
     }
 
-    delete [] UE4ObjectIDUseFlag;
 
     numAgentSend = sendIDList.size();
 
@@ -2917,10 +3042,15 @@ int SystemThread::SetSendData(int maxAgentSend,int maxTSSend,int pivotID)
 //    for(int n=0;n<numAgentSend;++n){
 //        int i = sendIDList[n];
 //        if( i == pivotID ){
-//            qDebug() << "  ID = " << agent[i]->ID << " CG=" << agent[i]->UE4ObjectID[ pivotID ];
+//            qDebug() << "  [a]ID = " << agent[i]->ID << " CG=" << agent[i]->UE4ObjectID[ pivotID ];
 //        }
 //        else{
-//            qDebug() << "  ID = " << agent[i]->ID << " CG=" << (agent[i]->UE4ObjectID[ pivotID ] +10);
+//            if( agent[i]->isScenarioObject == true && agent[i]->isOldScenarioType == true ){
+//                qDebug() << "  [b]ID = " << agent[i]->ID << " CG=" << agent[i]->UE4ObjectID[ pivotID ];
+//            }
+//            else{
+//                qDebug() << "  [c]ID = " << agent[i]->ID << " CG=" << (agent[i]->UE4ObjectID[ pivotID ] +10);
+//            }
 //        }
 //    }
 
@@ -2942,12 +3072,28 @@ int SystemThread::SetSendData(int maxAgentSend,int maxTSSend,int pivotID)
                 agent[i]->UE4ObjectID[ pivotID ] = pivotID;
             }
             else{
-                tempIVal = agent[i]->UE4ObjectID[ pivotID ] + 10;
+
+                tempIVal = agent[i]->UE4ObjectID[ pivotID ];
+
+//                if( agent[i]->isScenarioObject == true && agent[i]->isOldScenarioType == true ){
+//                    tempIVal = agent[i]->UE4ObjectID[ pivotID ];
+//                }
+//                else{
+//                    if( agent[i]->agentKind >= 100 ){
+//                        tempIVal = agent[i]->UE4ObjectID[ pivotID ] - (numSpawn * nVKind) + 500;
+//                    }
+//                    else{
+//                        tempIVal = agent[i]->UE4ObjectID[ pivotID ] + 10;
+//                    }
+//                }
             }
 
+//            qDebug() << "[UE4]ID=" << agent[i]->ID << " objID=" << tempIVal << " mdlID=" << agent[i]->vehicle.GetVehicleModelID();
+//                     << " x = " << agent[i]->state.x << " y = " << agent[i]->state.y;
 
 //            if( agent[i]->agentKind >= 100 ){
-//                qDebug() << "A" << agent[i]->ID << " : " << tempIVal;
+//                qDebug() << "P" << agent[i]->ID << " : UE4ID=" << tempIVal
+//                         << " Mdl = " << agent[i]->vehicle.GetVehicleModelID();
 //            }
 
             memcpy(&(sendDataBuf[at]), &tempIVal, sizeof(int));   // 8
@@ -2976,7 +3122,7 @@ int SystemThread::SetSendData(int maxAgentSend,int maxTSSend,int pivotID)
 
             tempFVal = agent[i]->state.yaw * (-1.0);
 
-            if( i != pivotID && agent[i]->vehicle.yawFiltered4CG != NULL ){
+            if( i != pivotID && agent[i]->vehicle.yawFiltered4CG != NULL && agent[i]->agentKind < 100 ){
                 tempFVal = agent[i]->vehicle.yawFiltered4CG->GetOutput() * (-1.0);
             }
 
@@ -3011,7 +3157,7 @@ int SystemThread::SetSendData(int maxAgentSend,int maxTSSend,int pivotID)
             memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 57
             at += sizeof(char);
 
-            tempIVal = 0;     // Tachometer
+            tempIVal = agent[i]->ID;     // Tachometer --> Original ID
             memcpy(&(sendDataBuf[at]), &tempIVal, sizeof(int));   // 58
             at += sizeof(int);
 
@@ -3238,6 +3384,12 @@ int SystemThread::SetSendData(int maxAgentSend,int maxTSSend,int pivotID)
         at += sizeof(float);
     }
 
+
+    // FrameCount
+    memcpy(&(sendDataBuf[at]), &g_simulationCount, sizeof(int));
+    at += sizeof(int);
+
+
     return at;
 }
 
@@ -3274,7 +3426,7 @@ int SystemThread::SetSendDataForFuncExtend(int maxAgentSend,int maxTSSend,QList<
 
     if( numAgentSend > maxAgentSend ){
 
-        int countByDistance[20];   // 50[m] * 20 = 1000[m]
+        int countByDistance[20];   // 20[m] * 20 = 400[m]
         for(int i=0;i<20;++i){
             countByDistance[i] = 0;
         }
@@ -3301,10 +3453,10 @@ int SystemThread::SetSendDataForFuncExtend(int maxAgentSend,int maxTSSend,QList<
                 float rx = agent[i]->state.x - agent[pivotIDs[j]]->state.x;
                 float ry = agent[i]->state.y - agent[pivotIDs[j]]->state.y;
                 float D = sqrt(rx * rx + ry * ry);
-                if( D > 1000.0 ){
+                if( D > 400.0 ){
                     continue;
                 }
-                int tidx = (int)(D / 50.0);
+                int tidx = (int)(D / 20.0);
                 if( tidx >=20 ){
                     tidx = 19;
                 }
@@ -3344,18 +3496,20 @@ int SystemThread::SetSendDataForFuncExtend(int maxAgentSend,int maxTSSend,QList<
         numAgentSend = 0;
         sendIDList.clear();
 
-        for(int i=0;i<maxAgent;++i){
+        for(int i=0;i<=thrIdx;++i){
+            for(int j=0;j<maxAgent;++j){
 
-            if( calDist[i] < 0 || calDist[i] > thrIdx ){
-                continue;
-            }
+                if( calDist[j] != i ){
+                    continue;
+                }
 
-            if( numAgentSend < maxAgentSend ){
-                sendIDList.append( i );
-                numAgentSend++;
-            }
-            else{
-                break;
+                if( numAgentSend < maxAgentSend ){
+                    sendIDList.append( j );
+                    numAgentSend++;
+                }
+                else{
+                    break;
+                }
             }
         }
     }
@@ -3439,9 +3593,12 @@ int SystemThread::SetSendDataForFuncExtend(int maxAgentSend,int maxTSSend,QList<
             memcpy(&(sendDataBuf[at]), &tempCVal, sizeof(char));   // 57
             at += sizeof(char);
 
-            tempIVal = 0;     // Tachometer
+            tempIVal = agent[i]->UE4ObjectID[pivotIDs.first()];     // Tachometer ---> UE4ID
             memcpy(&(sendDataBuf[at]), &tempIVal, sizeof(int));   // 58
             at += sizeof(int);
+
+//            qDebug() << "[FE]ID=" << agent[i]->ID << " objID=" << tempIVal;
+
 
             tempCVal = 0;     // lightFlag1
             if( agent[i]->vehicle.GetBrakeLampState() == 1 ){
@@ -3679,6 +3836,10 @@ int SystemThread::SetSendDataForFuncExtend(int maxAgentSend,int maxTSSend,QList<
     }
 
 
+    // FrameCount
+    memcpy(&(sendDataBuf[at]), &g_simulationCount, sizeof(int));
+    at += sizeof(int);
+
     return at;
 }
 
@@ -3708,7 +3869,7 @@ void SystemThread::SetTireHeight(int SInterObjID, int id, float zFL, float zFR, 
         if( agent[i]->agentKind >= 100 ){
             continue;
         }
-        if( agent[i]->UE4ObjectID[SInterObjID] + 10 == id ){
+        if( agent[i]->UE4ObjectID[SInterObjID] == id ){
             idx = i;
             break;
         }
@@ -3764,11 +3925,80 @@ void SystemThread::SetTireHeight(int SInterObjID, int id, float zFL, float zFR, 
 }
 
 
+void SystemThread::SetSInterInitState(char type, int id, float xi, float yi,float zi,float yawi,float wheelbase)
+{
+    if( id < 0 || id >= maxAgent ){
+        return;
+    }
+
+    if( type == 'v' || type == 'm' ){
+        agent[id]->agentKind = 0;
+    }
+    else if( type == 'p' || type == 'b' ){
+        agent[id]->agentKind = 100;
+    }
+
+    agent[id]->ID = id;
+    agent[id]->isSInterfaceObject = true;
+
+    agent[id]->state.x = xi;
+    agent[id]->state.y = yi;
+    agent[id]->state.z = zi;
+
+    agent[id]->state.roll  = 0.0;
+    agent[id]->state.pitch = 0.0;
+    agent[id]->state.yaw   = yawi;
+
+    agent[id]->agentStatus = 1;
+
+    if( agent[id]->vehicle.GetVehicleModelID() < 0 ){
+        int vModelID = simManage->GetVehicleShapeByWheelbase( wheelbase, road );
+        agent[id]->vehicle.SetVehicleModelID( vModelID );
+    }
+}
+
+void SystemThread::SetSInterObjDataToBuffer(char type, int id, AgentState *as,struct SInterObjInfo *so)
+{
+    int idx = -1;
+    for(int i=0;i<nSIObject;++i){
+        if( sov[i].objID == id ){
+            idx = i;
+            break;
+        }
+    }
+    if( idx < 0 ){
+        for(int i=0;i<nSIObject;++i){
+            if( sov[i].objID < 0 ){
+                idx = i;
+                break;
+            }
+        }
+    }
+    if( idx < 0 ){
+        return;
+    }
+
+    memcpy( &(sov[idx]) , so, sizeof(struct SInterObjInfo) );
+    memcpy( &(asv[idx]), as, sizeof(struct AgentState) );
+
+    sov[idx].objID = id;
+    if( type == 'v' || type == 'm' ){
+        sov[idx].objType = 0;
+    }
+    else if( type == 'p' || type == 'b' ){
+        sov[idx].objType = 100;
+    }
+}
+
+
 void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SInterObjInfo *so)
 {
-    mutexDSStateWrite->lock();
+//    mutexDSStateWrite->lock();
 
     //qDebug() << "SetSInterObjData: id = " << id;
+    if( id < 0 || id >= maxAgent ){
+        return;
+    }
 
     if( type == 'v' || type == 'm' ){
         agent[id]->agentKind = 0;
@@ -3942,6 +4172,22 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
         agent[id]->memory.currentTargetPath = pathId;
         agent[id]->memory.lateralDeviationFromTargetPath = deviation;
         agent[id]->memory.distanceFromStartWPInCurrentPath = s;
+
+
+        agent[id]->state.z_path = agent[id]->state.z;
+
+        if( idx >= 0 ){
+
+            float z = road->paths[idx]->pos.first()->z();
+            if( agent[id]->memory.distanceFromStartWPInCurrentPath >= 0 &&
+                    agent[id]->memory.distanceFromStartWPInCurrentPath <= road->paths[idx]->pathLength ){
+                float dz = (road->paths[idx]->pos.last()->z() - z) * agent[id]->memory.distanceFromStartWPInCurrentPath / road->paths[idx]->pathLength;
+                z += dz;
+            }
+
+            agent[id]->state.z_path = z;
+        }
+
 
 //        qDebug() << "deviation = " << deviation;
 
@@ -4181,7 +4427,7 @@ void SystemThread::SetSInterObjData(char type, int id, AgentState *as,struct SIn
         agent[id]->memory.distanceToStopPoint = dist - agent[id]->memory.distanceFromStartWPInCurrentPath;
 
     }
-    mutexDSStateWrite->unlock();
+//    mutexDSStateWrite->unlock();
 }
 
 
@@ -4236,7 +4482,8 @@ void SystemThread::WarpVehicle(int targetVID, float xTo, float yTo, float dirTo)
     agent[targetVID]->vehicle.state.X = xTo;
     agent[targetVID]->vehicle.state.Y = yTo;
 
-    agent[targetVID]->vehicle.state.yawAngle = dirTo * 0.017452;
+    dirTo *= 0.017452;
+    agent[targetVID]->vehicle.state.yawAngle = dirTo;
     agent[targetVID]->state.yaw = agent[targetVID]->vehicle.state.yawAngle;
     agent[targetVID]->state.cosYaw = cos( agent[targetVID]->state.yaw );
     agent[targetVID]->state.sinYaw = sin( agent[targetVID]->state.yaw );
@@ -4247,6 +4494,71 @@ void SystemThread::WarpVehicle(int targetVID, float xTo, float yTo, float dirTo)
     agent[targetVID]->vehicle.state.YRear -= agent[targetVID]->state.sinYaw * agent[targetVID]->vehicle.param.Lr;
 
     agent[targetVID]->justWarped = true;
+
+    if( agent[targetVID]->vehicle.yawFiltered4CG != NULL ){
+        agent[targetVID]->vehicle.yawFiltered4CG->SetInitialValue( agent[targetVID]->state.yaw );
+    }
+
+    float deviation = 0;
+    float xt = 0.0;
+    float yt = 0.0;
+    float xd = 0.0;
+    float yd = 0.0;
+    float s = 0.0;
+
+    int pathId = road->GetNearestPath( xTo, yTo, dirTo, deviation, xt, yt, xd, yd, s );
+    if( pathId >= 0 ){
+        agent[targetVID]->memory.currentTargetPath = pathId;
+    }
+
+    agent[targetVID]->CheckPathList( road );
+}
+
+void SystemThread::WarpVehicleAdjustPosToLane(int targetVID, float xTo, float yTo, float dirTo)
+{
+
+    qDebug() << "[WarpVehicle] xTo = " << xTo << " yTo = " << yTo << " dirTo = " << dirTo;
+
+    dirTo *= 0.017452;
+
+    float deviation = 0;
+    float xt = 0.0;
+    float yt = 0.0;
+    float xd = 0.0;
+    float yd = 0.0;
+    float s = 0.0;
+
+    int pathId = road->GetNearestPath( xTo, yTo, dirTo, deviation, xt, yt, xd, yd, s );
+    if( pathId >= 0 ){
+
+        agent[targetVID]->memory.currentTargetPath = pathId;
+
+        xTo = xt;
+        yTo = yt;
+        dirTo = atan2( yd, xd );
+
+    }
+
+    agent[targetVID]->state.x = xTo;
+    agent[targetVID]->state.y = yTo;
+    agent[targetVID]->vehicle.state.X = xTo;
+    agent[targetVID]->vehicle.state.Y = yTo;
+
+    agent[targetVID]->vehicle.state.yawAngle = dirTo;
+    agent[targetVID]->state.yaw = agent[targetVID]->vehicle.state.yawAngle;
+    agent[targetVID]->state.cosYaw = cos( agent[targetVID]->state.yaw );
+    agent[targetVID]->state.sinYaw = sin( agent[targetVID]->state.yaw );
+
+    agent[targetVID]->vehicle.state.XRear = agent[targetVID]->vehicle.state.X;
+    agent[targetVID]->vehicle.state.XRear -= agent[targetVID]->state.cosYaw * agent[targetVID]->vehicle.param.Lr;
+    agent[targetVID]->vehicle.state.YRear = agent[targetVID]->vehicle.state.Y;
+    agent[targetVID]->vehicle.state.YRear -= agent[targetVID]->state.sinYaw * agent[targetVID]->vehicle.param.Lr;
+
+    agent[targetVID]->justWarped = true;
+
+    if( agent[targetVID]->vehicle.yawFiltered4CG != NULL ){
+        agent[targetVID]->vehicle.yawFiltered4CG->SetInitialValue( agent[targetVID]->state.yaw );
+    }
 
     agent[targetVID]->CheckPathList( road );
 }
@@ -4263,6 +4575,7 @@ void SystemThread::DisposeAgent(int agentID)
 void SystemThread::AppearAgent(int agentID)
 {
     if( agentID >= 0 && agentID < maxAgent ){
+        qDebug() << "Received Appear Agent: agentID = " << agentID;
         simManage->SetAppearFlagByFE( agentID );
         simManage->AppearAgents(agent,maxAgent,road);
     }
@@ -4273,6 +4586,7 @@ void SystemThread::ChangeReferenceSpeed(int agentID, float refSpeed)
     if( agentID >= 0 && agentID < maxAgent ){
         agent[agentID]->memory.targetSpeedByScenario = refSpeed;
         //qDebug() << "agentID=" << agentID << " targetSpeedByScenario=" << refSpeed;
+        agent[agentID]->memory.setTargetSpeedByScenarioFlag = true;
     }
 }
 
@@ -4282,6 +4596,38 @@ void SystemThread::ForceChangeSpeed(int agentID, float speed)
     if( agentID >= 0 && agentID < maxAgent ){
         agent[agentID]->state.V = speed;
         agent[agentID]->vehicle.state.vx = speed;
+    }
+}
+
+
+void SystemThread::ChangeSpeedProfile(int agentID, QList<float> td, QList<float> vd )
+{
+    if( agentID >= 0 && agentID < maxAgent ){
+        agent[agentID]->memory.profileTime.clear();
+        agent[agentID]->memory.profileSpeed.clear();
+
+        for(int i=0;i<td.size();++i){
+            agent[agentID]->memory.profileTime.append( td[i] );
+        }
+
+        for(int i=0;i<vd.size();++i){
+            agent[agentID]->memory.profileSpeed.append( vd[i] );
+        }
+
+        agent[agentID]->memory.protectProfileData = true;
+    }
+}
+
+
+void SystemThread::SetTargetSpeedMode(int spmode, int agentID)
+{
+    if( agentID >= 0 && agentID < maxAgent ){
+        agent[agentID]->refSpeedMode = spmode;
+    }
+    else{
+        for(int i=0;i<maxAgent;++i){
+            agent[i]->refSpeedMode = spmode;
+        }
     }
 }
 
@@ -4396,6 +4742,32 @@ void SystemThread::CopyPathData(int fromAID, int toAID)
 }
 
 
+void SystemThread::RequestLaneChange(int aID, int dir, int mode)
+{
+    if( aID >= 0 && aID < maxAgent ){
+        agent[aID]->ProcessLaneChangeRequest(road, dir, mode, -1.0);
+    }
+}
+
+
+void SystemThread::RequestAssignedLaneChange(int aID, int dir, int mode, float moveLatDist)
+{
+    if( aID >= 0 && aID < maxAgent ){
+        agent[aID]->ProcessLaneChangeRequest(road, dir, mode, moveLatDist);
+    }
+}
+
+
+void SystemThread::OverwriteAgentParameter(int aID,int paramID,float val)
+{
+    if( aID >= 0 && aID < maxAgent ){
+        switch(paramID){
+        case 0: agent[aID]->param.maxLateralSpeedForLaneChange = val; break;
+        }
+    }
+}
+
+
 void SystemThread::ChangeControlModeStopAt(int aID, float atX, float atY)
 {
     if( aID >= 0 && aID < maxAgent ){
@@ -4417,6 +4789,7 @@ void SystemThread::ChangeControlModeHeadwayControl(int aID, float V, float dist,
 
         agent[aID]->memory.controlMode = AGENT_CONTROL_MODE::CONSTANT_SPEED_HEADWAY;
         agent[aID]->memory.targetSpeedByScenario = V;
+        agent[aID]->memory.setTargetSpeedByScenarioFlag = true;
         agent[aID]->memory.targetHeadwayDistanceByScenario = dist;
         agent[aID]->memory.allowableHeadwayDistDeviation = allowDev;
         agent[aID]->memory.targetHeadwayTimeByScenario = time;
@@ -4433,7 +4806,7 @@ void SystemThread::ChangeControlModeAgent(int aID)
     if( aID >= 0 && aID < maxAgent ){
         agent[aID]->memory.controlMode = AGENT_CONTROL_MODE::AGENT_LOGIC;
         agent[aID]->skipSetControlInfo = true;
-
+        agent[aID]->memory.setTargetSpeedByScenarioFlag = false;
 //        qDebug() << "Change control mode to Agent Control";
     }
 }
@@ -4448,6 +4821,22 @@ void SystemThread::ChangeControlModeIntersectionTurn(int aID,float speed,float i
         agent[aID]->skipSetControlInfo = true;
 
         qDebug() << "Change control mode to Intersection Turn Control: Vn = " << speed*3.6 << " Vt=" << insideSpeed*3.6;
+    }
+}
+
+
+void SystemThread::DirectAssignAcceleration(int aID,float a_com)
+{
+    if( aID >= 0 && aID < maxAgent ){
+        agent[aID]->memory.controlMode = AGENT_CONTROL_MODE::DIRECT_ACCEL_ASSIGN;
+        agent[aID]->memory.accel = 0.0;
+        agent[aID]->memory.brake = 0.0;
+        if( a_com >= 0.0f ){
+            agent[aID]->memory.accel = a_com;
+        }
+        else{
+            agent[aID]->memory.brake = -a_com;
+        }
     }
 }
 
@@ -4519,6 +4908,172 @@ void SystemThread::EmbedAgentBehavior(int id, float *data, int sizeData)
 }
 
 
+void SystemThread::ChangeVelocityControlParameters(float refV,float vDevP,float vDevM,float accel,float decel,int selMode,QList<int> aIDs)
+{
+    qDebug() << "ChangeVelocityControlParameters:";
+
+    if( selMode == 0 ){
+
+        qDebug() << "  select = 0";
+
+        for(int i=0;i<aIDs.size();++i){
+            int id = aIDs[i];
+            if( id >= 0 && id < maxAgent ){
+                agent[id]->param.refVforDev     = refV;
+                agent[id]->param.vDevAllowPlus  = vDevP;
+                agent[id]->param.vDevAllowMinus = vDevM;
+                agent[id]->param.accelAtVDev    = accel;
+                agent[id]->param.decelAtVDev    = decel;
+                agent[id]->param.deadZoneSpeedControl = 0.0;
+            }
+        }
+    }
+    else if( selMode == 1 ){
+
+        qDebug() << "  select = 1";
+
+        for(int i=0;i<aIDs.size();++i){
+            int id = aIDs[i];
+            if( id >= 0 && id < maxAgent ){
+                if( agent[id]->refSpeedMode == 0 ){
+                    agent[id]->param.refVforDev     = refV;
+                    agent[id]->param.vDevAllowPlus  = vDevP;
+                    agent[id]->param.vDevAllowMinus = vDevM;
+                    agent[id]->param.accelAtVDev    = accel;
+                    agent[id]->param.decelAtVDev    = decel;
+                    agent[id]->param.deadZoneSpeedControl = 0.0;
+                }
+            }
+        }
+    }
+    else if( selMode == 2 ){
+
+        qDebug() << "  select = 2";
+
+        for(int i=0;i<aIDs.size();++i){
+            int id = aIDs[i];
+            if( id >= 0 && id < maxAgent ){
+                if( agent[id]->refSpeedMode == 1 ){
+                    agent[id]->param.refVforDev     = refV;
+                    agent[id]->param.vDevAllowPlus  = vDevP;
+                    agent[id]->param.vDevAllowMinus = vDevM;
+                    agent[id]->param.accelAtVDev    = accel;
+                    agent[id]->param.decelAtVDev    = decel;
+                    agent[id]->param.deadZoneSpeedControl = 0.0;
+                }
+            }
+        }
+    }
+    else if( selMode == 3 ){
+
+        qDebug() << "  select = 3";
+        qDebug() << "  maxAgent = " << maxAgent;
+
+        for(int id=0;id<maxAgent;++id){
+            agent[id]->param.refVforDev     = refV;
+            agent[id]->param.vDevAllowPlus  = vDevP;
+            agent[id]->param.vDevAllowMinus = vDevM;
+            agent[id]->param.accelAtVDev    = accel;
+            agent[id]->param.decelAtVDev    = decel;
+            agent[id]->param.deadZoneSpeedControl = 0.0;
+        }
+    }
+}
+
+void SystemThread::ChangeLaneAssignedVelocityControlParameters(float refV,float vDevP,float vDevM,float accel,float decel,QList<int> laneIDs)
+{
+    qDebug() << "ChangeLaneAssignedVelocityControlParameters:";
+
+    for(int i=0;i<laneIDs.size();++i){
+        int lIdx = road->pathId2Index.indexOf( laneIDs[i] );
+        if( lIdx >= 0 ){
+            qDebug() << " Set Speed Variation Parameter to Lane " << laneIDs[i];
+
+            road->paths[lIdx]->setSpeedVariationParam = true;
+            road->paths[lIdx]->refVforDev = refV;
+            road->paths[lIdx]->vDevP = vDevP;
+            road->paths[lIdx]->vDevM = vDevM;
+            road->paths[lIdx]->accelAtDev = accel;
+            road->paths[lIdx]->decelAtDev = decel;
+        }
+    }
+}
+
+
+void SystemThread::ChangeRoadLaneSpeedLimit(QList<int> laneID, QList<float> vLimit)
+{
+    if( laneID.size() == 0 || laneID.size() != vLimit.size() ){
+        return;
+    }
+
+    for(int i=0;i<laneID.size();++i){
+        int lIdx = road->pathId2Index.indexOf( laneID[i] );
+        if( lIdx >= 0 ){
+            road->paths[lIdx]->speed85pt = vLimit[i];
+            road->paths[lIdx]->speedInfo = vLimit[i];
+//            qDebug() << "Speed Limit Changed: path = " << laneID[i] << " Vlim = " << vLimit[i] << " [km/h]";
+        }
+    }
+
+    for(int i=0;i<maxAgent;++i){
+        if( agent[i]->agentStatus != 1 ){
+            continue;
+        }
+        if( agent[i]->isScenarioObject == true ){
+            continue;
+        }
+        if( agent[i]->isSInterfaceObject == true ){
+            continue;
+        }
+        int currentPath = agent[i]->memory.currentTargetPath;
+        if( laneID.indexOf( currentPath ) >= 0 ){
+            int pIdx = road->pathId2Index.indexOf( currentPath );
+            if( pIdx >= 0 ){
+                if( agent[i]->isScenarioObject == true ){
+                    if( road->paths[pIdx]->speed85pt == road->paths[pIdx]->speedInfo ){
+                        agent[i]->refSpeedMode = 1;
+                    }
+                    else{
+                        agent[i]->refSpeedMode = 0;
+                    }
+                }
+                agent[i]->SetTargetSpeedIndividual( road->paths[pIdx]->speed85pt );
+            }
+        }
+    }
+}
+
+
+void SystemThread::ChangeMoveSpeedPedestrian(QList<float> vPedest)
+{
+    if( vPedest.size() >= 3 ){
+        for(int i=0;i<3;++i){
+            simManage->meanSpeedPedestrian[i] = vPedest.at(i);
+        }
+
+        for(int i=0;i<maxAgent;++i){
+            if( agent[i]->agentStatus != 1 ){
+                continue;
+            }
+            if( agent[i]->objTypeForUE4 == 1 ){
+                if( agent[i]->objNoForUE4 == 3 ){   // Child
+                    agent[i]->attri.age = 0;
+                    agent[i]->memory.targetSpeed = simManage->GetNormalDist( simManage->meanSpeedPedestrian[0], 0.107 );
+                }
+                else if( agent[i]->objNoForUE4 == 4 ){   // Aged
+                    agent[i]->attri.age = 2;
+                    agent[i]->memory.targetSpeed = simManage->GetNormalDist( simManage->meanSpeedPedestrian[2], 0.104 );
+                }
+                else{
+                    agent[i]->attri.age = 1;
+                    agent[i]->memory.targetSpeed = simManage->GetNormalDist( simManage->meanSpeedPedestrian[1], 0.093 );
+                }
+            }
+        }
+    }
+}
+
+
 void SystemThread::SetStopGraphicUpdate(bool b)
 {
     stopGraphicUpdate = b;
@@ -4560,9 +5115,9 @@ void SystemThread::ShowAgentData(float x,float y)
     int nearID = -1;
     float dist = 0.0;
     for(int i=0;i<maxAgent;++i){
-        if(agent[i]->agentStatus != 1 ){
-            continue;
-        }
+//        if(agent[i]->agentStatus != 1 ){
+//            continue;
+//        }
 
         //qDebug() << "agent " << agent[i]->ID;
 
@@ -4586,10 +5141,19 @@ void SystemThread::ShowAgentData(float x,float y)
         return;
     }
 
+    if( agent[nearID]->agentStatus != 1 ){
+
+        qDebug() << "Picked Agent ID = " << agent[nearID]->ID
+                 << " agentStaus = " << agent[nearID]->agentStatus;
+        return;
+    }
+
+
     qDebug() << "Picked Agent ID = " << agent[nearID]->ID
              << " : agentKind = " << agent[nearID]->agentKind
              << " vHalfLength = " << agent[nearID]->vHalfLength
-             << " vHalfWidth = " << agent[nearID]->vHalfWidth;
+             << " vHalfWidth = " << agent[nearID]->vHalfWidth
+             << " modelID = " << agent[nearID]->vehicle.GetVehicleModelID();
 
     qDebug() << "Vehicle State:";
     qDebug() << "  X = " << agent[nearID]->state.x;
@@ -4612,16 +5176,18 @@ void SystemThread::ShowAgentData(float x,float y)
                  << " W = " << agent[nearID]->memory.perceptedObjects[i]->effectiveHalfWidth
                  << " Type = " << agent[nearID]->memory.perceptedObjects[i]->objectType
                  << " Evaled = " << agent[nearID]->memory.perceptedObjects[i]->relPosEvaled;
+
         qDebug() << "        N = " << agent[nearID]->memory.perceptedObjects[i]->innerProductToNearestPathNormal
                  << " T = " << agent[nearID]->memory.perceptedObjects[i]->innerProductToNearestPathTangent
                  << " nupc = " << agent[nearID]->memory.perceptedObjects[i]->noUpdateCount
                  << " nearPath = " << agent[nearID]->memory.perceptedObjects[i]->nearestTargetPath
-                 << " t = " << agent[nearID]->memory.perceptedObjects[i]->objDistFromSWPOfNearTargetPath;
+                 << " t = " << agent[nearID]->memory.perceptedObjects[i]->objDistFromSWPOfNearTargetPath
+                 << " objPath = " << agent[nearID]->memory.perceptedObjects[i]->objectPath;
 
         if( agent[nearID]->memory.checkSideVehicleForLC == true ){
             qDebug() << "        LCpath = " << agent[nearID]->memory.perceptedObjects[i]->objPathInLCTargetPathList
-                     << " e = " << agent[nearID]->memory.perceptedObjects[i]->latDevObjInLCTargetPathList
-                     << " D = " << agent[nearID]->memory.perceptedObjects[i]->distToObjInLCTargetPathList;
+                     << " e = " << agent[nearID]->memory.perceptedObjects[i]->latDevObjInLaneChangeTargetPathList
+                     << " D = " << agent[nearID]->memory.perceptedObjects[i]->distToObjInLaneChangeTargetPathList;
         }
     }
 
@@ -4642,16 +5208,18 @@ void SystemThread::ShowAgentData(float x,float y)
         if( agent[nearID]->memory.perceptedObjects[i]->isValidData == false ){
             continue;
         }
-        qDebug() << "  OBJ:" << agent[nearID]->memory.perceptedObjects[i]->objectID
-                 << " hasCP = " << agent[nearID]->memory.perceptedObjects[i]->hasCollisionPoint
-                 << " merge = " << agent[nearID]->memory.perceptedObjects[i]->mergingAsCP;
-        if( agent[nearID]->memory.perceptedObjects[i]->hasCollisionPoint == true || agent[nearID]->memory.perceptedObjects[i]->mergingAsCP == true ){
-            qDebug() << "    xCP = " << agent[nearID]->memory.perceptedObjects[i]->xCP
-                     << " yCP = " << agent[nearID]->memory.perceptedObjects[i]->yCP;
-            qDebug() << "    myDist = " << agent[nearID]->memory.perceptedObjects[i]->myDistanceToCP
-                     << " myTime = " << agent[nearID]->memory.perceptedObjects[i]->myTimeToCP;
-            qDebug() << "    objDist = " << agent[nearID]->memory.perceptedObjects[i]->objectDistanceToCP
-                     << " objTime = " << agent[nearID]->memory.perceptedObjects[i]->objectTimeToCP;
+        if( agent[nearID]->memory.perceptedObjects[i]->hasCollisionPoint == true ){
+            qDebug() << "  OBJ:" << agent[nearID]->memory.perceptedObjects[i]->objectID
+                     << " hasCP = " << agent[nearID]->memory.perceptedObjects[i]->hasCollisionPoint
+                     << " merge = " << agent[nearID]->memory.perceptedObjects[i]->mergingAsCP;
+            if( agent[nearID]->memory.perceptedObjects[i]->hasCollisionPoint == true || agent[nearID]->memory.perceptedObjects[i]->mergingAsCP == true ){
+                qDebug() << "    xCP = " << agent[nearID]->memory.perceptedObjects[i]->xCP
+                         << " yCP = " << agent[nearID]->memory.perceptedObjects[i]->yCP;
+                qDebug() << "    myDist = " << agent[nearID]->memory.perceptedObjects[i]->myDistanceToCP
+                         << " myTime = " << agent[nearID]->memory.perceptedObjects[i]->myTimeToCP;
+                qDebug() << "    objDist = " << agent[nearID]->memory.perceptedObjects[i]->objectDistanceToCP
+                         << " objTime = " << agent[nearID]->memory.perceptedObjects[i]->objectTimeToCP;
+            }
         }
     }
 
@@ -4676,6 +5244,9 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  rightCrossIsClear = " << agent[nearID]->memory.rightCrossIsClear;
     qDebug() << "  rightCrossCheckCount = " << agent[nearID]->memory.rightCrossCheckCount;
     qDebug() << "  safetyConfimed = " << agent[nearID]->memory.safetyConfimed;
+    qDebug() << "  hazardusObject = " << agent[nearID]->memory.hazardusObject;
+    qDebug() << "  lastHazardusObject = " << agent[nearID]->memory.lastHazardusObject;
+    qDebug() << "  ignoreHazardusObject = " << agent[nearID]->memory.ignoreHazardusObject;
 
     qDebug() << "Lane-Change:";
     qDebug() << "  checkSideVehicleForLC = " << agent[nearID]->memory.checkSideVehicleForLC;
@@ -4693,6 +5264,8 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  brake = " << agent[nearID]->memory.brake;
 
     qDebug() << "  targetSpeed = " << agent[nearID]->memory.targetSpeed;
+    qDebug() << "  setTargetSpeedByScenarioFlag = " << agent[nearID]->memory.setTargetSpeedByScenarioFlag;
+    qDebug() << "  targetSpeedByScenario = " << agent[nearID]->memory.targetSpeedByScenario;
     qDebug() << "  actualTargetSpeed = " << agent[nearID]->memory.actualTargetSpeed;
     qDebug() << "  distanceAdjustLowSpeed = " << agent[nearID]->memory.distanceAdjustLowSpeed;
     qDebug() << "  axSpeedControl = " << agent[nearID]->memory.axSpeedControl;
@@ -4718,15 +5291,28 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  distanceFromStartWPInCurrentPath = " << agent[nearID]->memory.distanceFromStartWPInCurrentPath;
     qDebug() << "  lateralDeviationFromTargetPath = " << agent[nearID]->memory.lateralDeviationFromTargetPath;
     qDebug() << "  lateralDeviationFromTargetPathAtPreviewPoint = " << agent[nearID]->memory.lateralDeviationFromTargetPathAtPreviewPoint;
+    qDebug() << "  targetLateralShiftByScenario = " << agent[nearID]->memory.targetLateralShiftByScenario;
+    qDebug() << "  relativeAttitudeToLane = " << agent[nearID]->memory.relativeAttitudeToLane;
+
     qDebug() << "  lateralShiftTarget = " << agent[nearID]->memory.lateralShiftTarget;
+    qDebug() << "  lateralShiftTarget_Backup = " << agent[nearID]->memory.lateralShiftTarget_backup;
     qDebug() << "  avoidTarget = " << agent[nearID]->memory.avoidTarget;
     qDebug() << "  steer = " << agent[nearID]->memory.steer;
 
+    if( agent[nearID]->agentKind >= 100 ){
+        qDebug() << "  exeRunOut = " << agent[nearID]->memory.exeRunOut;
+        qDebug() << "  runOutState = " << agent[nearID]->memory.runOutState;
+    }
 
     qDebug() << "Guidance Info:";
     qDebug() << "  targetPathList = " << agent[nearID]->memory.targetPathList;
     qDebug() << "  currentPath = " << agent[nearID]->memory.currentTargetPath;
     qDebug() << "  currentTargetPathIndexInList = " << agent[nearID]->memory.currentTargetPathIndexInList;
+
+    if( agent[nearID]->agentKind >= 100 ){
+        qDebug() << "  pedest-path width: " << road->GetPedestPathWidth( agent[nearID]->memory.currentTargetPath, agent[nearID]->memory.currentTargetPathIndexInList );
+    }
+
     qDebug() << "  destinationNode = " << agent[nearID]->memory.destinationNode;
     qDebug() << "  myNodeList = " << agent[nearID]->memory.myNodeList;
     qDebug() << "  myInDirList = " << agent[nearID]->memory.myInDirList;
@@ -4769,6 +5355,10 @@ void SystemThread::ShowAgentData(float x,float y)
     qDebug() << "  safetyConfirmTime = " << agent[nearID]->param.safetyConfirmTime;
     qDebug() << "  LCInfoGetTime = " << agent[nearID]->param.LCInfoGetTime;
     qDebug() << "  LCCutInAllowTTC = " << agent[nearID]->param.LCCutInAllowTTC;
+    qDebug() << "  vDevAllowPlus = " << agent[nearID]->param.vDevAllowPlus;
+    qDebug() << "  vDevAllowMinus = " << agent[nearID]->param.vDevAllowMinus;
+    qDebug() << "  accelAtVDev = " << agent[nearID]->param.accelAtVDev;
+    qDebug() << "  decelAtVDev = " << agent[nearID]->param.decelAtVDev;
 
 
     qDebug() << "Debug Info:";
@@ -4782,7 +5372,7 @@ void SystemThread::ShowAgentData(float x,float y)
 
     qDebug() << "cognitionCount = " << agent[nearID]->cognitionCount;
     qDebug() << "cognitionCountMax = " << agent[nearID]->cognitionCountMax;
-    qDebug() << "decisionMalingCount = " << agent[nearID]->decisionMalingCount;
+    qDebug() << "decisionMakingCount = " << agent[nearID]->decisionMakingCount;
     qDebug() << "decisionMakingCountMax = " << agent[nearID]->decisionMakingCountMax;
     qDebug() << "controlCount = " << agent[nearID]->controlCount;
     qDebug() << "controlCountMax = " << agent[nearID]->controlCountMax;
@@ -4824,6 +5414,28 @@ void SystemThread::DSMove(float x, float y)
     if( udpThread != NULL ){
 
         udpThread->SendDSMoveCommand( DSMoveTarget, x, y, angle );
+    }
+}
+
+
+void SystemThread::ChangeOptionalImageParams(QList<float> p)
+{
+    if( p.size() < 2 ){
+        return;
+    }
+
+    int id = (int)(p[0]);
+    if( p[1] > 0.5 && p.size() >= 7 ){
+        float x = p[2];
+        float y = p[3];
+        float z = p[4];
+        float rot = p[5];
+        float s = p[6];
+
+        emit ShowOptionalImage(id,x,y,z,rot,s);
+    }
+    else{
+        emit HideOptionalImage(id);
     }
 }
 

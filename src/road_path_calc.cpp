@@ -195,6 +195,38 @@ int Road::GetNearestPath(float xp, float yp,float yawAngle,float &deviation,floa
 //  (xderiv, yderiv) and distance from the StartWP of the path is stored in
 //  the argument passed by reference.
 //
+int Road::GetDeviationFromPathWithZ(int pathID,
+                                    float xp,
+                                    float yp,
+                                    float zp,
+                                    float yawAngle,
+                                    float &deviation,
+                                    float &xt,
+                                    float &yt,
+                                    float &xderiv,
+                                    float &yderiv,
+                                    float &distFromStartWP,
+                                    bool negrectYawAngleInfo )
+{
+    int index = pathId2Index.indexOf(pathID);
+    if( index < 0 ){
+        return -1;
+    }
+
+    int ret = GetDeviationFromPath( pathID, xp, yp, yawAngle, deviation, xt, yt, xderiv, yderiv, distFromStartWP, negrectYawAngleInfo );
+    if( ret == pathID ){
+        float DZ = paths[index]->pos.last()->z() - paths[index]->pos.first()->z();
+        float s = distFromStartWP / paths[index]->pathLength;
+        float zt = paths[index]->pos.first()->z() + DZ * s;
+        if( fabs(zt - zp) > 1.5 ){
+            ret = -1;
+        }
+    }
+
+    return ret;
+}
+
+
 int Road::GetDeviationFromPath(int pathID,
                                float xp,
                                float yp,
@@ -248,6 +280,10 @@ int Road::GetDeviationFromPath(int pathID,
         if( ip1 * ip2 > 0.0 ){
             return ret;
         }
+
+        if( fabs(ip1) > paths[index]->pathLength + 20.0 || fabs(ip2) >  paths[index]->pathLength + 20.0 ){
+            return ret;
+        }
     }
 
     for(int i=1;i<nDiv;++i){
@@ -280,7 +316,103 @@ int Road::GetDeviationFromPath(int pathID,
 
         break;
     }
+    return ret;
+}
 
+
+int Road::GetDeviationFromPathExtendEnd(int pathID,
+                                       float xp,
+                                       float yp,
+                                       float yawAngle,
+                                       float &deviation,
+                                       float &xt,
+                                       float &yt,
+                                       float &xderiv,
+                                       float &yderiv,
+                                       float &distFromStartWP,
+                                       bool negrectYawAngleInfo )
+{
+    int index = pathId2Index.indexOf(pathID);
+    if( index < 0 ){
+        return -1;
+    }
+
+    float cya = cos( yawAngle );
+    float sya = sin( yawAngle );
+
+    int ret = -1;
+
+    distFromStartWP = 0.0;
+
+    int nDiv = paths[index]->pos.size();
+
+    // Check
+    {
+        float rx1 = xp - paths[index]->pos.first()->x();
+        float ry1 = yp - paths[index]->pos.first()->y();
+        float dx1 = paths[index]->derivative.first()->x();
+        float dy1 = paths[index]->derivative.first()->y();
+        float ip1 = rx1 * dx1 + ry1 * dy1;
+
+        float rx2 = xp - (paths[index]->pos.last()->x() + paths[index]->derivative.last()->x() * 100.0);
+        float ry2 = yp - (paths[index]->pos.last()->y() + paths[index]->derivative.last()->y() * 100.0);
+        float dx2 = paths[index]->derivative.last()->x();
+        float dy2 = paths[index]->derivative.last()->y();
+        float ip2 = rx2 * dx2 + ry2 * dy2;
+
+        if( negrectYawAngleInfo == false ){
+            float dxm = (dx1 + dx2) * 0.5;
+            float dym = (dy1 + dy2) * 0.5;
+
+            float ip = cya * dxm + sya * dym;
+            if( ip < 0.0 ){
+                return ret;
+            }
+        }
+
+        if( ip1 * ip2 > 0.0 ){
+            return ret;
+        }
+
+        if( fabs(ip1) > paths[index]->pathLength + 20.0 || fabs(ip2) >  paths[index]->pathLength + 120.0 ){
+            return ret;
+        }
+    }
+
+    for(int i=1;i<nDiv;++i){
+
+        float x = paths[index]->pos[i]->x();
+        float y = paths[index]->pos[i]->y();
+        if( i == nDiv - 1 ){
+            x += paths[index]->derivative[i]->x() * 100.0;
+            y += paths[index]->derivative[i]->y() * 100.0;
+        }
+
+        float rx = xp - x;
+        float ry = yp - y;
+        float dx = paths[index]->derivative[i]->x();
+        float dy = paths[index]->derivative[i]->y();
+
+        float ip = rx * dx + ry * dy;
+        if( ip > 0.0 ){
+            continue;
+        }
+
+        float cp = rx * (-dy) + ry * dx;
+
+        ret = pathID;
+        deviation = cp;
+
+        xt = x + ip * dx;
+        yt = y + ip * dy;
+
+        xderiv = dx;
+        yderiv = dy;
+
+        distFromStartWP = paths[index]->length[i] + ip;
+
+        break;
+    }
     return ret;
 }
 
@@ -329,7 +461,7 @@ int Road::GetNearestPedestPathSectionIndex(float xp,float yp,float &dist,int &ov
 }
 
 
-int Road::GetDeviationFromPedestPathAllSection(int pedestPathID, float xp, float yp, float &dev)
+int Road::GetDeviationFromPedestPathAllSection(int pedestPathID, float xp, float yp, float &dev,float &dist,float &xdir, float& ydir)
 {
     int ret = -1;
     float nearestDist = 0.0;
@@ -339,6 +471,7 @@ int Road::GetDeviationFromPedestPathAllSection(int pedestPathID, float xp, float
         return ret;
     }
 
+    dist = 0.0;
 
     for(int j=0;j<pedestPaths[plIdx]->shape.size()-1;++j){
 
@@ -357,12 +490,66 @@ int Road::GetDeviationFromPedestPathAllSection(int pedestPathID, float xp, float
         if( ret < 0 || fabs(nearestDist) > fabs(cp) ){
             ret = j;
             nearestDist = cp;
+            dist = ip;
+            xdir = ct;
+            ydir = st;
         }
+    }
 
+    for(int j=0;j<ret;++j){
+        dist += pedestPaths[plIdx]->shape[j]->distanceToNextPos;
     }
 
     dev = nearestDist;
     return ret;
+}
+
+
+float Road::GetSpeedAdjustFactorPedestPath(int pedestPathID, int sectIndex, float xp, float yp, float V)
+{
+    float factor = 1.0;
+
+    int idx = pedestPathID2Index.indexOf( pedestPathID );
+    if( idx < 0 ){
+        return factor;
+    }
+
+    if( sectIndex < 0 || sectIndex >= pedestPaths[idx]->shape.size() - 1 ){
+        return factor;
+    }
+
+    float dx = xp - pedestPaths[idx]->shape[sectIndex]->pos.x();
+    float dy = yp - pedestPaths[idx]->shape[sectIndex]->pos.y();
+
+    float dist = dx * (pedestPaths[idx]->shape[sectIndex]->cosA) + dy * (pedestPaths[idx]->shape[sectIndex]->sinA);
+    float rest = pedestPaths[idx]->shape[sectIndex]->distanceToNextPos - dist;
+    if( V > 0.1 ){
+        float ttc = rest / V;
+        if( ttc > 2.0 ){
+            return factor;
+        }
+    }
+
+    float dirProd = pedestPaths[idx]->shape[sectIndex]->cosA * pedestPaths[idx]->shape[sectIndex+1]->cosA
+            + pedestPaths[idx]->shape[sectIndex]->sinA * pedestPaths[idx]->shape[sectIndex+1]->sinA;
+
+    if( dirProd > 1.0 ){
+        dirProd = 1.0;
+    }
+    else if( dirProd < -1.0 ){
+        dirProd = -1.0;
+    }
+
+    float diffAngle = acos( dirProd ) * 57.3;
+
+    if( fabs(diffAngle) < 90.0 ){
+        factor = 1.0 - 0.5 * diffAngle / 90.0;
+    }
+    else{
+        factor = 0.5;
+    }
+
+    return factor;
 }
 
 
@@ -374,9 +561,15 @@ int Road::GetDeviationFromPedestPath(int pedestPathID,int sectIndex,float xp,flo
         return -1;
     }
 
-    if( sectIndex < 0 || sectIndex >= pedestPaths[idx]->shape.size() - 1 ){
+    if( sectIndex < 0 || sectIndex >= pedestPaths[idx]->shape.size() ){
         return -1;
     }
+    else if( sectIndex == pedestPaths[idx]->shape.size() - 1 ){
+        xdir = pedestPaths[idx]->shape[sectIndex]->cosA;
+        ydir = pedestPaths[idx]->shape[sectIndex]->sinA;
+        return 0;
+    }
+
 
     float dx = xp - pedestPaths[idx]->shape[sectIndex]->pos.x();
     float dy = yp - pedestPaths[idx]->shape[sectIndex]->pos.y();
@@ -385,17 +578,19 @@ int Road::GetDeviationFromPedestPath(int pedestPathID,int sectIndex,float xp,flo
     float cp = dy * (pedestPaths[idx]->shape[sectIndex]->cosA) - dx * (pedestPaths[idx]->shape[sectIndex]->sinA);
 
     dev = cp;
+
     z = pedestPaths[idx]->shape[sectIndex]->pos.z() + ip / (pedestPaths[idx]->shape[sectIndex]->distanceToNextPos) * ( pedestPaths[idx]->shape[sectIndex+1]->pos.z() - pedestPaths[idx]->shape[sectIndex]->pos.z() );
 
-    xdir = pedestPaths[idx]->shape[sectIndex+1]->pos.x() - lateralShift * pedestPaths[idx]->shape[sectIndex]->sinA - xp;
-    ydir = pedestPaths[idx]->shape[sectIndex+1]->pos.y() + lateralShift * pedestPaths[idx]->shape[sectIndex]->cosA - yp;
-    float L = sqrt( xdir * xdir + ydir * ydir );
-    if( L > 1.0 ){
-        xdir /= L;
-        ydir /= L;
+    int ret = 0;
+    if( ip + 0.5 > pedestPaths[idx]->shape[sectIndex]->distanceToNextPos ){
+        sectIndex++;
+        ret = 1;
     }
 
-    return 0;
+    xdir = pedestPaths[idx]->shape[sectIndex]->cosA;
+    ydir = pedestPaths[idx]->shape[sectIndex]->sinA;
+
+    return ret;
 }
 
 

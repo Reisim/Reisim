@@ -327,6 +327,8 @@ public:
 
     QList<QPoint> changeTSDisplayInfo;
 
+    float meanSpeedPedestrian[3];
+
 private:
     struct SimulationTime simTime;
 
@@ -335,6 +337,8 @@ private:
 
     bool DSMode;
     int IDAllowed;
+
+
 };
 
 #endif // SIMULATIONMANAGER_H

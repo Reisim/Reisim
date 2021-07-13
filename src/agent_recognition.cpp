@@ -47,22 +47,22 @@ void Agent::Recognition( Agent** pAgent, int maxAgent, Road* pRoad )
                 continue;
             }
 
-            if( memory.perceptedObjects[i]->relPosEvaled == false ){
-                continue;
-            }
-
-//            if( pAgent[memory.perceptedObjects[i]->objectID]->isSInterfaceObject == true ){
-//                continue;
-//            }
-
             if( memory.perceptedObjects[i]->objectType >= 100 ){
                 memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::PEDESTRIAN;
                 continue;
             }
-            else{
-                if( memory.perceptedObjects[i]->V < 0.1 && state.V < 0.1 && memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::PRECEDING ){
-                    continue;
-                }
+            else if( agentKind >= 100 && memory.perceptedObjects[i]->objectType < 100 ){
+                memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::UNDEFINED_RECOGNITION_LABEL;
+                continue;
+            }
+
+            if( memory.perceptedObjects[i]->relPosEvaled == false ){
+                continue;
+            }
+
+            if( memory.perceptedObjects[i]->filteredV < 0.1 && state.V < 0.1 &&
+                    memory.perceptedObjects[i]->recognitionLabel != AGENT_RECOGNITION_LABEL::PRECEDING ){
+                continue;
             }
 
             memory.perceptedObjects[i]->recognitionLabel = AGENT_RECOGNITION_LABEL::UNDEFINED_RECOGNITION_LABEL;

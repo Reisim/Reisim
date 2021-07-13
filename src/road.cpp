@@ -161,6 +161,9 @@ void Road::LoadRoadData(QString filename)
     ClearRoadData();
 
 
+    numActorForUE4Model = 10;
+    maxActorInUE4 = 1000;
+
     while( in.atEnd() == false ){
 
         line = in.readLine();
@@ -222,6 +225,13 @@ void Road::LoadRoadData(QString filename)
             path->speed85pt  = QString( elem[5] ).trimmed().toFloat() / 3.6;
 
             path->scenarioObjectID = -1;
+
+            path->setSpeedVariationParam = false;
+            path->vDevP = 0.0;
+            path->vDevM = 0.0;
+            path->refVforDev = 0.0;
+            path->accelAtDev = 0.0;
+            path->decelAtDev = 0.0;
 
             paths.append( path );
         }
@@ -657,6 +667,8 @@ void Road::LoadRoadData(QString filename)
             int com = QString( elem[0] ).trimmed().toInt();
             if( com == 1 ){
 
+                currentODRouteIndex = -1;
+
                 QStringList nodeList = elem;
                 nodeList.removeAt(0);
 
@@ -780,7 +792,7 @@ void Road::LoadRoadData(QString filename)
         else if( tag == QString("Vehicle Kind") ){
 
             QStringList elem = QString( divLine[1] ).split(",");
-            if( elem.size() == 5 ){
+            if( elem.size() >= 5 ){
 
                 struct ObjectCategoryAndSize *k = new ObjectCategoryAndSize;
 
@@ -793,13 +805,27 @@ void Road::LoadRoadData(QString filename)
                 k->width  = QString( elem[3] ).trimmed().toFloat();
                 k->height = QString( elem[4] ).trimmed().toFloat();
 
+                if( elem.size() >= 6 ){
+                    k->UE4ModelID  = QString( elem[5] ).trimmed().toInt();
+                }
+                else{
+                    k->UE4ModelID  = -1;
+                }
+
+                k->meanSpeed   = 0.0;
+                k->stdDevSpeed = 0.0;
+                k->ageInfo     = 0;
+
+                k->type = 0;  // Vehicle
+                k->No = vehicleKind.size();
+
                 vehicleKind.append( k );
             }
         }
         else if( tag == QString("Pedestrian Kind") ){
 
             QStringList elem = QString( divLine[1] ).split(",");
-            if( elem.size() == 5 ){
+            if( elem.size() >= 5 ){
 
                 struct ObjectCategoryAndSize *k = new ObjectCategoryAndSize;
 
@@ -812,8 +838,46 @@ void Road::LoadRoadData(QString filename)
                 k->width  = QString( elem[3] ).trimmed().toFloat();
                 k->height = QString( elem[4] ).trimmed().toFloat();
 
+                if( k->category.contains("Pedestrian") == true ){
+                    k->type = 1;
+                }
+                else if( k->category.contains("Bicycle") == true ){
+                    k->type = 2;
+                }
+                else{
+                    k->type = 1;
+                }
+
+                if( elem.size() >= 9 ){
+                    k->UE4ModelID  = QString( elem[5] ).trimmed().toInt();
+                    k->meanSpeed   = QString( elem[6] ).trimmed().toFloat();
+                    k->stdDevSpeed = QString( elem[7] ).trimmed().toFloat();
+                    k->ageInfo     = QString( elem[8] ).trimmed().toFloat();
+                }
+                else{
+                    k->UE4ModelID  = -1;
+                    k->meanSpeed   = 0.0;
+                    k->stdDevSpeed = 0.0;
+                    k->ageInfo = 0;
+                }
+
+                k->No = 0;
+                for(int n=0;n<pedestrianKind.size();++n){
+                    if( pedestrianKind[n]->type == k->type ){
+                        k->No = pedestrianKind[n]->No + 1;
+                    }
+                }
+
                 pedestrianKind.append( k );
             }
+        }
+        else if( tag == QString("Number of Actor for UE4 Model") ){
+
+            numActorForUE4Model = QString( divLine[1]).trimmed().toInt();
+        }
+        else if( tag == QString("Max Number of Actors of UE4") ){
+
+            maxActorInUE4 = QString( divLine[1]).trimmed().toInt();
         }
 
     }
@@ -833,6 +897,11 @@ void Road::LoadRoadData(QString filename)
         k->length = 4.7;
         k->width  = 1.72;
         k->height = 1.5;
+
+        k->UE4ModelID = -1;
+        k->meanSpeed = 0.0;
+        k->stdDevSpeed = 0.0;
+        k->ageInfo = 0;
 
         vehicleKind.append( k );
     }
@@ -920,6 +989,28 @@ void Road::LoadRoadData(QString filename)
 
         nodes[i]->isMergeNode = false;
 
+        nodes[i]->nWPin.clear();
+        nodes[i]->nWPout.clear();;
+
+        for(int j=0;j<nodes[i]->nCross;++j){
+
+            int nWPin = 0;
+            int nWPout = 0;
+            for(int k=0;k<nodes[i]->inBoundaryWPs.size();++k){
+                if( nodes[i]->inBoundaryWPs[k]->relatedDirection == j ){
+                    nWPin++;
+                }
+            }
+            for(int k=0;k<nodes[i]->outBoundaryWPs.size();++k){
+                if( nodes[i]->outBoundaryWPs[k]->relatedDirection == j ){
+                    nWPout++;
+                }
+            }
+
+            nodes[i]->nWPin.append( nWPin );
+            nodes[i]->nWPout.append( nWPout );
+        }
+
         if( nodes[i]->nCross == 3 && nodes[i]->hasTS == false ){
 
             QList<int> outDirList;
@@ -985,8 +1076,9 @@ void Road::LoadRoadData(QString filename)
                                 QPoint mergeLanePair;
                                 mergeLanePair.setX( p1 );
                                 mergeLanePair.setY( p2 );
-
-                                odRoute[i]->mergeLanesInfo.last().append( mergeLanePair );
+                                if( odRoute[i]->mergeLanesInfo.last().contains( mergeLanePair ) == false ){
+                                    odRoute[i]->mergeLanesInfo.last().append( mergeLanePair );
+                                }
                             }
                         }
                     }
@@ -1031,8 +1123,9 @@ void Road::LoadRoadData(QString filename)
                                     QPoint mergeLanePair;
                                     mergeLanePair.setX( p1 );
                                     mergeLanePair.setY( p2 );
-
-                                    odRoute[i]->mergeLanesInfo.last().append( mergeLanePair );
+                                    if( odRoute[i]->mergeLanesInfo.last().contains( mergeLanePair ) == false ){
+                                        odRoute[i]->mergeLanesInfo.last().append( mergeLanePair );
+                                    }
                                 }
                             }
                         }
@@ -1047,10 +1140,10 @@ void Road::LoadRoadData(QString filename)
 
         }
 
-//        qDebug() << "mergeLanesInfo for odRoute[" << i << "]";
-//        for(int j=0;j<odRoute[i]->mergeLanesInfo.size();++j){
-//            qDebug() << odRoute[i]->mergeLanesInfo[j];
-//        }
+        qDebug() << "mergeLanesInfo for odRoute[" << i << "]";
+        for(int j=0;j<odRoute[i]->mergeLanesInfo.size();++j){
+            qDebug() << odRoute[i]->mergeLanesInfo[j];
+        }
     }
 
 
@@ -1415,6 +1508,27 @@ float Road::GetPathLength(int pathID)
 }
 
 
+int Road::GetTargetNodeOfPath(int pathID)
+{
+    int index = pathId2Index.indexOf(pathID);
+    if( index < 0 ){
+        return -1;
+    }
+    return paths[index]->connectingNode;
+}
+
+
+float Road::GetPathMeanCurvature(int pathID)
+{
+    int index = pathId2Index.indexOf(pathID);
+    if( index < 0 ){
+        return 0.0;
+    }
+
+    return paths[index]->meanPathCurvature;
+}
+
+
 void Road::SetPathShape(int id)
 {
     int index = pathId2Index.indexOf(id);
@@ -1769,6 +1883,13 @@ void Road::CreatePathsforScenarioObject(int objectID)
 
         path->scenarioObjectID = objectID;
 
+        path->setSpeedVariationParam = false;
+        path->vDevP = 0.0;
+        path->vDevM = 0.0;
+        path->refVforDev = 0.0;
+        path->accelAtDev = 0.0;
+        path->decelAtDev = 0.0;
+
         paths.append( path );
 
         pathId2Index.append( maxID );
@@ -1877,10 +1998,37 @@ int Road::CreatePedestPathsforScenarioObject(int objectID,
 }
 
 
+float Road::GetPedestPathWidth(int ppID,int sect)
+{
+    float w = 1.0;
+    int ppIdx = pedestPathID2Index.indexOf( ppID );
+    if( ppIdx < 0 ){
+        return w;
+    }
+    if( sect >= 0 && sect < pedestPaths[ppIdx]->shape.size() ){
+        w = pedestPaths[ppIdx]->shape[sect]->width;
+    }
+    return w;
+}
+
+
 void Road::CheckPedestPathConnection()
 {
     qDebug() << "[Road::CheckPedestPathConnection]";
     qDebug() << "    nPedestPath = " << pedestPaths.size();
+
+    for(int i=0;i<pedestPaths.size();++i){
+        if( pedestPaths[i]->scenarioObjectID >= 0 ){
+            continue;
+        }
+
+        int j = pedestPaths[i]->shape.size() - 1;
+        pedestPaths[i]->shape[j]->angleToNextPos = pedestPaths[i]->shape[j-1]->angleToNextPos;
+        pedestPaths[i]->shape[j]->cosA = pedestPaths[i]->shape[j-1]->cosA;
+        pedestPaths[i]->shape[j]->sinA = pedestPaths[i]->shape[j-1]->sinA;
+        pedestPaths[i]->shape[j]->distanceToNextPos = 100.0;
+    }
+
 
     for(int i=0;i<pedestPaths.size();++i){
         if( pedestPaths[i]->scenarioObjectID < 0 ){
@@ -1899,6 +2047,12 @@ void Road::CheckPedestPathConnection()
             pedestPaths[i]->shape[j]->distanceToNextPos = sqrt( dx * dx + dy * dy );
 
         }
+
+        int j = pedestPaths[i]->shape.size() - 1;
+        pedestPaths[i]->shape[j]->angleToNextPos = pedestPaths[i]->shape[j-1]->angleToNextPos;
+        pedestPaths[i]->shape[j]->cosA = pedestPaths[i]->shape[j-1]->cosA;
+        pedestPaths[i]->shape[j]->sinA = pedestPaths[i]->shape[j-1]->sinA;
+        pedestPaths[i]->shape[j]->distanceToNextPos = 100.0;
     }
 }
 

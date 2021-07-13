@@ -49,6 +49,7 @@ public:
     void SetSysFile(QString filename);
     void SetConfFile(QString filename){ confFile = filename; }
     void LoadScenarioFile();
+    void SetExpIDText(QString t){ expIDText = t; }
 
 
 
@@ -70,7 +71,8 @@ signals:
     void SetRoadPointer(Road*);
     void TmpStopSimulation();
     void ExitProgram();
-
+    void ShowOptionalImage(int,float,float,float,float,float);
+    void HideOptionalImage(int);
 
 
 public slots:
@@ -91,20 +93,26 @@ public slots:
     void SimulationResume();
     void SetSpeedAdjustVal(int);
     void wrapExitProgram();
+    void wrapRedrawRequest();
     int SetSendData(int ,int ,int);
     int SetSendDataForFuncExtend(int ,int ,QList<int>);
     void SetSimulationFrequency(int);
     void SetTireHeight(int,int,float,float,float,float);
 
+    void SetSInterInitState(char, int, float, float ,float ,float, float);
+    void SetSInterObjDataToBuffer( char, int, struct AgentState *,struct SInterObjInfo * );
     void SetSInterObjData( char, int, struct AgentState *,struct SInterObjInfo * );
     void ForceChangeTSColor(int,int,float);
 
     void WarpVehicle(int,float,float,float);
+    void WarpVehicleAdjustPosToLane(int,float,float,float);
     void DisposeAgent(int);
     void AppearAgent(int);
     void EmbedAgentBehavior(int,float*,int);
     void ChangeReferenceSpeed(int,float);
     void CopyPathData(int,int);
+    void RequestLaneChange(int,int,int);
+    void RequestAssignedLaneChange(int,int,int,float);
     void ChangeControlModeStopAt(int,float,float);
     void ChangeControlModeHeadwayControl(int,float,float,float,float,int);
     void ChangeControlModeAgent(int);
@@ -116,6 +124,7 @@ public slots:
     void SetLateralGainMultiplier(int,float);
     void SetAgentGenerationNotAllowFlag(int, bool);
     void ForceChangeSpeed(int,float);
+    void ChangeSpeedProfile(int,QList<float>,QList<float>);
 
     void ShowAgentData(float x,float y);
     void SetTmpStopTime(int hour,int min,int sec);
@@ -126,6 +135,15 @@ public slots:
     void SetRestartFile(QString filename){ restartFile = filename; }
     void SetRestartData();
 
+    void DirectAssignAcceleration(int,float);
+    void SetTargetSpeedMode(int,int);
+    void ChangeRoadLaneSpeedLimit(QList<int>, QList<float>);
+    void ChangeVelocityControlParameters(float,float,float,float,float,int,QList<int>);
+    void ChangeLaneAssignedVelocityControlParameters(float,float,float,float,float,QList<int>);
+    void OverwriteAgentParameter(int,int,float);
+
+    void ChangeMoveSpeedPedestrian(QList<float>);
+    void ChangeOptionalImageParams(QList<float>);
 
 
 private:
@@ -142,6 +160,9 @@ private:
 
     LogOutputThread *logThread;
 
+    int nSIObject;
+    struct AgentState *asv;
+    struct SInterObjInfo *sov;
 
 
     bool DSMode;
@@ -172,6 +193,8 @@ private:
 
     QMutex *mutexDSStateWrite;
     int DSMoveTarget;
+
+    QString expIDText;
 };
 
 #endif // SYSTEMTHREAD_H

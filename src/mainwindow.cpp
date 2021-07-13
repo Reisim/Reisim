@@ -22,6 +22,12 @@
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
+
+    ReadPreferenceSetting();
+
+
+    //--------
+
     QWidget *cWidget = new QWidget();
 
     canvas = new GraphicCanvas();
@@ -29,6 +35,10 @@ MainWindow::MainWindow(QWidget *parent)
     confWin = new ConfigWindow();
     confWin->setWindowIcon( QIcon(":images/resim-icon.png") );
     confWin->hide();
+
+    if( preferenceSetting.empty() == false && preferenceSetting.keys().contains("Eye Height") == true ){
+        canvas->SetZeye( preferenceSetting.value( QString("Eye Height") ) );
+    }
 
 
     //--------
@@ -60,34 +70,109 @@ MainWindow::MainWindow(QWidget *parent)
     animeSpeedAdjusterByValue->setValue(50);
     animeSpeedAdjusterByValue->setFixedWidth(60);
 
+    if( preferenceSetting.empty() == false && preferenceSetting.keys().contains("Animation Speed Value Adjuster") == true ){
+        animeSpeedAdjusterByValue->setValue( preferenceSetting.value( QString("Animation Speed Value Adjuster") ) );
+    }
+
     animeSpeedAdjuster = new QSlider( Qt::Horizontal );
     animeSpeedAdjuster->setMinimum(0);
     animeSpeedAdjuster->setMaximum(200);
     animeSpeedAdjuster->setValue(50);
     animeSpeedAdjuster->setFixedWidth(100);
+
+    if( preferenceSetting.empty() == false && preferenceSetting.keys().contains("Animation Speed Adjuster") == true ){
+        animeSpeedAdjuster->setValue( preferenceSetting.value( QString("Animation Speed Adjuster") ) );
+    }
+
     connect(animeSpeedAdjuster,SIGNAL(valueChanged(int)),this,SLOT(SpeedAdjustMoved(int)));
     connect(animeSpeedAdjusterByValue,SIGNAL(valueChanged(int)),animeSpeedAdjuster,SLOT(setValue(int)));
-
 
     resetSpeedAdjuster = new QPushButton();
     resetSpeedAdjuster->setIcon(QIcon(":/images/reset.png"));
     resetSpeedAdjuster->setFixedWidth(25);
     connect(resetSpeedAdjuster,SIGNAL(clicked(bool)),this,SLOT(ResetSpeedAdjuster()));
 
+    resetZeye = new QPushButton("Reset Eye Height");
+    resetZeye->setIcon(QIcon(":/images/reset.png"));
+    resetZeye->setFixedWidth( resetZeye->sizeHint().width() );
+    connect(resetZeye,SIGNAL(clicked(bool)),this,SLOT(ResetZeye()));
+
+    cbShowPathCG = new QCheckBox("Show Path");
+    cbShowPathCG->setChecked(true);
+    connect(cbShowPathCG,SIGNAL(toggled(bool)),this,SLOT(ShowPathCGChanged(bool)));
+
+    if( preferenceSetting.empty() == false && preferenceSetting.keys().contains("Show Path CG") == true ){
+        if( preferenceSetting.value( QString("Show Path CG") ) == 1 ){
+            cbShowPathCG->setChecked(true);
+        }
+        else{
+            cbShowPathCG->setChecked(false);
+        }
+    }
+
+    cbShowTSCG = new QCheckBox("Show TS");
+    cbShowTSCG->setChecked(true);
+    connect(cbShowTSCG,SIGNAL(toggled(bool)),this,SLOT(ShowTSCGChanged(bool)));
+
+    if( preferenceSetting.empty() == false && preferenceSetting.keys().contains("Show TS CG") == true ){
+        if( preferenceSetting.value( QString("Show TS CG") ) == 1 ){
+            cbShowTSCG->setChecked(true);
+        }
+        else{
+            cbShowTSCG->setChecked(false);
+        }
+    }
+
+    cbShowBaseMap = new QCheckBox("Show Base-Map Image");
+    cbShowBaseMap->setChecked(true);
+    connect(cbShowBaseMap,SIGNAL(toggled(bool)),this,SLOT(ShowBaseMapChanged(bool)));
+
+    if( preferenceSetting.empty() == false && preferenceSetting.keys().contains("Show Base-map Image") == true ){
+        if( preferenceSetting.value( QString("Show Base-map Image") ) == 1 ){
+            cbShowBaseMap->setChecked(true);
+        }
+        else{
+            cbShowBaseMap->setChecked(false);
+        }
+    }
+
     cbShowVID = new QCheckBox("Show ID Label");
     cbShowVID->setChecked(true);
     connect(cbShowVID,SIGNAL(toggled(bool)),this,SLOT(ShowVIDChanged(bool)));
+
+    if( preferenceSetting.empty() == false && preferenceSetting.keys().contains("Show ID Label") == true ){
+        if( preferenceSetting.value( QString("Show ID Label") ) == 0 ){
+            cbShowVID->setChecked(false);
+        }
+    }
 
     cbShowPathID = new QCheckBox("Show Path Label");
     cbShowPathID->setChecked(false);
     connect(cbShowPathID,SIGNAL(toggled(bool)),this,SLOT(ShowPathIDChanged(bool)));
 
+    if( preferenceSetting.empty() == false && preferenceSetting.keys().contains("Show PATH Label") == true ){
+        if( preferenceSetting.value( QString("Show PATH Label") ) == 1 ){
+            cbShowPathID->setChecked(true);
+        }
+    }
+
     cbShowTSID = new QCheckBox("Show TS Label");
     cbShowTSID->setChecked(false);
     connect(cbShowTSID,SIGNAL(toggled(bool)),this,SLOT(ShowTSIDChanged(bool)));
 
+    if( preferenceSetting.empty() == false && preferenceSetting.keys().contains("Show TS Label") == true ){
+        if( preferenceSetting.value( QString("Show TS Label") ) == 1 ){
+            cbShowTSID->setChecked(true);
+        }
+    }
+
     cbStopGraphicUpdate = new QCheckBox("Stop Graphic Update");
     cbStopGraphicUpdate->setChecked(false);
+    if( preferenceSetting.empty() == false && preferenceSetting.keys().contains("Stop Graphic Update") == true ){
+        if( preferenceSetting.value( QString("Stop Graphic Update") ) == 1 ){
+            cbStopGraphicUpdate->setChecked(true);
+        }
+    }
     connect(cbStopGraphicUpdate,SIGNAL(toggled(bool)),this,SLOT(StopGraphicUpdateChanged(bool)));
 
     fontScaler = new QSlider( Qt::Horizontal );
@@ -95,8 +180,28 @@ MainWindow::MainWindow(QWidget *parent)
     fontScaler->setMaximum(200);
     fontScaler->setValue(14);
     fontScaler->setFixedWidth(100);
+
+    if( preferenceSetting.empty() == false && preferenceSetting.keys().contains("Font Scale") == true ){
+        fontScaler->setValue( preferenceSetting.value( QString("Font Scale") ) );
+    }
+
     connect(fontScaler,SIGNAL(valueChanged(int)),this,SLOT(SetFontScale(int)));
     connect(canvas,SIGNAL(ChangeFontScale(int)),fontScaler,SLOT(setValue(int)));
+
+    SInterfaceScalerLabel = new QLabel("S-Obj Scale:");
+    SInterfaceScalerLabel->setHidden(true);
+
+    SInterfaceScaler = new QSlider( Qt::Horizontal );
+    SInterfaceScaler->setMinimum(0);
+    SInterfaceScaler->setMaximum(800);
+    SInterfaceScaler->setValue(0);
+    SInterfaceScaler->setFixedWidth(100);
+    connect(SInterfaceScaler,SIGNAL(valueChanged(int)),canvas,SLOT(SetScaleSInterface(int)));
+    SInterfaceScaler->setHidden(true);
+
+    if( preferenceSetting.empty() == false && preferenceSetting.keys().contains("S-Interface Object Scale") == true ){
+        SInterfaceScaler->setValue( preferenceSetting.value( QString("S-Interface Object Scale") ) );
+    }
 
     snapshotBtn = new QPushButton("Snapshot");
     snapshotBtn->setIcon(QIcon(":/images/Pin.png"));
@@ -105,6 +210,11 @@ MainWindow::MainWindow(QWidget *parent)
 
     cbFixCameraToObj = new QCheckBox("Fix Camera to Object");
     cbFixCameraToObj->setChecked(false);
+    if( preferenceSetting.empty() == false && preferenceSetting.keys().contains("Fix Camera to Object") == true ){
+        if( preferenceSetting.value( QString("Fix Camera to Object") ) == 1 ){
+            cbFixCameraToObj->setChecked(true);
+        }
+    }
     connect(cbFixCameraToObj,SIGNAL(toggled(bool)),this,SLOT(FixCameraToObjChanged(bool)));
 
     cameraFixToObjID = new QSpinBox();
@@ -113,7 +223,9 @@ MainWindow::MainWindow(QWidget *parent)
     cameraFixToObjID->setValue(1);
     cameraFixToObjID->setPrefix("ID:");
     cameraFixToObjID->setFixedWidth(100);
-
+    if( preferenceSetting.empty() == false && preferenceSetting.keys().contains("Camera Fix Object ID") == true ){
+        cameraFixToObjID->setValue( preferenceSetting.value( QString("Camera Fix Object ID") ) );
+    }
 
     QHBoxLayout *controlLayout1 = new QHBoxLayout();
     QHBoxLayout *controlLayout2 = new QHBoxLayout();
@@ -128,18 +240,24 @@ MainWindow::MainWindow(QWidget *parent)
     controlLayout1->addWidget( animeSpeedAdjuster );
     controlLayout1->addWidget( resetSpeedAdjuster );
     controlLayout1->addWidget( snapshotBtn );
+    controlLayout1->addWidget( SInterfaceScalerLabel );
+    controlLayout1->addWidget( SInterfaceScaler );
     controlLayout1->addStretch();
 
+    controlLayout2->addWidget( cbShowPathCG );
+    controlLayout2->addWidget( cbShowTSCG );
+    controlLayout2->addWidget( cbShowBaseMap );
     controlLayout2->addWidget( cbShowVID );
     controlLayout2->addWidget( cbShowPathID );
     controlLayout2->addWidget( cbShowTSID );
-    controlLayout2->addWidget( cbStopGraphicUpdate );
-    controlLayout2->addWidget( new QLabel("Font Scaler:"));
-    controlLayout2->addWidget( fontScaler );
     controlLayout2->addStretch();
 
+    controlLayout3->addWidget( cbStopGraphicUpdate );
+    controlLayout3->addWidget( new QLabel("Font Scaler:"));
+    controlLayout3->addWidget( fontScaler );
     controlLayout3->addWidget( cbFixCameraToObj );
     controlLayout3->addWidget( cameraFixToObjID );
+    controlLayout3->addWidget( resetZeye );
     controlLayout3->addStretch();
 
     controlLayout->addLayout( controlLayout1 );
@@ -192,7 +310,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-
+    WritePreferenceSetting();
 }
 
 
@@ -212,7 +330,7 @@ void MainWindow::ShowConfigWindow()
 }
 
 
-void MainWindow::LoadSettingFile(QString filename)
+void MainWindow::LoadSettingFile(QString filename,bool withArg)
 {
     qDebug() << "[MainWindow::LoadSettingFile] filename = " << filename;
 
@@ -275,6 +393,10 @@ void MainWindow::LoadSettingFile(QString filename)
 
             emit SetScenraioFile( reconstFilename );
         }
+        else if( tag.contains("Base-Map Files") ){
+            QString basemapfile = QString(divLine[1]).trimmed();
+            emit SetBasemapFile(basemapfile,settingFolder);
+        }
         else if( tag.contains("Supplement File") ){
             QString supplementFile = QString(divLine[1]).trimmed();
             emit SetSupplementFile( supplementFile );
@@ -282,12 +404,30 @@ void MainWindow::LoadSettingFile(QString filename)
         else if( tag.contains("DS Mode") ){
             QString modeStr = QString(divLine[1]).trimmed();
             if( modeStr == "yes" ){
+
+                if( withArg == false ){
+                    QMessageBox::warning(this,"DS Mode Configulation","Can not use DS Mode configulation file.");
+                    return;
+                }
+
                 qDebug() << "!!!  SetDSMode emiited.";
                 emit SetDSMode();
-                cbStopGraphicUpdate->setChecked(true);
-                emit SetStopGraphicUpdate(true);
+
+                if( preferenceSetting.empty() == false && preferenceSetting.keys().contains("Stop Graphic Update") == true ){
+                    if( preferenceSetting.value( QString("Stop Graphic Update") ) == 1 ){
+                        cbStopGraphicUpdate->setChecked(true);
+                        emit SetStopGraphicUpdate(true);
+                    }
+                }
+                else{
+                    cbStopGraphicUpdate->setChecked(true);
+                    emit SetStopGraphicUpdate(true);
+                }
 
                 DSMode = true;
+
+                SInterfaceScalerLabel->setHidden( false );
+                SInterfaceScaler->setHidden( false );
             }
             else{
                 qDebug() << "Simulation Mode";
@@ -368,6 +508,8 @@ void MainWindow::LoadSettingFile(QString filename)
 
     }
     file.close();
+
+    qDebug() << "----- End of LoadSettingFile -----";
 }
 
 
@@ -385,7 +527,7 @@ void MainWindow::OpenSettingFile()
         return;
     }
 
-    LoadSettingFile(fileName);
+    LoadSettingFile(fileName,false);
 }
 
 
@@ -484,6 +626,35 @@ void MainWindow::SpeedAdjustMoved(int val)
 void MainWindow::ResetSpeedAdjuster()
 {
     animeSpeedAdjuster->setValue( 50 );
+}
+
+
+void MainWindow::ResetZeye()
+{
+    canvas->SetZeye( -50.0 );
+    canvas->ResetView();
+    canvas->update();
+}
+
+
+void MainWindow::ShowPathCGChanged(bool v)
+{
+    canvas->SetPathCGFlag(v);
+    canvas->update();
+}
+
+
+void MainWindow::ShowTSCGChanged(bool v)
+{
+    canvas->SetTSCGFlag(v);
+    canvas->update();
+}
+
+
+void MainWindow::ShowBaseMapChanged(bool v)
+{
+    canvas->SetBaseMapFlag(v);
+    canvas->update();
 }
 
 
@@ -618,3 +789,105 @@ void MainWindow::OutputRestartData()
 }
 
 
+void MainWindow::WritePreferenceSetting()
+{
+    QFile pFile( QApplication::applicationDirPath() + QString("/preference_setting.txt") );
+
+    if( pFile.open( QIODevice::WriteOnly | QIODevice::Text) == false ){
+        qDebug() << "Cannot open preference_setting.txt";
+        return;
+    }
+
+
+    QTextStream out(&pFile);
+
+    out << "Stop Graphic Update ; " << (cbStopGraphicUpdate->isChecked() == true ? 1 : 0) << "\n";
+    out << "Fix Camera to Object ; " << (cbFixCameraToObj->isChecked() == true ? 1 : 0) << "\n";
+    out << "Camera Fix Object ID ; " << cameraFixToObjID->value() << "\n";
+    out << "Show Path CG ; " << (cbShowPathCG->isChecked() == true ? 1 : 0) << "\n";
+    out << "Show TS CG ; " << (cbShowTSCG->isChecked() == true ? 1 : 0) << "\n";
+    out << "Show Base-map Image ; " << (cbShowBaseMap->isChecked() == true ? 1 : 0) << "\n";
+    out << "Eye Height ; " << canvas->GetZeye() << "\n";
+    out << "S-Interface Object Scale ; " << SInterfaceScaler->value() << "\n";
+    out << "Show ID Label ; " << (cbShowVID->isChecked() == true ? 1 : 0) << "\n";
+    out << "Show TS Label ; " << (cbShowTSID->isChecked() == true ? 1 : 0) << "\n";
+    out << "Show PATH Label ; " << (cbShowPathID->isChecked() == true ? 1 : 0) << "\n";
+    out << "Font Scale ; " << fontScaler->value() << "\n";
+    out << "Animation Speed Adjuster ; " << animeSpeedAdjuster->value() << "\n";
+    out << "Animation Speed Value Adjuster ; " << animeSpeedAdjusterByValue->value() << "\n";
+
+    pFile.close();
+}
+
+
+void MainWindow::ReadPreferenceSetting()
+{
+    qDebug() << "[ReadPreferenceSetting]" << QApplication::applicationDirPath() + QString("/preference_setting.txt");
+
+    QFile pFile( QApplication::applicationDirPath() + QString("/preference_setting.txt") );
+
+    if( pFile.open( QIODevice::ReadOnly | QIODevice::Text) == false ){
+        qDebug() << "No preference_setting.txt";
+        return;
+    }
+
+    preferenceSetting.clear();
+
+    QTextStream in(&pFile);
+
+    qDebug() << "Preference:";
+
+    while(in.atEnd() == false ){
+        QString aLine = in.readLine();
+        if( aLine.isNull() == true || aLine.isEmpty() == true || aLine.startsWith("#") == true ){
+            continue;
+        }
+
+        QStringList divLine = aLine.split(";");
+        if( divLine.size() != 2 ){
+            continue;
+        }
+
+        QString key = QString(divLine[0]).trimmed();
+        if( key.contains("Eye Height")){
+            int val = (int)QString(divLine[1]).trimmed().toFloat();
+
+            preferenceSetting.insert( key, val );
+            qDebug() << key << " " << val;
+        }
+        else{
+            int val = QString(divLine[1]).trimmed().toInt();
+
+            preferenceSetting.insert( key, val );
+            qDebug() << key << " " << val;
+        }
+    }
+
+    pFile.close();
+}
+
+
+void MainWindow::ShowOptionalImage(int id,float x,float y,float z,float rot,float s)
+{
+    if( id < 0 || id >= canvas->optionalImages.size() ){
+        return;
+    }
+
+    canvas->optionalImages[id]->x = x;
+    canvas->optionalImages[id]->y = y;
+    canvas->optionalImages[id]->z = z;
+    canvas->optionalImages[id]->rotate = rot;
+    canvas->optionalImages[id]->scale = s;
+
+    canvas->optionalImages[id]->showImage = true;
+}
+
+
+void MainWindow::HideOptionalImage(int id)
+{
+    if( id < 0 || id >= canvas->optionalImages.size() ){
+        return;
+    }
+
+    canvas->optionalImages[id]->showImage = false;
+}

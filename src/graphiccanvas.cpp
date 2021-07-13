@@ -65,6 +65,11 @@ GraphicCanvas::GraphicCanvas(QOpenGLWidget *parent) : QOpenGLWidget(parent)
     Y_eye = 0.0;
     Z_eye = -50.0;
 
+    xmin = 0.0;
+    xmax = 0.0;
+    ymin = 0.0;
+    ymax = 0.0;
+
     X_trans = X_eye;
     Y_trans = Y_eye;
     Z_trans = Z_eye;
@@ -77,7 +82,13 @@ GraphicCanvas::GraphicCanvas(QOpenGLWidget *parent) : QOpenGLWidget(parent)
     showPathID = false;
     showTSID = false;
 
+    showPathCG = true;
+    showTSCG = true;
+    showMapImage = true;
+    backMapImage = false;
+
     fontScale = 14;
+    sInterfaceObjScale = 0;
 
     currentWidth = 800;
     currentHeight = 800;
@@ -302,6 +313,10 @@ void GraphicCanvas::initializeGL()
 
     VBOText_TS->release();
     VAOText_TS.release();
+
+
+    // Load Optinal Image
+    LoadOptionalImage();
 }
 
 
@@ -355,7 +370,55 @@ void GraphicCanvas::paintGL()
     w2c.rotate( cameraQuat );
 
 
-    if( pathPolygons ){
+    // Base map
+    if( rectPoly.isValid == true && showMapImage == true ){
+
+        glLineWidth(1.0);
+
+        for(int i=0;i<baseMapImages.size();++i){
+
+            if( baseMapImages[i]->isValid == false ){
+                continue;
+            }
+
+            rectPoly.array.bind();
+
+            float mapZ = -1.0;
+            if( backMapImage == true ){
+                mapZ = -25.0;
+            }
+            model2World.setTranslation( QVector3D( baseMapImages[i]->x,
+                                                   baseMapImages[i]->y,
+                                                   mapZ) );
+
+            float angle = baseMapImages[i]->rotate * 0.017452;
+            model2World.setRotation( QQuaternion( cos(angle*0.5), 0.0, 0.0, sin(angle*0.5) ) );
+
+            float s = baseMapImages[i]->scale;
+            model2World.setScale( QVector3D(s * baseMapImages[i]->halfWidth, s * baseMapImages[i]->halfHeight, 1.0) );
+
+            program->setUniformValue( u_modelToWorld,  w2c * model2World.getWorldMatrix() );
+
+            int useTex  = program->uniformLocation("useTex");
+            program->setUniformValue( useTex, 1 );
+
+            int isText  = program->uniformLocation("isText");
+            program->setUniformValue( isText, 0 );
+
+            glActiveTexture( GL_TEXTURE0 );
+
+            glBindTexture(GL_TEXTURE_2D, baseMapImages[i]->textureID);
+
+            glDrawArrays(GL_QUADS, 0, 4 * sizeof(GLfloat) );
+
+            rectPoly.array.release();
+        }
+    }
+
+
+
+    // Path
+    if( pathPolygons && showPathCG ){
 
         program->setUniformValue( u_worldToView, projection );
 
@@ -417,19 +480,24 @@ void GraphicCanvas::paintGL()
 
                 model2World.setTranslation(QVector3D( agent[i]->state.x ,
                                                       agent[i]->state.y ,
-                                                      agent[i]->state.z  ));
+                                                      agent[i]->state.z_path  ));
 
                 float half_psi = agent[i]->state.yaw * 0.5;
                 model2World.setRotation( QQuaternion( cos(half_psi), 0.0, 0.0, sin(half_psi) ) );
 
-                model2World.setScale( QVector3D( 1.0, 1.0, 1.0 ) );
+                if( agent[i]->isSInterfaceObject == true ){
+                    model2World.setScale( QVector3D( 1.0, 1.0, 1.0 ) * (1.0 + sInterfaceObjScale * 0.05) );
+                }
+                else{
+                    model2World.setScale( QVector3D( 1.0, 1.0, 1.0 ) );
+                }
 
                 program->setUniformValue( u_modelToWorld,  w2c * model2World.getWorldMatrix() );
 
 
                 int colorPos  = program->uniformLocation("vColor");
                 if( agent[i]->isSInterfaceObject == true ){
-                    program->setUniformValue( colorPos, QVector4D(0.7, 0.7, 0.7, 1.0) );
+                    program->setUniformValue( colorPos, QVector4D(0.998, 0.1, 0.05, 1.0) );
                 }
                 else if( agent[i]->isScenarioObject == true ){
                     program->setUniformValue( colorPos, QVector4D(0.12, 0.7, 0.7, 1.0) );
@@ -505,12 +573,23 @@ void GraphicCanvas::paintGL()
             float half_psi = agent[i]->state.yaw * 0.5;
             model2World.setRotation( QQuaternion( cos(half_psi), 0.0, 0.0, sin(half_psi) ) );
 
+            if( agent[i]->isSInterfaceObject == true ){
+
+                float w = personModels[personShapeID]->width;
+                float f = 0.5 / w;
+
+                model2World.setScale( QVector3D( 1.0, 1.0, 1.0 ) * (1.0 + sInterfaceObjScale * 0.05) * f );
+            }
+            else{
+                model2World.setScale( QVector3D( 1.0, 1.0, 1.0 ) );
+            }
+
             program->setUniformValue( u_modelToWorld,  w2c * model2World.getWorldMatrix() );
 
 
             int colorPos  = program->uniformLocation("vColor");
             if( agent[i]->isSInterfaceObject == true ){
-                program->setUniformValue( colorPos, QVector4D(0.7, 0.7, 0.7, 1.0) );
+                program->setUniformValue( colorPos, QVector4D(0.998, 0.1, 0.05, 1.0) );
             }
             else if( agent[i]->isScenarioObject == true ){
                 program->setUniformValue( colorPos, QVector4D(0.12, 0.7, 0.7, 1.0) );
@@ -543,7 +622,7 @@ void GraphicCanvas::paintGL()
     }
 
 
-    //if( nAppearAgent > 0 ){
+    if( showTSCG ){
 
     //qDebug() << "trafficSignal.size = " << trafficSignal.size();
 
@@ -559,6 +638,8 @@ void GraphicCanvas::paintGL()
 
             float half_psi = (trafficSignal[i]->direction + 3.141592 * 0.5) * 0.5;
             model2World.setRotation( QQuaternion( cos(half_psi), 0.0, 0.0, sin(half_psi) ) );
+
+            model2World.setScale( QVector3D(1.0, 1.0, 1.0) );
 
             program->setUniformValue( u_modelToWorld,  w2c * model2World.getWorldMatrix() );
 
@@ -617,12 +698,12 @@ void GraphicCanvas::paintGL()
 
             TSPolygons[i]->TSPolygonsArray.release();
         }
-    //}
+    }
 
 
 
     // Fonts
-    if( showPathID == true && road->paths.size() > 0 ){
+    if( showPathCG == true && showPathID == true && road->paths.size() > 0 ){
 
         VAOText_Path.bind();
 
@@ -676,7 +757,7 @@ void GraphicCanvas::paintGL()
         VAOText_Path.release();
     }
 
-    if( showTSID == true && trafficSignal.size() > 0 ){
+    if( showTSCG == true && showTSID == true && trafficSignal.size() > 0 ){
 
         VAOText_TS.bind();
 
@@ -734,7 +815,6 @@ void GraphicCanvas::paintGL()
         VAOText.bind();
 
         int colorPos  = program->uniformLocation("vColor");
-        program->setUniformValue( colorPos, QVector4D(0.067, 1.0, 0.067, 1.0) );
 
         int useTex  = program->uniformLocation("useTex");
         program->setUniformValue( useTex, 100 );
@@ -772,23 +852,29 @@ void GraphicCanvas::paintGL()
             if( agent[i]->agentKind < 100 ){
                 if( agent[i]->isSInterfaceObject == true ){
                     sprintf(str,"[DS]V%d",agent[i]->ID);
+                    program->setUniformValue( colorPos, QVector4D(0.998, 0.1, 0.05, 1.0) );
                 }
                 else if( agent[i]->isScenarioObject == true ){
                     sprintf(str,"[snr]V%d",agent[i]->ID);
+                    program->setUniformValue( colorPos, QVector4D(0.067, 1.0, 0.067, 1.0) );
                 }
                 else{
                     sprintf(str,"V%d",agent[i]->ID);
+                    program->setUniformValue( colorPos, QVector4D(0.067, 1.0, 0.067, 1.0) );
                 }
             }
             else if( agent[i]->agentKind >= 100 ){
                 if( agent[i]->isSInterfaceObject == true ){
-                    sprintf(str,"[DS]P%d",agent[i]->ID);
+                    sprintf(str,"[PS]P%d",agent[i]->ID);
+                    program->setUniformValue( colorPos, QVector4D(0.998, 0.1, 0.05, 1.0) );
                 }
                 else if( agent[i]->isScenarioObject == true ){
                     sprintf(str,"[snr]P%d",agent[i]->ID);
+                    program->setUniformValue( colorPos, QVector4D(0.998, 0.78, 0.00, 1.0) );
                 }
                 else{
                     sprintf(str,"P%d",agent[i]->ID);
+                    program->setUniformValue( colorPos, QVector4D(0.998, 0.78, 0.00, 1.0) );
                 }
             }
 
@@ -812,6 +898,52 @@ void GraphicCanvas::paintGL()
     }
 
     model2World.setScale( QVector3D(1.0, 1.0, 1.0) );
+
+
+    if( rectPoly.isValid == true && optionalImages.size() > 0 ){
+
+        glLineWidth(1.0);
+
+//        qDebug() << "Draw OptinalImage";
+
+        for(int i=0;i<optionalImages.size();++i){
+
+            if( optionalImages[i]->isValid == false || optionalImages[i]->showImage == false ){
+                continue;
+            }
+
+            rectPoly.array.bind();
+            model2World.setTranslation( QVector3D( optionalImages[i]->x,
+                                                   optionalImages[i]->y,
+                                                   optionalImages[i]->z) );
+
+            qDebug() << "x = " << optionalImages[i]->x << " y = " << optionalImages[i]->y << " z = " << optionalImages[i]->z
+                     << " rot = " << optionalImages[i]->rotate << " s = " << optionalImages[i]->scale;
+
+
+            float angle = optionalImages[i]->rotate * 0.017452;
+            model2World.setRotation( QQuaternion( cos(angle*0.5), 0.0, 0.0, sin(angle*0.5) ) );
+
+            float s = optionalImages[i]->scale;
+            model2World.setScale( QVector3D(s * optionalImages[i]->halfWidth, s * optionalImages[i]->halfHeight, 1.0) );
+
+            program->setUniformValue( u_modelToWorld,  w2c * model2World.getWorldMatrix() );
+
+            int useTex  = program->uniformLocation("useTex");
+            program->setUniformValue( useTex, 1 );
+
+            int isText  = program->uniformLocation("isText");
+            program->setUniformValue( isText, 0 );
+
+            glActiveTexture( GL_TEXTURE0 );
+
+            glBindTexture(GL_TEXTURE_2D, optionalImages[i]->textureID);
+
+            glDrawArrays(GL_QUADS, 0, 4 * sizeof(GLfloat) );
+
+            rectPoly.array.release();
+        }
+    }
 }
 
 
@@ -914,6 +1046,8 @@ void GraphicCanvas::wheelEvent(QWheelEvent *e)
     emit ChangeFontScale(fs);
 
     QOpenGLWidget::update();
+
+//    qDebug() << "X=" << X_eye << " Y=" << Y_eye << " Z=" << Z_eye;
 }
 
 
@@ -1041,8 +1175,9 @@ void GraphicCanvas::SetPersonPolygon(int index,float width,float height,float de
         return;
     }
 
-    makeCurrent();
+    personModels[index]->width = width;
 
+    makeCurrent();
 
     bool ret;
     ret = personModels[index]->personPolygonArray.create();
@@ -1535,8 +1670,10 @@ void GraphicCanvas::SetRoadData()
     qDebug() << " nVertex = " << nVertex;
 
 
-    float xmin = -50.0, xmax = 50.0;
-    float ymin = -50.0, ymax = 50.0;
+    xmin = -50.0;
+    xmax = 50.0;
+    ymin = -50.0;
+    ymax = 50.0;
 
     bool setEyePos = true;
 
@@ -1728,7 +1865,7 @@ void GraphicCanvas::SetRoadData()
                     ze += 0.1;
                 }
 
-                if( road->paths[i]->scenarioObjectID >= 0 ){
+                if( road->pedestPaths[i]->scenarioObjectID >= 0 ){
                     pathPolygons->pathPolygonData << x1 << y1 << zs << 0.0f << 0.0f << 0.2f << 0.3f << 0.7f;
                     pathPolygons->pathPolygonData << x2 << y2 << zs << 0.0f << 0.0f << 0.2f << 0.3f << 0.7f;
                     pathPolygons->pathPolygonData << x3 << y3 << ze << 0.0f << 0.0f << 0.2f << 0.3f << 0.7f;
@@ -1793,33 +1930,86 @@ void GraphicCanvas::SetRoadData()
         pathPolygons->pathPolygonsArray.release();
     }
 
+    //
+    // Rectangle
+    qDebug() << "Create Rectangle Polygon";
 
-    if( setEyePos ){
+    rectPoly.isValid = false;
+    int ret = rectPoly.array.create();
+    if( !ret ){
+        qDebug() << "   rectPoly.array.create failed.";
+    }
+    rectPoly.array.bind();
+    rectPoly.buffer = new QOpenGLBuffer();
+    ret =  rectPoly.buffer->create();
+    if( !ret ){
+        qDebug() << "   rectPoly.buffer.create failed.";
+    }
+    else{
+        ret = rectPoly.buffer->bind();
+        if( !ret ){
+            qDebug() << "   rectPoly.buffer.bind failed.";
+        }
+        else{
 
-        X_eye = ( xmax + xmin ) / 2.0;
-        Y_eye = ( ymax + ymin ) / 2.0;
+            rectPoly.vertex << -1.0 << 1.0 << 0.0 << 0.0 << 0.0 << 1.0 << 1.0 << 1.0;
+            rectPoly.vertex << -1.0 << -1.0 << 0.0 << 1.0 << 0.0 << 1.0 << 1.0 << 1.0;
+            rectPoly.vertex <<  1.0 << -1.0 << 0.0 << 1.0 << 1.0 << 1.0 << 1.0 << 1.0;
+            rectPoly.vertex <<  1.0 <<  1.0 << 0.0 << 0.0 << 1.0 << 1.0 << 1.0 << 1.0;
 
-        X_eye *= (-1.0);
-        Y_eye *= (-1.0);
+            rectPoly.buffer->setUsagePattern( QOpenGLBuffer::StaticDraw );
+            rectPoly.buffer->allocate( rectPoly.vertex.constData(), rectPoly.vertex.size() * sizeof(GLfloat) );
 
-        float xlen = (xmax - xmin) / 2.0;
-        float ylen = (ymax - ymin) / 2.0;
-        Z_eye = xlen > ylen ? xlen : ylen;
-        Z_eye *= (-1.0) / 0.5578;
+            program->enableAttributeArray( 0 );
+            program->setAttributeBuffer( 0, GL_FLOAT, 0, 3, 8 * sizeof(GLfloat) );
 
-        qDebug() << "xmin = " << xmin << " xmax = " << xmax;
-        qDebug() << "ymin = " << ymin << " ymax = " << ymax;
-        qDebug() << "xlen = " << xlen << " ylen = " << ylen;
+            program->enableAttributeArray( 1 );
+            program->setAttributeBuffer( 1, GL_FLOAT, 3 * sizeof(GLfloat) , 2, 8 * sizeof(GLfloat) );
 
-        int fs = (int)(-0.0838 * Z_eye) + 10;
-        emit ChangeFontScale( fs );
+            program->enableAttributeArray( 2 );
+            program->setAttributeBuffer( 2, GL_FLOAT, 5 * sizeof(GLfloat) , 3, 8 * sizeof(GLfloat) );
+
+            rectPoly.buffer->release();
+            rectPoly.array.release();
+
+            rectPoly.isValid = true;
+        }
     }
 
-    //qDebug() << "X_eye = " << X_eye << " Y_eye = " << Y_eye << " Z_eye = " << Z_eye;
+
+    if( setEyePos ){
+        qDebug() << "ResetView";
+        ResetView();
+    }
+
+    qDebug() << "X_eye = " << X_eye << " Y_eye = " << Y_eye << " Z_eye = " << Z_eye;
 
     doneCurrent();
 }
 
+
+void GraphicCanvas::ResetView()
+{
+    X_eye = ( xmax + xmin ) / 2.0;
+    Y_eye = ( ymax + ymin ) / 2.0;
+
+    X_eye *= (-1.0);
+    Y_eye *= (-1.0);
+
+    float xlen = (xmax - xmin) / 2.0;
+    float ylen = (ymax - ymin) / 2.0;
+    if( Z_eye == -50.0 && xlen > 0 && ylen > 0 ){
+        Z_eye = xlen > ylen ? xlen : ylen;
+        Z_eye *= (-1.0) / 0.5578;
+    }
+
+    qDebug() << "xmin = " << xmin << " xmax = " << xmax;
+    qDebug() << "ymin = " << ymin << " ymax = " << ymax;
+    qDebug() << "xlen = " << xlen << " ylen = " << ylen;
+
+    int fs = (int)(-0.0838 * Z_eye) + 10;
+    emit ChangeFontScale( fs );
+}
 
 void GraphicCanvas::SetTrafficParticipantsData()
 {
@@ -1978,4 +2168,269 @@ void GraphicCanvas::LocateAtAgent(int id)
     }
 }
 
+
+void GraphicCanvas::SetBasemapFile(QString filename,QString settingFileFolder)
+{
+    qDebug() << "[GraphicCanvas::SetBasemapFile] filename = " << filename;
+
+    // Check supplied filename is absolute or relative
+    if( filename.contains(":") == false ){
+        filename = settingFileFolder + filename;  // filename is relative from settingFileFolder
+    }
+
+    QFile file( filename );
+    if( file.open(QIODevice::ReadOnly | QIODevice::Text) == false ){
+        qDebug() << "[GraphicCanvas::SetBasemapFile] Cannot open file ; " << filename;
+        return;
+    }
+
+    QTextStream in(&file);
+    QString strLines = in.readAll();
+    file.close();
+
+    QStringList strLinesDiv = strLines.split("\n");
+    for(int i=0;i<strLinesDiv.size();++i){
+        if( QString(strLinesDiv[i]).contains("BASE MAP") == false ){
+            continue;
+        }
+
+        QStringList datDiv = QString(strLinesDiv[i]).split(",");
+        if( datDiv.size() < 6 ){
+            continue;
+        }
+
+        struct baseMapImage *bmi = new struct baseMapImage;
+
+        bmi->path = QString( datDiv[0] ).remove("BASE MAP :").trimmed();
+        bmi->filename = QString( datDiv[1] ).trimmed();
+        bmi->x = QString( datDiv[2] ).trimmed().toFloat();
+        bmi->y = QString( datDiv[3] ).trimmed().toFloat();
+        bmi->scale = QString( datDiv[4] ).trimmed().toFloat();
+        bmi->rotate = QString( datDiv[5] ).trimmed().toFloat();
+
+//        qDebug() << "Try to Load: " << bmi->path << bmi->filename;
+//        qDebug() << "  x = " << bmi->x << " y = " << bmi->y << " scale = " << bmi->scale;
+
+        LoadMapImage(bmi);
+
+        if( bmi->isValid == true ){
+            baseMapImages.append( bmi );
+
+            if( (i+1) % 10 == 0 ){
+                qDebug() << "Processed " << (i+1) << "/" << strLinesDiv.size();
+            }
+        }
+        else{
+            delete bmi;
+        }
+    }
+
+    update();
+}
+
+
+void GraphicCanvas::LoadMapImage(struct baseMapImage* bmi)
+{
+    makeCurrent();
+
+    // Load Image
+    QImage map;
+
+    bmi->isValid = false;
+
+    QString PathToFile = bmi->path;
+    if( PathToFile.endsWith("/") == false ){
+        PathToFile += QString("/");
+    }
+
+    QString testname = PathToFile + bmi->filename;
+
+//    qDebug() << "Loading " << testname;
+
+    if( map.load(testname) == false ){
+        qDebug() << "Loading " << testname;
+        qDebug() << "Failed.";
+        return;
+    }
+
+    glGenTextures(1, &(bmi->textureID));
+    glBindTexture(GL_TEXTURE_2D, bmi->textureID);
+
+    int wi = map.width();
+    int hi = map.height();
+
+    bmi->halfWidth = wi * 0.5;
+    bmi->halfHeight = hi * 0.5;
+
+    int wi2 = 2;
+    while( wi2 <= wi )
+        wi2 *= 2;
+
+    if( wi2 > 2048 )
+        wi2 = 2048;
+
+    int hi2 = 2;
+    while( hi2 <= hi )
+            hi2 *= 2;
+
+    if( hi2 > 2048 )
+        hi2 = 2048;
+
+    GLubyte *bits;
+    int tsz = wi2 * hi2 * 4;
+    bits = new GLubyte [tsz];
+
+    tsz = 0;
+    for(int i=0;i<wi2;++i){
+        int x = (int)((i / (float)wi2) * (float)wi);
+        for(int j=0;j<hi2;++j){
+            int y = (int)((j / (float)hi2) * (float)hi);
+            QRgb pix = map.pixel(x,y);
+            bits[tsz++] = (GLubyte)qRed(pix);
+            bits[tsz++] = (GLubyte)qGreen(pix);
+            bits[tsz++] = (GLubyte)qBlue(pix);
+            bits[tsz++] = 0xff;
+        }
+    }
+
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D( GL_TEXTURE_2D , 0 , GL_RGBA , wi2 , hi2,  0 , GL_RGBA , GL_UNSIGNED_BYTE , bits );
+
+    delete [] bits;
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    bmi->isValid = true;
+
+    doneCurrent();
+
+//    qDebug() << "Image loaded successfully.";
+}
+
+void GraphicCanvas::SetScaleSInterface(int v)
+{
+    sInterfaceObjScale = v;
+}
+
+
+void GraphicCanvas::LoadOptionalImage()
+{
+    qDebug() << "+--- LoadOptionalImage";
+
+    QString pathToApp = QApplication::applicationDirPath();
+    QString pathToImageList = pathToApp + QString("/optionalImages/image_list.txt");
+
+    QFile file(pathToImageList);
+    if( file.open(QIODevice::ReadOnly | QIODevice::Text) == false ){
+        qDebug() << "  image_list.txt not found.";
+        return;
+    }
+
+    qDebug() << "  image_list.txt found.";
+
+    QTextStream in(&file);
+    while( in.atEnd() == false ){
+        QString tmpStr = in.readLine();
+
+        struct OptionalImage *oi = new OptionalImage;
+
+        oi->isValid = false;
+        oi->filename = tmpStr;
+
+        QString testname = tmpStr;
+        if( testname.startsWith("C:") == false ){    // Not full path
+            if( testname.contains("/") == false ){   // only filename
+                testname = pathToApp + QString("/optionalImages/") + testname;
+            }
+        }
+
+        qDebug() << "  Try to load " << testname;
+
+        QImage map;
+        if( map.load(testname) == false ){
+            qDebug() << "      Failed.";
+            delete oi;
+            continue;
+        }
+        qDebug() << "      Loaded.";
+
+        oi->x = 0.0;
+        oi->y = 0.0;
+        oi->z = 10.0;
+        oi->rotate = 0.0;
+        oi->scale = 1.0;
+
+        makeCurrent();
+
+        glGenTextures(1, &(oi->textureID));
+        glBindTexture(GL_TEXTURE_2D, oi->textureID);
+
+        int wi = map.width();
+        int hi = map.height();
+
+        oi->halfWidth = wi * 0.5;
+        oi->halfHeight = hi * 0.5;
+
+        int wi2 = 2;
+        while( wi2 <= wi )
+            wi2 *= 2;
+
+        if( wi2 > 2048 )
+            wi2 = 2048;
+
+        int hi2 = 2;
+        while( hi2 <= hi )
+                hi2 *= 2;
+
+        if( hi2 > 2048 )
+            hi2 = 2048;
+
+        GLubyte *bits;
+        int tsz = wi2 * hi2 * 4;
+        bits = new GLubyte [tsz];
+
+        tsz = 0;
+        for(int i=0;i<wi2;++i){
+            int x = (int)((i / (float)wi2) * (float)wi);
+            for(int j=0;j<hi2;++j){
+                int y = (int)((j / (float)hi2) * (float)hi);
+                QRgb pix = map.pixel(x,y);
+                bits[tsz++] = (GLubyte)qRed(pix);
+                bits[tsz++] = (GLubyte)qGreen(pix);
+                bits[tsz++] = (GLubyte)qBlue(pix);
+                bits[tsz++] = 0xff;
+            }
+        }
+
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D( GL_TEXTURE_2D , 0 , GL_RGBA , wi2 , hi2,  0 , GL_RGBA , GL_UNSIGNED_BYTE , bits );
+
+        delete [] bits;
+
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        oi->isValid = true;
+        oi->showImage = false;
+
+        optionalImages.append( oi );
+
+        doneCurrent();
+    }
+
+    qDebug() << "  Size of optionalImages = " << optionalImages.size();
+
+    file.close();
+}
 

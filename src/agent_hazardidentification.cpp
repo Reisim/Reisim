@@ -20,9 +20,9 @@
 void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
 {
 
-    decisionMalingCount++;
-    if( decisionMalingCount >= decisionMakingCountMax ){
-        decisionMalingCount = 0;
+    decisionMakingCount++;
+    if( decisionMakingCount >= decisionMakingCountMax ){
+        decisionMakingCount = 0;
 
         strForDebugRiskEval = QString("-----\n");
     }
@@ -38,7 +38,7 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
 
             // If far from intersection, skip CP check
             bool skipCPCheckOfVehicle = false;
-            if( memory.distanceToNodeWPIn > 6.0 * ( state.V > 5.0 ? state.V : 5.0) ){
+            if( memory.distanceToCurrentTargetNodeWPIn > 6.0 * ( state.V > 5.0 ? state.V : 5.0) ){
 
                 skipCPCheckOfVehicle = true;
 
@@ -127,7 +127,7 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                             }
                         }
 
-                        strForDebugRiskEval += QString("P%1 myIdx=%2 ObjIdx=%3\n").arg( memory.perceptedObjects[i]->objectID ).arg( memory.perceptedObjects[i]->myCPPathIndex ).arg( memory.perceptedObjects[i]->objCPPathIndex );
+//                        strForDebugRiskEval += QString("P%1 myIdx=%2 ObjIdx=%3\n").arg( memory.perceptedObjects[i]->objectID ).arg( memory.perceptedObjects[i]->myCPPathIndex ).arg( memory.perceptedObjects[i]->objCPPathIndex );
 
 
                         // Update distance to CP
@@ -544,6 +544,9 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
                         }
 
                         if( memory.distToYeildStopLine + dist - memory.distanceFromStartWPInCurrentPath > 200.0){
+                            break;
+                        }
+                        else if( memory.distToYeildStopLine < -1.5 ){
                             break;
                         }
 

@@ -47,6 +47,7 @@ public slots:
     void SaveAsConfig();
 
     void SelectScenario();
+    void SelectBaseMap();
     void SelectLogOutputFolder();
     void SelectLogFileName();
     void SelectRestartFile();
@@ -68,6 +69,7 @@ private:
     QLabel *logSaveFolder;
     QLabel *logFileName;
     QLabel *scenarioFilename;
+    QLabel *baseMapFilename;
 
     QLabel *restartFilename;
     QDoubleSpinBox *calTimeStep;

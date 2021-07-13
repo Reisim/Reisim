@@ -47,7 +47,7 @@ void SystemThread::OutputRestartData(QString filename)
             << agent[i]->cognitionCountMax << ","
             << agent[i]->cognitionCount << ","
             << agent[i]->decisionMakingCountMax << ","
-            << agent[i]->decisionMalingCount << ","
+            << agent[i]->decisionMakingCount << ","
             << agent[i]->controlCountMax << ","
             << agent[i]->controlCount << "\n";
 
@@ -75,41 +75,56 @@ void SystemThread::OutputRestartData(QString filename)
             << agent[i]->param.minimumPerceptibleDecelerationOfPreceding << ","
             << agent[i]->param.speedVariationFactor << "\n";
 
+        if( agent[i]->agentKind < 100 ){
 
-        out << agent[i]->vehicle.state.X << ","
-            << agent[i]->vehicle.state.Y << ","
-            << agent[i]->vehicle.state.Z << ","
-            << agent[i]->vehicle.state.vx << ","
-            << agent[i]->vehicle.state.yawAngle << ","
-            << agent[i]->vehicle.state.roll << ","
-            << agent[i]->vehicle.state.pitch << ","
-            << agent[i]->vehicle.state.yawRate << ","
-            << agent[i]->vehicle.state.ax << ","
-            << agent[i]->state.accel << ","
-            << agent[i]->state.brake << ","
-            << agent[i]->state.steer << ","
-            << agent[i]->vehicle.winker_state << ","
-            << agent[i]->vehicle.winker_count << ","
-            << agent[i]->vehicle.vehicleModelID << "\n";
+            out << agent[i]->vehicle.state.X << ","
+                << agent[i]->vehicle.state.Y << ","
+                << agent[i]->vehicle.state.Z << ","
+                << agent[i]->vehicle.state.vx << ","
+                << agent[i]->vehicle.state.yawAngle << ","
+                << agent[i]->vehicle.state.roll << ","
+                << agent[i]->vehicle.state.pitch << ","
+                << agent[i]->vehicle.state.yawRate << ","
+                << agent[i]->vehicle.state.ax << ","
+                << agent[i]->state.accel << ","
+                << agent[i]->state.brake << ","
+                << agent[i]->state.steer << ","
+                << agent[i]->vehicle.winker_state << ","
+                << agent[i]->vehicle.winker_count << ","
+                << agent[i]->vehicle.vehicleModelID << "\n";
 
+            out << agent[i]->memory.routeType << ","
+                << agent[i]->memory.routeIndex << ","
+                << agent[i]->memory.routeLaneIndex << ","
+                << agent[i]->memory.currentTargetPath << ","
+                << agent[i]->memory.currentTargetPathIndexInList << ","
+                << agent[i]->memory.distanceFromStartWPInCurrentPath << ","
+                << agent[i]->memory.scenarioPathSelectID << ","
+                << agent[i]->memory.distanceToTurnNodeWPIn << ","
+                << agent[i]->memory.distanceToNodeWPIn << ","
+                << agent[i]->memory.distanceToTurnNodeWPOut << ","
+                << agent[i]->memory.distanceToNodeWPOut << ","
+                << agent[i]->memory.LCSupportRouteLaneIndex << ","
+                << agent[i]->memory.LCStartRouteIndex << ","
+                << agent[i]->memory.LCDirection << ","
+                << agent[i]->memory.checkSideVehicleForLC << ","
+                << agent[i]->memory.LCCheckState << ","
+                << agent[i]->memory.destinationNode << "\n";
+        }
+        else if( agent[i]->agentKind >= 100 ){
 
-        out << agent[i]->memory.routeType << ","
-            << agent[i]->memory.routeIndex << ","
-            << agent[i]->memory.routeLaneIndex << ","
-            << agent[i]->memory.currentTargetPath << ","
-            << agent[i]->memory.currentTargetPathIndexInList << ","
-            << agent[i]->memory.distanceFromStartWPInCurrentPath << ","
-            << agent[i]->memory.scenarioPathSelectID << ","
-            << agent[i]->memory.distanceToTurnNodeWPIn << ","
-            << agent[i]->memory.distanceToNodeWPIn << ","
-            << agent[i]->memory.distanceToTurnNodeWPOut << ","
-            << agent[i]->memory.distanceToNodeWPOut << ","
-            << agent[i]->memory.LCSupportRouteLaneIndex << ","
-            << agent[i]->memory.LCStartRouteIndex << ","
-            << agent[i]->memory.LCDirection << ","
-            << agent[i]->memory.checkSideVehicleForLC << ","
-            << agent[i]->memory.LCCheckState << ","
-            << agent[i]->memory.destinationNode << "\n";
+            out << agent[i]->state.x << ","
+                << agent[i]->state.y << ","
+                << agent[i]->state.z << ","
+                << agent[i]->state.V << ","
+                << agent[i]->state.yaw << ","
+                << agent[i]->state.cosYaw << ","
+                << agent[i]->state.sinYaw << ","
+                << agent[i]->vehicle.vehicleModelID << "\n";
+
+            out << agent[i]->memory.currentTargetPath << ","
+                << agent[i]->memory.currentTargetPathIndexInList << "\n";
+        }
 
 
         out << agent[i]->memory.accel << ","
@@ -317,6 +332,14 @@ void SystemThread::OutputRestartData(QString filename)
 
     }
 
+    for(int i=0;i<road->pedestPaths.size();++i){
+
+        out << "PP," << i << ","
+               << road->pedestPaths[i]->meanArrivalTime << ","
+               << road->pedestPaths[i]->NextAppearTime << "\n";
+
+    }
+
     file.close();
 }
 
@@ -332,6 +355,7 @@ void SystemThread::SetRestartData()
 
     QFile file(restartFile);
     if( file.open(QIODevice::ReadOnly | QIODevice::Text) == false ){
+        qDebug() << " Cannot open file: " << restartFile;
         return;
     }
 
@@ -353,6 +377,7 @@ void SystemThread::SetRestartData()
     int cPos = 0;
 
     int lineNo = 4;
+    float simTimeInSecAtSnapshot = 0.0;
 
     while( in.atEnd() == false ){
 
@@ -364,15 +389,18 @@ void SystemThread::SetRestartData()
 
         if( readLine.startsWith("Time-Stamp:") == true ){
 
+            QStringList timeStrDiv = readLine.remove("Time-Stamp:").trimmed().split(":");
+
+            int day  = QString(timeStrDiv[0]).remove("[d]").trimmed().toInt();
+            int hour = QString(timeStrDiv[1]).remove("[h]").trimmed().toInt();
+            int mint = QString(timeStrDiv[2]).remove("[m]").trimmed().toInt();
+            float sec = QString(timeStrDiv[3]).remove("[s]").trimmed().toFloat();
+
             if( DSMode == false ){
-                QStringList timeStrDiv = readLine.remove("Time-Stamp:").trimmed().split(":");
-
-                int day  = QString(timeStrDiv[0]).remove("[d]").trimmed().toInt();
-                int hour = QString(timeStrDiv[1]).remove("[h]").trimmed().toInt();
-                int mint = QString(timeStrDiv[2]).remove("[m]").trimmed().toInt();
-                float sec = QString(timeStrDiv[3]).remove("[s]").trimmed().toFloat();
-
                 simManage->SetSimulationTime(day,hour,mint,sec);
+            }
+            else{
+                simTimeInSecAtSnapshot = day * 86400.0 + hour * 3600.0 + mint * 60.0 + sec;
             }
 
             lineNo++;
@@ -386,8 +414,13 @@ void SystemThread::SetRestartData()
                 return;
             }
 
+
+
             int idx                     =  QString(valDiv[1]).trimmed().toInt();
             int ID                      =  QString(valDiv[2]).trimmed().toInt();
+
+//            qDebug() << "A; ID=" << ID;
+
             int agentKind               =  QString(valDiv[3]).trimmed().toInt();
             bool isScenarioObject       = (QString(valDiv[4]).trimmed().toInt() == 1 ? true : false);
             bool isBehaviorEmbeded      = (QString(valDiv[5]).trimmed().toInt() == 1 ? true : false);
@@ -397,14 +430,17 @@ void SystemThread::SetRestartData()
             int cognitionCountMax       =  QString(valDiv[9]).trimmed().toInt();
             int cognitionCount          =  QString(valDiv[10]).trimmed().toInt();
             int decisionMakingCountMax  =  QString(valDiv[11]).trimmed().toInt();
-            int decisionMalingCount     =  QString(valDiv[12]).trimmed().toInt();
+            int decisionMakingCount     =  QString(valDiv[12]).trimmed().toInt();
             int controlCountMax         =  QString(valDiv[13]).trimmed().toInt();
             int controlCount            =  QString(valDiv[14]).trimmed().toInt();
 
 
             cIdx = idx;
+
+            agent[cIdx]->InitializeMemory();
+
             agent[cIdx]->ID                     = ID;
-            agent[cIdx]->agentKind              = agentKind + 1;
+            agent[cIdx]->agentKind              = agentKind;
             agent[cIdx]->isScenarioObject       = isScenarioObject;
             agent[cIdx]->isBehaviorEmbeded      = isBehaviorEmbeded;
             agent[cIdx]->isSInterfaceObject     = isSInterfaceObject;
@@ -420,7 +456,7 @@ void SystemThread::SetRestartData()
             agent[cIdx]->cognitionCountMax      = cognitionCountMax;
             agent[cIdx]->cognitionCount         = cognitionCount;
             agent[cIdx]->decisionMakingCountMax = decisionMakingCountMax;
-            agent[cIdx]->decisionMalingCount    = decisionMalingCount;
+            agent[cIdx]->decisionMakingCount    = decisionMakingCount;
             agent[cIdx]->controlCountMax        = controlCountMax;
             agent[cIdx]->controlCount           = controlCount;
 
@@ -440,6 +476,8 @@ void SystemThread::SetRestartData()
                 return;
             }
 
+//            qDebug() << " cPos=" << cPos;
+
             int age    = QString(valDiv[0]).trimmed().toInt();
             int gender = QString(valDiv[1]).trimmed().toInt();
 
@@ -457,6 +495,8 @@ void SystemThread::SetRestartData()
                 qDebug() << "Data Error: LineNo = " << lineNo << " ; data = " << readLine;
                 return;
             }
+
+//            qDebug() << " cPos=" << cPos;
 
             agent[cIdx]->param.startRelay =  QString(valDiv[0]).trimmed().toFloat();
             agent[cIdx]->param.headwayTime =  QString(valDiv[1]).trimmed().toFloat();
@@ -498,46 +538,105 @@ void SystemThread::SetRestartData()
         }
         else if( cIdx >= 0 && cPos == 3 ){
 
-            QStringList valDiv = readLine.trimmed().split(",");
-            if( valDiv.size() <= 14 ){
-                qDebug() << "Data Error: LineNo = " << lineNo << " ; data = " << readLine;
-                return;
+//            qDebug() << " cPos=" << cPos;
+
+            if( agent[cIdx]->agentKind < 100 ){
+
+                QStringList valDiv = readLine.trimmed().split(",");
+                if( valDiv.size() <= 14 ){
+                    qDebug() << "Data Error: LineNo = " << lineNo << " ; data = " << readLine;
+                    return;
+                }
+
+                agent[cIdx]->vehicle.state.X        =  QString(valDiv[0]).trimmed().toFloat();
+                agent[cIdx]->vehicle.state.Y        =  QString(valDiv[1]).trimmed().toFloat();
+                agent[cIdx]->vehicle.state.Z        =  QString(valDiv[2]).trimmed().toFloat();
+                agent[cIdx]->vehicle.state.vx       =  QString(valDiv[3]).trimmed().toFloat();
+                agent[cIdx]->vehicle.state.yawAngle =  QString(valDiv[4]).trimmed().toFloat();
+                agent[cIdx]->vehicle.state.roll     =  QString(valDiv[5]).trimmed().toFloat();
+                agent[cIdx]->vehicle.state.pitch    =  QString(valDiv[6]).trimmed().toFloat();
+                agent[cIdx]->vehicle.state.yawRate  =  QString(valDiv[7]).trimmed().toFloat();
+                agent[cIdx]->vehicle.state.ax       =  QString(valDiv[8]).trimmed().toFloat();
+                agent[cIdx]->state.accel            =  QString(valDiv[9]).trimmed().toFloat();
+                agent[cIdx]->state.brake            =  QString(valDiv[10]).trimmed().toFloat();
+                agent[cIdx]->state.steer            =  QString(valDiv[11]).trimmed().toFloat();
+                agent[cIdx]->vehicle.winker_state   =  QString(valDiv[12]).trimmed().toInt();
+                agent[cIdx]->vehicle.winker_count   =  QString(valDiv[13]).trimmed().toInt();
+                agent[cIdx]->vehicle.vehicleModelID =  QString(valDiv[14]).trimmed().toInt();
+
+
+                int j = agent[cIdx]->vehicle.vehicleModelID;
+
+                float L = road->vehicleKind[j]->length;
+                float W = road->vehicleKind[j]->width;
+                float H = road->vehicleKind[j]->height;
+
+                agent[cIdx]->objTypeForUE4 = road->vehicleKind[j]->type;
+                agent[cIdx]->objNoForUE4   = road->vehicleKind[j]->No;
+                if( road->vehicleKind[j]->UE4ModelID > 0){
+                    agent[cIdx]->objIDForUE4 = road->vehicleKind[j]->UE4ModelID;
+                }
+                else{
+                    agent[cIdx]->objIDForUE4 = -1;
+                }
+
+                agent[cIdx]->vehicle.SetVehicleParam( L, W, H, L * 0.8, L * 0.1, 0.5 );
+                agent[cIdx]->vHalfLength = L * 0.5;
+                agent[cIdx]->vHalfWidth  = W  * 0.5;
+
+                agent[cIdx]->state.V = agent[cIdx]->vehicle.state.vx;
+                agent[cIdx]->state.x = agent[cIdx]->vehicle.state.X;
+                agent[cIdx]->state.y = agent[cIdx]->vehicle.state.Y;
+                agent[cIdx]->state.z = agent[cIdx]->vehicle.state.Z;
+                agent[cIdx]->state.yaw = agent[cIdx]->vehicle.state.yawAngle;
+                agent[cIdx]->state.cosYaw = cos( agent[cIdx]->vehicle.state.yawAngle );
+                agent[cIdx]->state.sinYaw = sin( agent[cIdx]->vehicle.state.yawAngle );
             }
+            else if( agent[cIdx]->agentKind >= 100 ){
 
-            agent[cIdx]->vehicle.state.X        =  QString(valDiv[0]).trimmed().toFloat();
-            agent[cIdx]->vehicle.state.Y        =  QString(valDiv[1]).trimmed().toFloat();
-            agent[cIdx]->vehicle.state.Z        =  QString(valDiv[2]).trimmed().toFloat();
-            agent[cIdx]->vehicle.state.vx       =  QString(valDiv[3]).trimmed().toFloat();
-            agent[cIdx]->vehicle.state.yawAngle =  QString(valDiv[4]).trimmed().toFloat();
-            agent[cIdx]->vehicle.state.roll     =  QString(valDiv[5]).trimmed().toFloat();
-            agent[cIdx]->vehicle.state.pitch    =  QString(valDiv[6]).trimmed().toFloat();
-            agent[cIdx]->vehicle.state.yawRate  =  QString(valDiv[7]).trimmed().toFloat();
-            agent[cIdx]->vehicle.state.ax       =  QString(valDiv[8]).trimmed().toFloat();
-            agent[cIdx]->state.accel            =  QString(valDiv[9]).trimmed().toFloat();
-            agent[cIdx]->state.brake            =  QString(valDiv[10]).trimmed().toFloat();
-            agent[cIdx]->state.steer            =  QString(valDiv[11]).trimmed().toFloat();
-            agent[cIdx]->vehicle.winker_state   =  QString(valDiv[12]).trimmed().toInt();
-            agent[cIdx]->vehicle.winker_count   =  QString(valDiv[13]).trimmed().toInt();
-            agent[cIdx]->vehicle.vehicleModelID =  QString(valDiv[14]).trimmed().toInt();
+                QStringList valDiv = readLine.trimmed().split(",");
+                if( valDiv.size() <= 7 ){
+                    qDebug() << "Data Error: LineNo = " << lineNo << " ; data = " << readLine;
+                    return;
+                }
 
+                agent[cIdx]->state.x = QString(valDiv[0]).trimmed().toFloat();
+                agent[cIdx]->state.y = QString(valDiv[1]).trimmed().toFloat();
+                agent[cIdx]->state.z = QString(valDiv[2]).trimmed().toFloat();
+                agent[cIdx]->state.V = QString(valDiv[3]).trimmed().toFloat();
+                agent[cIdx]->state.yaw = QString(valDiv[4]).trimmed().toFloat();
+                agent[cIdx]->state.cosYaw = QString(valDiv[5]).trimmed().toFloat();
+                agent[cIdx]->state.sinYaw = QString(valDiv[6]).trimmed().toFloat();
+                agent[cIdx]->vehicle.vehicleModelID =  QString(valDiv[7]).trimmed().toInt();
 
-            int j = agent[cIdx]->vehicle.vehicleModelID;
-            float L = road->vehicleKind[j]->length;
-            float W = road->vehicleKind[j]->width;
-            float H = road->vehicleKind[j]->height;
+                agent[cIdx]->state.z_path = agent[cIdx]->state.z;
+                agent[cIdx]->state.pitch  = 0.0;
+                agent[cIdx]->state.roll   = 0.0;
 
-            agent[cIdx]->vehicle.SetVehicleParam( L, W, H, L * 0.8, L * 0.1, 0.5 );
-            agent[cIdx]->vHalfLength = L * 0.5;
-            agent[cIdx]->vHalfWidth  = W  * 0.5;
+                agent[cIdx]->vehicle.state.vx = agent[cIdx]->state.V;
+                agent[cIdx]->vehicle.state.X = agent[cIdx]->state.x;
+                agent[cIdx]->vehicle.state.Y = agent[cIdx]->state.y;
+                agent[cIdx]->vehicle.state.Z = agent[cIdx]->state.z;
+                agent[cIdx]->vehicle.state.yawAngle = agent[cIdx]->state.yaw;
 
+                int j = agent[cIdx]->vehicle.vehicleModelID;
+                float L = road->pedestrianKind[j]->length;
+                float W = road->pedestrianKind[j]->width;
+                float H = road->pedestrianKind[j]->height;
 
-            agent[cIdx]->state.V = agent[cIdx]->vehicle.state.vx;
-            agent[cIdx]->state.x = agent[cIdx]->vehicle.state.X;
-            agent[cIdx]->state.y = agent[cIdx]->vehicle.state.Y;
-            agent[cIdx]->state.z = agent[cIdx]->vehicle.state.Z;
-            agent[cIdx]->state.yaw = agent[cIdx]->vehicle.state.yawAngle;
-            agent[cIdx]->state.cosYaw = cos( agent[cIdx]->vehicle.state.yawAngle );
-            agent[cIdx]->state.sinYaw = sin( agent[cIdx]->vehicle.state.yawAngle );
+                agent[cIdx]->objTypeForUE4 = road->pedestrianKind[j]->type;
+                agent[cIdx]->objNoForUE4   = road->pedestrianKind[j]->No;
+                if( road->pedestrianKind[j]->UE4ModelID > 0){
+                    agent[cIdx]->objIDForUE4 = road->pedestrianKind[j]->UE4ModelID;
+                }
+                else{
+                    agent[cIdx]->objIDForUE4 = -1;
+                }
+
+                agent[cIdx]->vehicle.SetVehicleParam( L, W, H, L * 0.8, L * 0.1, 0.5 );
+                agent[cIdx]->vHalfLength = L * 0.5;
+                agent[cIdx]->vHalfWidth  = W  * 0.5;
+            }
 
             lineNo++;
             cPos = 4;
@@ -545,46 +644,48 @@ void SystemThread::SetRestartData()
         }
         else if( cIdx >= 0 && cPos == 4 ){
 
-            QStringList valDiv = readLine.trimmed().split(",");
-            if( valDiv.size() <= 10 ){
-                qDebug() << "Data Error: LineNo = " << lineNo << " ; data = " << readLine;
-                return;
-            }
-
-            agent[cIdx]->memory.routeType                        =  QString(valDiv[0]).trimmed().toInt();
-            agent[cIdx]->memory.routeIndex                       =  QString(valDiv[1]).trimmed().toInt();
-            agent[cIdx]->memory.routeLaneIndex                   =  QString(valDiv[2]).trimmed().toInt();
-            agent[cIdx]->memory.currentTargetPath                =  QString(valDiv[3]).trimmed().toInt();
-            agent[cIdx]->memory.currentTargetPathIndexInList     =  QString(valDiv[4]).trimmed().toInt();
-            agent[cIdx]->memory.distanceFromStartWPInCurrentPath =  QString(valDiv[5]).trimmed().toFloat();
-            agent[cIdx]->memory.scenarioPathSelectID             =  QString(valDiv[6]).trimmed().toInt();
-            agent[cIdx]->memory.distanceToTurnNodeWPIn           =  QString(valDiv[7]).trimmed().toFloat();
-            agent[cIdx]->memory.distanceToNodeWPIn               =  QString(valDiv[8]).trimmed().toFloat();
-            agent[cIdx]->memory.distanceToTurnNodeWPOut          =  QString(valDiv[9]).trimmed().toFloat();
-            agent[cIdx]->memory.distanceToNodeWPOut              =  QString(valDiv[10]).trimmed().toFloat();
-            if( valDiv.size() >= 16 ){
-                agent[cIdx]->memory.LCSupportRouteLaneIndex      =  QString(valDiv[11]).trimmed().toInt();
-                agent[cIdx]->memory.LCStartRouteIndex            =  QString(valDiv[12]).trimmed().toInt();
-                agent[cIdx]->memory.LCDirection                  =  QString(valDiv[13]).trimmed().toInt();
-                agent[cIdx]->memory.checkSideVehicleForLC        = (QString(valDiv[14]).trimmed().toInt() == 1 ? true : false);
-                agent[cIdx]->memory.LCCheckState                 =  QString(valDiv[15]).trimmed().toInt();
-            }
-            else{
-                agent[cIdx]->memory.LCSupportRouteLaneIndex      =  -1;
-                agent[cIdx]->memory.LCStartRouteIndex            =  -1;
-                agent[cIdx]->memory.LCDirection                  =  0;
-                agent[cIdx]->memory.checkSideVehicleForLC        =  false;
-                agent[cIdx]->memory.LCCheckState                 =  0;
-            }
-            if( valDiv.size() >= 17 ){
-                agent[cIdx]->memory.destinationNode = QString(valDiv[16]).trimmed().toInt();
-            }
-            else{
-                agent[cIdx]->memory.destinationNode = -1;
-            }
+//            qDebug() << " cPos=" << cPos;
 
 
-            if( agent[cIdx]->agentKind < 100 ){                
+            if( agent[cIdx]->agentKind < 100 ){
+
+                QStringList valDiv = readLine.trimmed().split(",");
+                if( valDiv.size() <= 10 ){
+                    qDebug() << "Data Error: LineNo = " << lineNo << " ; data = " << readLine;
+                    return;
+                }
+
+                agent[cIdx]->memory.routeType                        =  QString(valDiv[0]).trimmed().toInt();
+                agent[cIdx]->memory.routeIndex                       =  QString(valDiv[1]).trimmed().toInt();
+                agent[cIdx]->memory.routeLaneIndex                   =  QString(valDiv[2]).trimmed().toInt();
+                agent[cIdx]->memory.currentTargetPath                =  QString(valDiv[3]).trimmed().toInt();
+                agent[cIdx]->memory.currentTargetPathIndexInList     =  QString(valDiv[4]).trimmed().toInt();
+                agent[cIdx]->memory.distanceFromStartWPInCurrentPath =  QString(valDiv[5]).trimmed().toFloat();
+                agent[cIdx]->memory.scenarioPathSelectID             =  QString(valDiv[6]).trimmed().toInt();
+                agent[cIdx]->memory.distanceToTurnNodeWPIn           =  QString(valDiv[7]).trimmed().toFloat();
+                agent[cIdx]->memory.distanceToNodeWPIn               =  QString(valDiv[8]).trimmed().toFloat();
+                agent[cIdx]->memory.distanceToTurnNodeWPOut          =  QString(valDiv[9]).trimmed().toFloat();
+                agent[cIdx]->memory.distanceToNodeWPOut              =  QString(valDiv[10]).trimmed().toFloat();
+                if( valDiv.size() >= 16 ){
+                    agent[cIdx]->memory.LCSupportRouteLaneIndex      =  QString(valDiv[11]).trimmed().toInt();
+                    agent[cIdx]->memory.LCStartRouteIndex            =  QString(valDiv[12]).trimmed().toInt();
+                    agent[cIdx]->memory.LCDirection                  =  QString(valDiv[13]).trimmed().toInt();
+                    agent[cIdx]->memory.checkSideVehicleForLC        = (QString(valDiv[14]).trimmed().toInt() == 1 ? true : false);
+                    agent[cIdx]->memory.LCCheckState                 =  QString(valDiv[15]).trimmed().toInt();
+                }
+                else{
+                    agent[cIdx]->memory.LCSupportRouteLaneIndex      =  -1;
+                    agent[cIdx]->memory.LCStartRouteIndex            =  -1;
+                    agent[cIdx]->memory.LCDirection                  =  0;
+                    agent[cIdx]->memory.checkSideVehicleForLC        =  false;
+                    agent[cIdx]->memory.LCCheckState                 =  0;
+                }
+                if( valDiv.size() >= 17 ){
+                    agent[cIdx]->memory.destinationNode = QString(valDiv[16]).trimmed().toInt();
+                }
+                else{
+                    agent[cIdx]->memory.destinationNode = -1;
+                }
 
                 int i = agent[cIdx]->memory.routeIndex;
                 int selIdx = agent[cIdx]->memory.routeLaneIndex;
@@ -878,13 +979,32 @@ void SystemThread::SetRestartData()
                         continue;
                     }
                 }
+
             }
+            else if( agent[cIdx]->agentKind >= 100 ){
+
+                QStringList valDiv = readLine.trimmed().split(",");
+                if( valDiv.size() <= 1 ){
+                    qDebug() << "Data Error: LineNo = " << lineNo << " ; data = " << readLine;
+                    return;
+                }
+
+                agent[cIdx]->memory.currentTargetPath                =  QString(valDiv[0]).trimmed().toInt();
+                agent[cIdx]->memory.currentTargetPathIndexInList     =  QString(valDiv[1]).trimmed().toInt();
+
+                agent[cIdx]->memory.targetPathList.clear();
+                agent[cIdx]->memory.targetPathList.append( agent[cIdx]->memory.currentTargetPath );
+
+            }
+
 
             lineNo++;
             cPos = 5;
             continue;
         }
         else if( cIdx >= 0 && cPos == 5 ){
+
+//            qDebug() << " cPos=" << cPos;
 
             QStringList valDiv = readLine.trimmed().split(",");
             if( valDiv.size() <= 8 ){
@@ -910,6 +1030,8 @@ void SystemThread::SetRestartData()
             continue;
         }
         else if( cIdx >= 0 && cPos == 6 ){
+
+//            qDebug() << " cPos=" << cPos;
 
             QStringList valDiv = readLine.trimmed().split(",");
             if( valDiv.size() <= 16 ){
@@ -940,6 +1062,8 @@ void SystemThread::SetRestartData()
             continue;
         }
         else if( cIdx >= 0 && cPos == 7 ){
+
+//            qDebug() << " cPos=" << cPos;
 
             QStringList valDiv = readLine.trimmed().split(",");
             if( valDiv.size() <= 17 ){
@@ -972,6 +1096,8 @@ void SystemThread::SetRestartData()
         }
         else if( cIdx >= 0 && cPos == 8 ){
 
+//            qDebug() << " cPos=" << cPos;
+
             QStringList valDiv = readLine.trimmed().split(",");
             if( valDiv.size() <= 10 ){
                 qDebug() << "Data Error: LineNo = " << lineNo << " ; data = " << readLine;
@@ -987,6 +1113,9 @@ void SystemThread::SetRestartData()
             agent[cIdx]->memory.avoidTarget                                  =  QString(valDiv[6]).trimmed().toInt();
             agent[cIdx]->memory.isChaningLane                                = (QString(valDiv[7]).trimmed().toInt() == 1 ? true : false);
             agent[cIdx]->memory.speedProfileCount                            =  QString(valDiv[8]).trimmed().toInt();
+
+            // Reset
+            agent[cIdx]->memory.lateralShiftTarget = 0.0;
 
             if( QString(valDiv[9]).isEmpty() == false && QString(valDiv[9]).contains("/") == true ){
 
@@ -1017,6 +1146,8 @@ void SystemThread::SetRestartData()
             continue;
         }
         else if( cIdx >= 0 && cPos == 9 ){
+
+//            qDebug() << " cPos=" << cPos;
 
             QStringList valDiv = readLine.trimmed().split(",");
             if( valDiv.size() <= 20 ){
@@ -1051,6 +1182,8 @@ void SystemThread::SetRestartData()
             continue;
         }
         else if( cIdx >= 0 && cPos == 10 && readLine.startsWith("PO,") == true ){
+
+//            qDebug() << " cPos=" << cPos;
 
             QStringList valDiv = readLine.trimmed().split(",");
             if( valDiv.size() <= 42 ){
@@ -1115,6 +1248,7 @@ void SystemThread::SetRestartData()
         }
         else if( cIdx >= 0 && cPos == 10 && readLine.startsWith("PS,") == true ){
 
+
             QStringList valDiv = readLine.trimmed().split(",");
             if( valDiv.size() <= 16 ){
                 qDebug() << "Data Error: LineNo = " << lineNo << " ; data = " << readLine;
@@ -1134,6 +1268,10 @@ void SystemThread::SetRestartData()
             struct TrafficSignalPerception* ts = agent[cIdx]->memory.perceptedSignals[psIdx];
 
             ts->objectID       =  QString(valDiv[2]).trimmed().toInt();
+
+//            qDebug() << " PS, ID=" << ts->objectID;
+
+
             ts->objectType     =  QString(valDiv[3]).trimmed().toInt();
             ts->x              =  QString(valDiv[4]).trimmed().toFloat();
             ts->y              =  QString(valDiv[5]).trimmed().toFloat();
@@ -1163,6 +1301,9 @@ void SystemThread::SetRestartData()
             int idx = QString(valDiv[1]).trimmed().toInt();
 
             trafficSignal[idx]->id                         = QString(valDiv[2]).trimmed().toInt();
+
+//            qDebug() << " TS, ID=" << trafficSignal[idx]->id;
+
             trafficSignal[idx]->currentDisplayIndex        = QString(valDiv[3]).trimmed().toInt();
             trafficSignal[idx]->nextUpdateTimeFVal         = QString(valDiv[4]).trimmed().toFloat();
             trafficSignal[idx]->lastUpdateTimeFVal         = QString(valDiv[5]).trimmed().toFloat();
@@ -1206,16 +1347,62 @@ void SystemThread::SetRestartData()
             int origNode = QString(valDiv[2]).trimmed().toInt();
             int destNode = QString(valDiv[3]).trimmed().toInt();
 
+//            qDebug() << " OD, O=" << origNode << " D=" << destNode;
+
             if( idx >= 0 && idx < road->odRoute.size() &&
                     road->odRoute[idx]->originNode == origNode &&
                     road->odRoute[idx]->destinationNode == destNode ){
 
                 road->odRoute[idx]->meanArrivalTime = QString(valDiv[4]).trimmed().toFloat();
-                road->odRoute[idx]->NextAppearTime  = QString(valDiv[5]).trimmed().toFloat();
+                road->odRoute[idx]->NextAppearTime  = QString(valDiv[5]).trimmed().toFloat() - simTimeInSecAtSnapshot;
+            }
+        }
+        else if( readLine.startsWith("PP,") == true ){
+
+            QStringList valDiv = readLine.trimmed().split(",");
+            if( valDiv.size() <= 2 ){
+                qDebug() << "Data Error: LineNo = " << lineNo << " ; data = " << readLine;
+                return;
+            }
+
+            int idx = QString(valDiv[1]).trimmed().toInt();
+
+            int origNode = QString(valDiv[2]).trimmed().toInt();
+            int destNode = QString(valDiv[3]).trimmed().toInt();
+
+//            qDebug() << " PP, idx=" << idx;
+
+            if( idx >= 0 && idx < road->pedestPaths.size() ){
+
+                road->pedestPaths[idx]->meanArrivalTime = QString(valDiv[2]).trimmed().toFloat();
+                road->pedestPaths[idx]->NextAppearTime  = QString(valDiv[3]).trimmed().toFloat() - simTimeInSecAtSnapshot;
             }
         }
     }
 
+    qDebug() << "End of SetRestartData";
+
+    if( DSMode == true ){
+        for(int i=0;i<maxAgent;++i){
+            if( agent[i]->agentStatus != 1 ){
+                continue;
+            }
+            if( agent[i]->isScenarioObject == true ){
+                continue;
+            }
+            if( agent[i]->isSInterfaceObject == true ){
+                continue;
+            }
+            if( agent[i]->agentKind >= 100 ){
+                continue;
+            }
+            int currentPath = agent[i]->memory.currentTargetPath;
+            int pIdx = road->pathId2Index.indexOf( currentPath );
+            if( pIdx >= 0 ){
+                agent[i]->SetTargetSpeedIndividual( road->paths[pIdx]->speed85pt );
+            }
+        }
+    }
 
     file.close();
 

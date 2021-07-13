@@ -40,7 +40,8 @@ enum AGENT_CONTROL_MODE
     STOP_AT,
     INTERSECTION_TURN_CONTROL,
     SET_STEER_CONTROL_FLAG,
-    RUN_OUT
+    RUN_OUT,
+    DIRECT_ACCEL_ASSIGN
 };
 
 enum AGENT_ROUTE_TYPE
@@ -88,6 +89,9 @@ struct AgentPerception
     float V;
     float Ax;
 
+    float pastV[10];
+    float filteredV;
+
     int objectPath;
     int objectTargetNode;
     float deviationFromObjectPath;
@@ -122,8 +126,8 @@ struct AgentPerception
     int objCPPathIndex;
     int objPathCPChecked;
 
-    float distToObjInLCTargetPathList;
-    float latDevObjInLCTargetPathList;
+    float distToObjInLaneChangeTargetPathList;
+    float latDevObjInLaneChangeTargetPathList;
     int objPathInLCTargetPathList;
 
     bool shouldEvalRisk;
@@ -160,6 +164,8 @@ struct TrafficSignalPerception
 
 struct AgentMemory
 {
+    int flag;
+
     // control output
     float accel;
     float brake;
@@ -187,6 +193,7 @@ struct AgentMemory
     float actualTargetHeadwayDistance;
     float targetSpeed;
     float targetHeadwayDistance;
+    bool setTargetSpeedByScenarioFlag;
     float targetSpeedByScenario;
     float actualTargetHeadwayDistanceByScenario;
     float targetHeadwayDistanceByScenario;
@@ -214,6 +221,7 @@ struct AgentMemory
     int speedProfileCount;
     QList<float> profileTime;
     QList<float> profileSpeed;
+    bool protectProfileData;
 
     bool ADDisturbFlag;
     int ADDisturbCount;
@@ -240,9 +248,19 @@ struct AgentMemory
     float lateralDeviationFromTargetPath;
     float steeringControlGainMultiplier;
     float lateralShiftTarget;
+    float lateralShiftTarget_backup;
+    float distToAvoidTarget;
     int avoidTarget;
+    int hazardusObject;
+    int lastHazardusObject;
+    int ignoreHazardusObject;
+    QList<int> ignoreCollisonAvoidanceCheckObject;
+
+    float relativeAttitudeToLane;
 
     bool isChaningLane;
+    bool alwaysMoveSide;
+    bool requestTemporalDeceleratrion;
 
 
     // hazard and risk valuation
@@ -296,6 +314,12 @@ struct AgentMemory
     float distanceToNodeWPIn;
     float distanceToTurnNodeWPOut;
     float distanceToNodeWPOut;
+    float distanceToCurrentTargetNodeWPIn;
+    float distanceToCurrentTargetNodeWPOut;
+
+
+    QPoint currentWPInPos;
+    QPoint currentWPOutPos;
 
     QList<int> myNodeList;
     QList<int> myInDirList;
@@ -303,6 +327,9 @@ struct AgentMemory
     QList<int> myTurnDirectionList;
     int currentTargetNode;
     int currentTargetNodeIndexInNodeList;
+    int currentTargetNodeInDirect;
+    int currentTargetNodeOutDirect;
+    int currentTargetNodeOncomingDirect;
     int nextTurnDirection;
     int nextTurnNode;
     int nextTurnNodeIndexInNodeList;
@@ -323,6 +350,7 @@ struct AgentMemory
     int LCInfoGetCount;
     bool sideVehicleRiskClear;
     float LCSteerMax;
+    int LCbyEventMode;
 
     QList<int> laneChangeTargetPathList;
     QList<float> laneChangePathLength;
@@ -332,6 +360,18 @@ struct AgentMemory
     float distFromSWPLCTargetPathList;
 
 
+    // Run-Out of Pedestrian
+    bool runOutChecked;
+    bool exeRunOut;
+    int runOutState;
+    float runOutPosInPedestPath;
+    float runOutDir;
+    float cosRunOutDir;
+    float sinRunOutDir;
+    float runOutStartX;
+    float runOutStartY;
+
+
     // navigation
     int routeType;
     int routeIndex;
@@ -339,6 +379,10 @@ struct AgentMemory
     int LCSupportRouteLaneIndex;
     int LCStartRouteIndex;
     int destinationNode;
+
+
+    // Abnormal Driving
+    bool runOncomingLane;
 };
 
 struct AgentParam
@@ -363,6 +407,12 @@ struct AgentParam
     float speedVariationFactor;
     float LCInfoGetTime;
     float LCCutInAllowTTC;
+    float vDevAllowPlus;
+    float vDevAllowMinus;
+    float accelAtVDev;
+    float decelAtVDev;
+    float refVforDev;
+    float maxLateralSpeedForLaneChange;
 };
 
 struct AgentState
@@ -397,6 +447,8 @@ struct AgentAttiribute
 
 struct SInterObjInfo
 {
+    int objID;
+    int objType;
     float lf;
     float lr;
     float tf;
@@ -436,6 +488,7 @@ public:
 
     void CheckPathList(Road*);
     void SetTargetNodeListByTargetPaths(Road*);
+    void ProcessLaneChangeRequest(Road*,int LCdir,int LCmode,float moveLatDist);
 
 
     int ID;
@@ -443,10 +496,13 @@ public:
                           // 100 ~ 199 : other traffic participants(pedestrian, bicycle, etc.0
     int agentStatus;
     bool isScenarioObject;
+    bool isOldScenarioType;
     bool canAppearRepeatedly;   // This is only used for scenario vehicle, isScenarioObject = true
     bool isSInterfaceObject;
     bool isBehaviorEmbeded;
     bool notAllowedAppear;
+
+    int refSpeedMode;
 
     struct AgentAttiribute attri;
     struct AgentMemory     memory;
@@ -462,6 +518,9 @@ public:
     Vehicle vehicle;
     float vHalfLength;
     float vHalfWidth;
+    int objTypeForUE4;
+    int objNoForUE4;
+    int objIDForUE4;
 
     bool justWarped;
     bool skipSetControlInfo;
@@ -471,7 +530,7 @@ public:
     int cognitionSubCount;
 
     int decisionMakingCountMax;
-    int decisionMalingCount;
+    int decisionMakingCount;
 
     int controlCountMax;
     int controlCount;
@@ -479,6 +538,9 @@ public:
     bool onlyCheckPreceding;
 
     RandomGenerator rndGen;
+    double GenUniform(){ return rndGen.GenUniform(); }
+    double GetNormalDist(double mean,double std){ return rndGen.GetNormalDist(mean, std); }
+    double GetExponentialDist(double mean){ return rndGen.GetExponentialDist(mean); }
 
 
     int UE4ObjectID[10];

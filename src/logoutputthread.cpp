@@ -28,6 +28,8 @@ LogOutputThread::LogOutputThread(QObject *parent) :
 
     logInterval = 1;
     logIntervalCount = 0;
+
+    expID = QString();
 }
 
 LogOutputThread::~LogOutputThread()
@@ -54,12 +56,22 @@ void LogOutputThread::SetLogFileName(QString filename)
 
             QTextStream logOut(&fileLog);
 
-            logOut << "Time[sec],FE1,FE2,FE3,FE4";
+            if( expID.isNull() == false ){
+                logOut << expID
+                       << ","
+                       << "Time[sec],FE1,FE2,FE3,FE4";
+
+                expID = QString(",");
+            }
+            else{
+                logOut << "Time[sec],FE1,FE2,FE3,FE4";
+            }
+
             for(int i=0;i<numTS;++i){
                 logOut << QString(",TS%1").arg( ts[i]->id );
             }
             for(int i=0;i<maxAgent;++i){
-                logOut << ",ID,Status,Kind,Accel,Brake,Steer[deg],X[m],Y[m],Yaw[deg],V[km/h],WK,BL,HL,Collison,Warp";
+                logOut << ",ID,Status,Kind,Accel,Brake,Steer[deg],X[m],Y[m],Yaw[deg],V[km/h],WK,BL,HL,Collison,Warp/LC";
             }
             logOut << "\n";
         }
@@ -108,6 +120,7 @@ void LogOutputThread::run()
 
         float simTimeSec = simManage->GetSimulationTimeInSec();
 
+        logOut << expID;
         logOut << simTimeSec;
 
         for(int i=0;i<4;++i){
@@ -163,7 +176,7 @@ void LogOutputThread::run()
                     }
                 }
                 logOut << "," << collision;
-                logOut << "," << agent[i]->state.warpFlag;
+                logOut << "," << (agent[i]->state.warpFlag + agent[i]->memory.LCCheckState);
                 if( agent[i]->state.warpFlag == 1 ){
                     agent[i]->state.warpFlag = 0;
                 }

@@ -37,6 +37,10 @@ SimulationManager::SimulationManager()
     IDAllowed = -1;
 
     udpthread = NULL;
+
+    meanSpeedPedestrian[0] = 1.339;
+    meanSpeedPedestrian[1] = 1.358;
+    meanSpeedPedestrian[2] = 1.337;
 }
 
 
@@ -258,15 +262,35 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                           // This rule is applied for no-DS mode to use restart data in DS-mode
 
         if( scenario.size() > 0 ){
+
             int nItem = scenario[currentScenarioID]->scenarioItems.size();
             for(int i=0;i<nItem;++i){
                 int objectID = scenario[currentScenarioID]->scenarioItems[i]->objectID;
-                if( IDAllowed < objectID ){
+
+//                qDebug() << "Scenario: objectID = " << objectID;
+
+                if( IDAllowed <= objectID ){
                     IDAllowed = objectID + 1;
+                }
+            }
+
+            int nEvent = scenario[currentScenarioID]->scenarioEvents.size();
+            for(int i=0;i<nEvent;++i){
+
+                if( scenario[currentScenarioID]->scenarioEvents[i]->eventType == SCENARIO_EVENT_TYPE::OBJECT_EVENT ){
+
+                    int objectID = scenario[currentScenarioID]->scenarioEvents[i]->targetObjectID;
+
+//                    qDebug() << "Scenario: objectID = " << objectID;
+
+                    if( IDAllowed <= objectID ){
+                        IDAllowed = objectID + 1;
+                    }
                 }
             }
         }
 
+        qDebug() << "+--- IDAllowed = " << IDAllowed;
     }
 
 
@@ -294,14 +318,14 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
         }
 
         if( rd->meanArrivalTime < 0.0 ){
+//            qDebug() << "OD[" << i << "] meanArrivalTime < 0.0";
             continue;
         }
 
         if( rd->NextAppearTime <  0.0 ){
-
+//            qDebug() << "OD[" << i << "] NextAppearTime < 0.0";
             rd->NextAppearTime = GetExponentialDist( rd->meanArrivalTime );
-            //qDebug() << "OD[" << i << "] : NextAppearTime = " <<  pRoad->odRoute[i]->NextAppearTime;
-
+//            qDebug() << "  set NextAppearTime = " << rd->NextAppearTime;
         }
         else{
 
@@ -319,6 +343,8 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             }
 
             if( genFlag == false ){
+//                qDebug() << "OD[" << i << "] genFlag = false: nAppear = " << nAppear;
+//                qDebug() << "simTimeSec = " << simTimeSec << " NextAppearTime = " << rd->NextAppearTime << " maxNAppearAtATime = " << maxNAppearAtATime;
                 continue;
             }
 
@@ -335,6 +361,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                 }
             }
             if( objID < 0 ){
+                qDebug() << "OD[" << i << "] objID < 0";
                 continue;
             }
 
@@ -353,7 +380,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
             // Hazard Identification and Risk Evaluation; 5[Hz]
             pAgent[objID]->decisionMakingCountMax = (int)(simHz / 5.0);
-            pAgent[objID]->decisionMalingCount = 0;
+            pAgent[objID]->decisionMakingCount = 0;
 
             // Control; 10[Hz]
             pAgent[objID]->controlCountMax = (int)(simHz / 10.0);
@@ -563,12 +590,14 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
 
 
-            if(  pAgent[objID]->memory.currentTargetPath < 0 || pAgent[objID]->memory.targetPathList.size() < 2 ){
+            if(  pAgent[objID]->memory.currentTargetPath < 0 || pAgent[objID]->memory.targetPathList.size() < 1 ){
                 qDebug() << "-------";
                 qDebug() << "Trying to generate agent ID = " << objID << ": from Node "
                          << pRoad->odRoute[i]->originNode << " to "
                          << pRoad->odRoute[i]->destinationNode;
                 qDebug() << "Failed to set currentTargetPath.";
+                qDebug() << "currentTargetPath = " << pAgent[objID]->memory.currentTargetPath;
+                qDebug() << "targetPathList.size = " << pAgent[objID]->memory.targetPathList.size();
                 qDebug() << "-------";
                 continue;
             }
@@ -595,7 +624,8 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             float cYAi = pRoad->paths[tpIdx]->derivative.first()->x();
             float sYAi = pRoad->paths[tpIdx]->derivative.first()->y();
             float YAi = atan2( sYAi , cYAi );
-            float Vi  = 0.0;
+
+            float Vi  = pRoad->paths[tpIdx]->speed85pt;
 
 
             // set vehicle size
@@ -615,11 +645,20 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
                         pAgent[objID]->vehicle.SetVehicleModelID( j );
 
+                        pAgent[objID]->objTypeForUE4 = pRoad->vehicleKind[j]->type;
+                        pAgent[objID]->objNoForUE4   = pRoad->vehicleKind[j]->No;
+                        if( pRoad->vehicleKind[j]->UE4ModelID > 0 ){
+                            pAgent[objID]->objIDForUE4 = pRoad->vehicleKind[j]->UE4ModelID;
+                        }
+                        else{
+                            pAgent[objID]->objIDForUE4 = -1;
+                        }
+
                         float L = pRoad->vehicleKind[j]->length;
                         float W = pRoad->vehicleKind[j]->width;
                         float H = pRoad->vehicleKind[j]->height;
 
-                        pAgent[objID]->vehicle.SetVehicleParam( L, W, H, L * 0.8, L * 0.1, 0.5 );
+                        pAgent[objID]->vehicle.SetVehicleParam( L, W, H, L * 0.8, L * 0.1, 1.0 );
 
                         pAgent[objID]->vHalfLength = L * 0.5;
                         pAgent[objID]->vHalfWidth  = W  * 0.5;
@@ -634,6 +673,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
             // Check the lane has enough space for new vehicle
             bool enoughSpace = true;
+            float minL = 200.0;
             for(int j=0;j<maxAgentNumber;++j){
                 if( pAgent[j]->agentStatus == 0 ){
                     continue;
@@ -653,9 +693,18 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     enoughSpace = false;
                     break;
                 }
+
+                if( minL > L ){
+                    minL = L;
+                }
             }
             if( enoughSpace == false ){
                 continue;
+            }
+
+            float minV = sqrt( 2.0 * pAgent[objID]->param.maxDeceleration * 0.8 * minL );
+            if( Vi > minV ){
+                Vi = minV;
             }
 
 
@@ -695,7 +744,12 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             pAgent[objID]->SetTargetSpeedIndividual( pRoad->paths[tpIdx]->speed85pt );
 
 
+            pAgent[objID]->param.visibleDistance = 200.0;
+            pAgent[objID]->param.minimumHeadwayDistanceAtStop = 4.5;
+
+
             pAgent[objID]->agentStatus = 1;
+//            qDebug() << "Generate Agent : objID = " << objID << " currentTargetPath = " << pAgent[objID]->memory.currentTargetPath;
             qDebug() << "Generate Agent : objID = " << objID;
 
             pAgent[objID]->isScenarioObject = false;
@@ -710,6 +764,25 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             pAgent[objID]->SetTargetNodeListByTargetPaths( pRoad );
 
             pAgent[objID]->BackupMemory();
+
+
+//            pAgent[objID]->memory.runOncomingLane = true;
+
+
+            // Fluctuation in Speed Control
+            if( pRoad->paths[tpIdx]->setSpeedVariationParam == true ){
+
+//                qDebug() << " Set vDev Param";
+
+                pAgent[objID]->param.refVforDev     = pRoad->paths[tpIdx]->refVforDev;
+                pAgent[objID]->param.vDevAllowPlus  = pRoad->paths[tpIdx]->vDevP;
+                pAgent[objID]->param.vDevAllowMinus = pRoad->paths[tpIdx]->vDevM;
+                pAgent[objID]->param.accelAtVDev    = pRoad->paths[tpIdx]->accelAtDev;
+                pAgent[objID]->param.decelAtVDev    = pRoad->paths[tpIdx]->decelAtDev;
+                pAgent[objID]->param.deadZoneSpeedControl = 0.0;
+
+            }
+
 
             if( DSMode == true ){
 
@@ -871,7 +944,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
             // Hazard Identification and Risk Evaluation; 3[Hz]
             pAgent[objID]->decisionMakingCountMax = (int)(simHz / 3.0);
-            pAgent[objID]->decisionMalingCount = 0;
+            pAgent[objID]->decisionMakingCount = 0;
 
             // Control; 10[Hz]
             pAgent[objID]->controlCountMax = (int)(simHz / 10.0);
@@ -897,9 +970,107 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             }
 
 
+            if( pRoad->pedestrianKind[selPedestModelIdx]->type == 2 ){   // Bicycle
+
+                float rnd = this->GenUniform();
+                if( rnd <= 0.0638 ){
+                    pAgent[objID]->attri.age = 0;
+                    pAgent[objID]->memory.targetSpeed = GetNormalDist( 3.0, 0.107 );
+                }
+                else if( rnd >= 1.0 - 0.2637 ){
+                    pAgent[objID]->attri.age = 2;
+                    pAgent[objID]->memory.targetSpeed = GetNormalDist( 4.0, 0.104 );
+                }
+                else{
+                    pAgent[objID]->attri.age = 1;
+                    pAgent[objID]->memory.targetSpeed = GetNormalDist( 5.0, 0.093 );
+                }
+
+            }
+            else{
+                float rnd = this->GenUniform();
+                if( rnd <= 0.0638 ){
+                    pAgent[objID]->attri.age = 0;
+                    pAgent[objID]->memory.targetSpeed = GetNormalDist( meanSpeedPedestrian[0], 0.107 );
+                }
+                else if( rnd >= 1.0 - 0.2637 ){
+                    pAgent[objID]->attri.age = 2;
+                    pAgent[objID]->memory.targetSpeed = GetNormalDist( meanSpeedPedestrian[2], 0.104 );
+                }
+                else{
+                    pAgent[objID]->attri.age = 1;
+                    pAgent[objID]->memory.targetSpeed = GetNormalDist( meanSpeedPedestrian[1], 0.093 );
+                }
+
+                if( pAgent[objID]->memory.targetSpeed <= 0.2 ){
+                    pAgent[objID]->memory.targetSpeed = 0.2;
+                }
+            }
+
+
             pAgent[objID]->agentKind = 100 + selPedestModelIdx;
 
             pAgent[objID]->vehicle.SetVehicleModelID( selPedestModelIdx );
+
+            if( selPedestModelIdx < pRoad->pedestrianKind.size() ){
+
+                pAgent[objID]->objTypeForUE4 = pRoad->pedestrianKind[selPedestModelIdx]->type;
+                pAgent[objID]->objNoForUE4   = pRoad->pedestrianKind[selPedestModelIdx]->No;
+                if( pRoad->pedestrianKind[selPedestModelIdx]->UE4ModelID > 0 ){
+                    pAgent[objID]->objIDForUE4 = pRoad->pedestrianKind[selPedestModelIdx]->UE4ModelID;
+                }
+                else{
+                    pAgent[objID]->objIDForUE4 = -1;
+                }
+
+                if( DSMode == true && pAgent[objID]->objIDForUE4 < 0 ){  // Only for support of old-format data
+                    if( pAgent[objID]->objTypeForUE4 == 1 ){
+                        if( pAgent[objID]->objNoForUE4 == 3 ){   // Child
+                            pAgent[objID]->attri.age = 0;
+                            pAgent[objID]->memory.targetSpeed = GetNormalDist( meanSpeedPedestrian[0], 0.107 );
+                        }
+                        else if( pAgent[objID]->objNoForUE4 == 4 ){   // Aged
+                            pAgent[objID]->attri.age = 2;
+                            pAgent[objID]->memory.targetSpeed = GetNormalDist( meanSpeedPedestrian[2], 0.104 );
+                        }
+                        else{
+                            pAgent[objID]->attri.age = 1;
+                            pAgent[objID]->memory.targetSpeed = GetNormalDist( meanSpeedPedestrian[1], 0.093 );
+                        }
+                    }
+                }
+
+
+                //
+                //  Set speed and age if assigned by SEdit; this is for new format data
+                //
+                if( pAgent[objID]->objIDForUE4 > 0 ){
+                    if( pRoad->pedestrianKind[selPedestModelIdx]->meanSpeed > 0.0 ){
+
+                        pAgent[objID]->memory.targetSpeed = GetNormalDist( pRoad->pedestrianKind[selPedestModelIdx]->meanSpeed,
+                                                                           pRoad->pedestrianKind[selPedestModelIdx]->stdDevSpeed );
+
+
+                        if( pAgent[objID]->memory.targetSpeed <= 0.55 ){
+                            pAgent[objID]->memory.targetSpeed = 0.55;
+                        }
+                    }
+
+                    pAgent[objID]->attri.age = pRoad->pedestrianKind[selPedestModelIdx]->ageInfo;
+                }
+
+
+                pAgent[objID]->vHalfWidth  = pRoad->pedestrianKind[selPedestModelIdx]->width * 0.5;
+                pAgent[objID]->vHalfLength = pRoad->pedestrianKind[selPedestModelIdx]->length * 0.5;
+
+//                // Assume minimum size of pedestrian as a circle of Diameter=0.75[m]
+//                if( pAgent[objID]->vHalfWidth < 0.35 ){
+//                    pAgent[objID]->vHalfWidth = 0.35;
+//                }
+//                if( pAgent[objID]->vHalfLength < 0.35 ){
+//                    pAgent[objID]->vHalfLength = 0.35;
+//                }
+            }
 
             pAgent[objID]->state.V = 0.0;
             pAgent[objID]->state.x = pRoad->pedestPaths[i]->shape.first()->pos.x();
@@ -917,7 +1088,14 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             pAgent[objID]->memory.currentTargetPathIndexInList = 0;
 
 
-            float maxWID = pRoad->pedestPaths[i]->shape.first()->width * 0.5;
+            float maxWID = pRoad->pedestPaths[i]->shape.first()->width * 0.5 - pAgent[objID]->vHalfWidth;
+            if( maxWID > 2.5 - pAgent[objID]->vHalfWidth ){
+                maxWID = 2.5 - pAgent[objID]->vHalfWidth;
+            }
+            else if(maxWID < 0.5){
+                maxWID = 0.5;
+            }
+
             pAgent[objID]->memory.lateralShiftTarget = ( GetNormalDist( 0.0, 2.0 ) )* maxWID;
             if( pAgent[objID]->memory.lateralShiftTarget > maxWID ){
                 pAgent[objID]->memory.lateralShiftTarget = maxWID;
@@ -926,27 +1104,14 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                 pAgent[objID]->memory.lateralShiftTarget = -maxWID;
             }
 
+            pAgent[objID]->memory.lateralShiftTarget_backup = pAgent[objID]->memory.lateralShiftTarget;
+
 
             // Set control information
             pAgent[objID]->memory.controlMode = AGENT_CONTROL_MODE::AGENT_LOGIC;
 
-
-            {
-                float rnd = this->GenUniform();
-                if( rnd <= 0.0638 ){
-                    pAgent[objID]->attri.age = 0;
-                    pAgent[objID]->memory.targetSpeed = GetNormalDist( 1.339, 0.107 );
-                }
-                else if( rnd >= 1.0 - 0.2637 ){
-                    pAgent[objID]->attri.age = 2;
-                    pAgent[objID]->memory.targetSpeed = GetNormalDist( 1.337, 0.104 );
-                }
-                else{
-                    pAgent[objID]->attri.age = 1;
-                    pAgent[objID]->memory.targetSpeed = GetNormalDist( 1.358, 0.093 );
-                }
-            }
-
+            pAgent[objID]->param.visibleDistance = 25.0;
+            pAgent[objID]->param.minimumHeadwayDistanceAtStop = 1.5;
 
 
             // Set Flags
@@ -965,6 +1130,21 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
                 pAgent[objID]->vehicle.yawFiltered4CG->SetParam(1,simTime.dt, 10.0 , 0.0);
                 pAgent[objID]->vehicle.yawFiltered4CG->SetInitialValue( pAgent[objID]->state.yaw );
+
+                if( pAgent[objID]->vehicle.axFiltered4CG == NULL ){
+                    pAgent[objID]->vehicle.axFiltered4CG = new LowPassFilter(1, simTime.dt, 6.0 , 0.0);
+                }
+
+                pAgent[objID]->vehicle.axFiltered4CG->SetParam(1,simTime.dt, 30.0 , 0.0);
+                pAgent[objID]->vehicle.axFiltered4CG->SetInitialValue( cos( pAgent[objID]->state.yaw ) );
+
+
+                if( pAgent[objID]->vehicle.ayFiltered4CG == NULL ){
+                    pAgent[objID]->vehicle.ayFiltered4CG = new LowPassFilter(1, simTime.dt, 6.0 , 0.0);
+                }
+
+                pAgent[objID]->vehicle.ayFiltered4CG->SetParam(1,simTime.dt, 30.0 , 0.0);
+                pAgent[objID]->vehicle.ayFiltered4CG->SetInitialValue( sin( pAgent[objID]->state.yaw ) );
             }
         }
     }
@@ -1224,7 +1404,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
         // Hazard Identification and Risk Evaluation; 3[Hz]
         pAgent[objectID]->decisionMakingCountMax = (int)(simHz / 3.0);
-        pAgent[objectID]->decisionMalingCount = 0;
+        pAgent[objectID]->decisionMakingCount = 0;
 
         // Control; 10[Hz]
         pAgent[objectID]->controlCountMax = (int)(simHz / 10.0);
@@ -1269,11 +1449,20 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             pAgent[objectID]->vehicle.SetVehicleModelID( vmID );  // This ID is used to draw the object in canvas
 
             {
+                pAgent[objectID]->objTypeForUE4 = pRoad->vehicleKind[vmID]->type;
+                pAgent[objectID]->objNoForUE4   = pRoad->vehicleKind[vmID]->No;
+                if( pRoad->vehicleKind[vmID]->UE4ModelID > 0 ){
+                    pAgent[objectID]->objIDForUE4 = pRoad->vehicleKind[vmID]->UE4ModelID;
+                }
+                else{
+                    pAgent[objectID]->objIDForUE4 = -1;
+                }
+
                 float L = pRoad->vehicleKind[vmID]->length;
                 float W = pRoad->vehicleKind[vmID]->width;
                 float H = pRoad->vehicleKind[vmID]->height;
 
-                pAgent[objectID]->vehicle.SetVehicleParam( L, W, H, L * 0.8, L * 0.1, 0.5 );
+                pAgent[objectID]->vehicle.SetVehicleParam( L, W, H, L * 0.8, L * 0.1, 1.0 );
 
                 pAgent[objectID]->vHalfLength = L * 0.5;
                 pAgent[objectID]->vHalfWidth  = W  * 0.5;
@@ -1318,14 +1507,27 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
                     int numLaneLists = pRoad->odRoute[i]->LCSupportLaneLists.last()->laneList.size();
 
+                    int baseLane = se->eventIntData[1];
+
                     int selIdx = 0;
                     if( numLaneLists > 1 ){
-                        float rnd = rndGen.GenUniform();
-                        float H = 1.0 / (float)numLaneLists;
+
+                        bool foundFromLists = false;
                         for(int k=0;k<numLaneLists;++k){
-                            if( rnd >= k * H && rnd < (k+1) * H ){
+                            if( pRoad->odRoute[i]->LCSupportLaneLists.last()->laneList[k].lastIndexOf( baseLane ) >= 0 ){
+                                foundFromLists = true;
                                 selIdx = k;
                                 break;
+                            }
+                        }
+                        if( foundFromLists == false ){
+                            float rnd = rndGen.GenUniform();
+                            float H = 1.0 / (float)numLaneLists;
+                            for(int k=0;k<numLaneLists;++k){
+                                if( rnd >= k * H && rnd < (k+1) * H ){
+                                    selIdx = k;
+                                    break;
+                                }
                             }
                         }
                     }
@@ -1365,6 +1567,15 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
                     int tpIdx = pRoad->pathId2Index.lastIndexOf( currentPath );
                     if( tpIdx >= 0 ){
+//                        qDebug() << "Call SetTargetSpeedIndividual: ID = " << objectID << " Path=" << currentPath
+//                                 << " idx=" << tpIdx << " chk=" << pRoad->paths[tpIdx]->id
+//                                 << " V85=" << pRoad->paths[tpIdx]->speed85pt;
+                        if( pRoad->paths[tpIdx]->speed85pt == pRoad->paths[tpIdx]->speedInfo ){
+                            pAgent[objectID]->refSpeedMode = 1;
+                        }
+                        else{
+                            pAgent[objectID]->refSpeedMode = 0;
+                        }
                         pAgent[objectID]->SetTargetSpeedIndividual( pRoad->paths[tpIdx]->speed85pt );
                     }
 
@@ -1486,12 +1697,26 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             qDebug() << "Generate Agent[Scenario] : objectID = " << objectID;
 
             pAgent[objectID]->isScenarioObject = true;
+            pAgent[objectID]->isOldScenarioType = false;
             pAgent[objectID]->canAppearRepeatedly = se->eventBooleanData[0];
 
             pAgent[objectID]->isSInterfaceObject = false;
             pAgent[objectID]->isBehaviorEmbeded  = false;
             pAgent[objectID]->justWarped = false;
 
+
+            // Fluctuation in Speed Control
+            int tpIdx = pRoad->pedestPathID2Index.indexOf( pAgent[objectID]->memory.currentTargetPath );
+            if( tpIdx >= 0 && pRoad->paths[tpIdx]->setSpeedVariationParam == true ){
+
+                pAgent[objectID]->param.refVforDev     = pRoad->paths[tpIdx]->refVforDev;
+                pAgent[objectID]->param.vDevAllowPlus  = pRoad->paths[tpIdx]->vDevP;
+                pAgent[objectID]->param.vDevAllowMinus = pRoad->paths[tpIdx]->vDevM;
+                pAgent[objectID]->param.accelAtVDev    = pRoad->paths[tpIdx]->accelAtDev;
+                pAgent[objectID]->param.decelAtVDev    = pRoad->paths[tpIdx]->decelAtDev;
+                pAgent[objectID]->param.deadZoneSpeedControl = 0.0;
+
+            }
 
             if( DSMode == true ){
 
@@ -1596,6 +1821,30 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             pAgent[objectID]->agentKind = 100 + pedestMdlIdx;
             pAgent[objectID]->vehicle.SetVehicleModelID( pedestMdlIdx );
 
+            if( pedestMdlIdx < pRoad->pedestrianKind.size() ){
+
+                pAgent[objectID]->objTypeForUE4 = pRoad->pedestrianKind[pedestMdlIdx]->type;
+                pAgent[objectID]->objNoForUE4   = pRoad->pedestrianKind[pedestMdlIdx]->No;
+                if( pRoad->pedestrianKind[pedestMdlIdx]->UE4ModelID > 0 ){
+                    pAgent[objectID]->objIDForUE4 = pRoad->pedestrianKind[pedestMdlIdx]->UE4ModelID;
+                }
+                else{
+                    pAgent[objectID]->objIDForUE4 = -1;
+                }
+
+                pAgent[objectID]->vHalfWidth  = pRoad->pedestrianKind[pedestMdlIdx]->width * 0.5;
+                pAgent[objectID]->vHalfLength = pRoad->pedestrianKind[pedestMdlIdx]->length * 0.5;
+
+                // Assume minimum size of pedestrian as a circle of 1[m]
+//                if( pAgent[objectID]->vHalfWidth < 0.5 ){
+//                    pAgent[objectID]->vHalfWidth = 0.5;
+//                }
+//                if( pAgent[objectID]->vHalfLength < 0.5 ){
+//                    pAgent[objectID]->vHalfLength = 0.5;
+//                }
+            }
+
+
             pAgent[objectID]->state.V = se->eventFloatData[3];
             pAgent[objectID]->state.x = se->eventFloatData[0];
             pAgent[objectID]->state.y = se->eventFloatData[1];
@@ -1606,11 +1855,9 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
             pAgent[objectID]->memory.targetSpeedByScenario = se->eventFloatData[3];
 
-            int ppIdx = -1;
             pAgent[objectID]->memory.currentTargetPath = -1;
             for(int k=0;k<pRoad->pedestPaths.size();++k){
                 if( pRoad->pedestPaths[k]->scenarioObjectID == pAgent[objectID]->ID ){
-                    ppIdx = k;
                     pAgent[objectID]->memory.currentTargetPath = pRoad->pedestPaths[k]->id;
                     break;
                 }
@@ -1643,6 +1890,10 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objectID]->attri.age = 1;
                     pAgent[objectID]->memory.targetSpeed = GetNormalDist( 1.358, 0.093 );
                 }
+
+                if( pAgent[objectID]->memory.targetSpeed <= 0.55 ){
+                    pAgent[objectID]->memory.targetSpeed = 0.55;
+                }
             }
 
 
@@ -1651,6 +1902,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             //qDebug() << "Generate Agent[Pedestrian] : objID = " << objID;
 
             pAgent[objectID]->isScenarioObject = true;
+            pAgent[objectID]->isOldScenarioType = false;
             pAgent[objectID]->canAppearRepeatedly = se->eventBooleanData[0];
 
             pAgent[objectID]->BackupMemory();
@@ -1716,7 +1968,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
         // Check trigger
         ScenarioTriggers *trig = scenario[currentScenarioID]->scenarioItems[i]->appearTriggers;
-        //qDebug() << "objectID = " << objectID << " trigger mode = " << trig->mode;
+//        qDebug() << "objectID = " << objectID << " trigger mode = " << trig->mode;
         if( trig->mode == TRIGGER_TYPE::TIME_TRIGGER ||
             trig->mode == TRIGGER_TYPE::POSITION_TIME_TRIGGER ){
 
@@ -1794,8 +2046,11 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             continue;
         }
 
+//        qDebug() << " objectID = " << objectID
+//                 << " byExternalTriggerFlag = " << trig->byExternalTriggerFlag
+//                 << " extTriggerFlagState = " << trig->extTriggerFlagState;
 
-        if( trig->byExternalTriggerFlag == true ){
+        if( trig->byExternalTriggerFlag == true || trig->mode == TRIGGER_TYPE::BY_FUNCTION_EXTENDER ){
             if( trig->extTriggerFlagState == false ){
                 nAppear--;
                 continue;
@@ -1846,7 +2101,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
         // Hazard Identification and Risk Evaluation; 3[Hz]
         pAgent[objectID]->decisionMakingCountMax = (int)(simHz / 3.0);
-        pAgent[objectID]->decisionMalingCount = 0;
+        pAgent[objectID]->decisionMakingCount = 0;
 
         // Control; 10[Hz]
         pAgent[objectID]->controlCountMax = (int)(simHz / 10.0);
@@ -1892,11 +2147,14 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             pAgent[objectID]->vehicle.SetVehicleModelID( vmID );  // This ID is used to draw the object in canvas
 
             {
+                pAgent[objectID]->objTypeForUE4 = -1;  // For Scenario Vehicle
+                pAgent[objectID]->objNoForUE4   = vmID;
+
                 float L = pRoad->vehicleKind[vmID]->length;
                 float W = pRoad->vehicleKind[vmID]->width;
                 float H = pRoad->vehicleKind[vmID]->height;
 
-                pAgent[objectID]->vehicle.SetVehicleParam( L, W, H, L * 0.8, L * 0.1, 0.5 );
+                pAgent[objectID]->vehicle.SetVehicleParam( L, W, H, L * 0.8, L * 0.1, 1.0 );
 
                 pAgent[objectID]->vHalfLength = L * 0.5;
                 pAgent[objectID]->vHalfWidth  = W  * 0.5;
@@ -2011,10 +2269,10 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             scenario[currentScenarioID]->scenarioItems[i]->status = 1;
 
             pAgent[objectID]->agentStatus = 1;
-            qDebug() << "Generate Agent[Scenario] : objectID = " << objectID;
+            qDebug() << "Generate Agent[Scenario Vehicle(Old Format)] : objectID = " << objectID;
 
             pAgent[objectID]->isScenarioObject = true;
-
+            pAgent[objectID]->isOldScenarioType = true;
             pAgent[objectID]->isSInterfaceObject = false;
             pAgent[objectID]->isBehaviorEmbeded  = false;
             pAgent[objectID]->justWarped = false;
@@ -2131,6 +2389,22 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             }
             pAgent[objectID]->vehicle.SetVehicleModelID( pmID );   // This ID is used to draw the object in canvas
 
+            {
+                pAgent[objectID]->objTypeForUE4 = pRoad->pedestrianKind[pmID]->type;
+                pAgent[objectID]->objNoForUE4   = pRoad->pedestrianKind[pmID]->No;
+
+                pAgent[objectID]->vHalfWidth  = pRoad->pedestrianKind[pmID]->width * 0.5;
+                pAgent[objectID]->vHalfLength = pRoad->pedestrianKind[pmID]->length * 0.5;
+
+                // Assume minimum size of pedestrian as a circle of 1[m]
+                if( pAgent[objectID]->vHalfWidth < 0.5 ){
+                    pAgent[objectID]->vHalfWidth = 0.5;
+                }
+                if( pAgent[objectID]->vHalfLength < 0.5 ){
+                    pAgent[objectID]->vHalfLength = 0.5;
+                }
+            }
+
 
             // Set route information
             for(int j=0;j<scenario[currentScenarioID]->scenarioItems[i]->controlInfo->pedestPathRoute.size();++j){
@@ -2189,9 +2463,10 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             scenario[currentScenarioID]->scenarioItems[i]->status = 1;
 
             pAgent[objectID]->agentStatus = 1;
-            //qDebug() << "Generate Agent[Pedestrian] : objectID = " << objectID;
+            //qDebug() << "Generate Agent[Scenario Pedestrian(Old Format)] : objectID = " << objectID;
 
             pAgent[objectID]->isScenarioObject = true;
+            pAgent[objectID]->isOldScenarioType = true;
         }
 
 
@@ -2234,7 +2509,7 @@ void SimulationManager::DisappearAgents(Agent **pAgent, int maxAgent)
                         // Reset trigger flag
                         ScenarioTriggers *trig = scenario[currentScenarioID]->scenarioItems[j]->appearTriggers;
                         if( trig->mode == TRIGGER_TYPE::BY_FUNCTION_EXTENDER ){
-                            trig->byExternalTriggerFlag = false;
+                            trig->extTriggerFlagState = false;
                         }
                         break;
                     }
@@ -2271,6 +2546,7 @@ void SimulationManager::DisappearAgents(Agent **pAgent, int maxAgent)
             }
 
             pAgent[i]->isScenarioObject = false;
+            pAgent[i]->isOldScenarioType = false;
             pAgent[i]->skipSetControlInfo = false;
 
 //            qDebug() << "Agent ID = " << i << " disposed.";
@@ -2285,7 +2561,37 @@ void SimulationManager::SetAppearFlagByFE(int id)
         return;
     }
 
-    int nItem = scenario[currentScenarioID]->scenarioItems.size();
+    int nItem = scenario[currentScenarioID]->scenarioEvents.size();
+//    qDebug() << "SetAppearFlagByFE: id= " << id << " scenarioEvents.size=" << nItem;
+    for(int i=0;i<nItem;++i){
+
+        if( scenario[currentScenarioID]->scenarioEvents[i]->eventType != SCENARIO_EVENT_TYPE::OBJECT_EVENT ){
+            continue;
+        }
+
+        int objectID = scenario[currentScenarioID]->scenarioEvents[i]->targetObjectID;
+        if( objectID != id ){
+            continue;
+        }
+
+        if( scenario[currentScenarioID]->scenarioEvents[i]->eventKind != OBJECT_SCENARIO_ACTION_KIND::APPEAR_VEHICLE &&
+                scenario[currentScenarioID]->scenarioEvents[i]->eventKind != OBJECT_SCENARIO_ACTION_KIND::APPEAR_PEDESTRIAN ){
+            continue;
+        }
+
+        // Check trigger
+        ScenarioTriggers *trig = scenario[currentScenarioID]->scenarioEvents[i]->eventTrigger;
+        if( trig->byExternalTriggerFlag == true ){
+
+            trig->extTriggerFlagState = true;
+//            qDebug() << "ScenarioObject: ID=" << objectID << " set extTriggerFlagState = true";
+            break;
+        }
+    }
+
+    nItem = scenario[currentScenarioID]->scenarioItems.size();
+
+//    qDebug() << "SetAppearFlagByFE: id= " << id << " scenarioItems.size=" << nItem;
     for(int i=0;i<nItem;++i){
 
         int objectID = scenario[currentScenarioID]->scenarioItems[i]->objectID;
@@ -2293,13 +2599,14 @@ void SimulationManager::SetAppearFlagByFE(int id)
             continue;
         }
 
-        // Check trigger
         ScenarioTriggers *trig = scenario[currentScenarioID]->scenarioItems[i]->appearTriggers;
         if( trig->mode == TRIGGER_TYPE::BY_FUNCTION_EXTENDER ){
-            trig->byExternalTriggerFlag = true;
+            trig->extTriggerFlagState = true;
+//            qDebug() << "ScenarioObject: ID=" << objectID << " set extTriggerFlagState = true";
             break;
         }
     }
+
 }
 
 
@@ -2329,7 +2636,7 @@ void SimulationManager::SetScenarioObjectsRouteInfo()
                     // Path List Type
                     scenario[i]->scenarioEvents[j]->routeType = ROUTE_TYPE::PATH_LIST_TYPE;
 
-                    int nElem = scenario[i]->scenarioEvents[j]->eventIntData[3];
+//                    int nElem = scenario[i]->scenarioEvents[j]->eventIntData[3];
                     for(int k=4;k<scenario[i]->scenarioEvents[j]->eventFloatData.size();k+=4){
 
                         struct ScenarioWPRoute* wp = new struct ScenarioWPRoute;
@@ -2350,7 +2657,7 @@ void SimulationManager::SetScenarioObjectsRouteInfo()
 
                 scenario[i]->scenarioEvents[j]->routeType = ROUTE_TYPE::PEDEST_PATH_LIST_TYPE;
 
-                int nElem = scenario[i]->scenarioEvents[j]->eventIntData[2];
+//                int nElem = scenario[i]->scenarioEvents[j]->eventIntData[2];
                 for(int k=4;k<scenario[i]->scenarioEvents[j]->eventFloatData.size();k+=4){
 
                     struct ScenarioWPRoute* wp = new struct ScenarioWPRoute;

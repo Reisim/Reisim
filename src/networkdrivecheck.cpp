@@ -48,20 +48,22 @@ void GetNetworkDrive()
     wchar_t szRemoteName[255];
     dwResult = WNetGetConnection(driveNameWT, szRemoteName, &dwLength);
 
-    QString remoteName = QString::fromWCharArray(szRemoteName).replace("\\","/");
-    qDebug() << " remoteName for " << tmpDrive << " = " << remoteName;
+    if( dwResult == NO_ERROR ){
+        QString remoteName = QString::fromWCharArray(szRemoteName).replace("\\","/");
+        qDebug() << " remoteName for " << tmpDrive << " = " << remoteName;
 
-    if( remoteName.startsWith("//") ){
+        if( remoteName.startsWith("//") ){
 
-        struct NetworkDriveInfo *ndi = new struct NetworkDriveInfo;
-	      if( ndi != NULL ){
-		        ndi->driveName = tmpDrive;
-		        ndi->path = remoteName;
-		
-		        netDrive.append( ndi );
+            struct NetworkDriveInfo *ndi = new struct NetworkDriveInfo;
+              if( ndi != NULL ){
+                    ndi->driveName = tmpDrive;
+                    ndi->path = remoteName;
+
+                    netDrive.append( ndi );
+            }
+
+    //        qDebug() << "Network Drive;  " << ndi->driveName << " " << ndi->path;
         }
-
-//        qDebug() << "Network Drive;  " << ndi->driveName << " " << ndi->path;
     }
 }
 

@@ -56,6 +56,7 @@ ConfigWindow::ConfigWindow(QWidget *parent) : QWidget(parent)
     gridLay->addWidget( new QLabel("Work with Driving Simulator"), 5, 0, 1, 1 );
     gridLay->addWidget( new QLabel("Restart File"), 6, 0, 1, 1 );
     gridLay->addWidget( new QLabel("Calculation Time Step"), 7, 0, 1, 1 );
+    gridLay->addWidget( new QLabel("Base-Map File"), 8, 0, 1, 1 );
 
 
     QPushButton *selectScenario = new QPushButton("Select");
@@ -119,6 +120,16 @@ ConfigWindow::ConfigWindow(QWidget *parent) : QWidget(parent)
     calTimeStep->setSuffix("[s]");
     gridLay->addWidget( calTimeStep, 7, 1, 1, 1, Qt::AlignLeft );
 
+    QPushButton *selectBaseMap = new QPushButton("Select");
+    selectBaseMap->setIcon( QIcon(":/images/select.png") );
+    selectBaseMap->setFixedWidth(60);
+    connect(selectBaseMap,SIGNAL(clicked(bool)),this,SLOT(SelectBaseMap()));
+    gridLay->addWidget( selectBaseMap, 8, 1, 1, 1 );
+
+    baseMapFilename = new QLabel("Not selected.");
+    baseMapFilename->setFixedWidth( 600 );
+    baseMapFilename->setWordWrap(true);
+    gridLay->addWidget( baseMapFilename, 8, 2, 1, 1 );
 
 
     //----------------------
@@ -151,6 +162,7 @@ void ConfigWindow::NewConfig()
     logSaveFolder->setText( "Not selected." );
     logFileName->setText( "Not selected." );
     restartFilename->setText( "Not selected." );
+    baseMapFilename->setText( "Not selected." );
 
     cbOutputLogFile->setCheckState( Qt::Unchecked );
     cbDSMode->setCheckState( Qt::Unchecked );
@@ -189,6 +201,14 @@ void ConfigWindow::OpenConfig()
             QMessageBox::warning(this,"Error","Cannot open file: " + fileName);
             return;
         }
+
+
+        scenarioFilename->setText( "Not selected." );
+        logSaveFolder->setText( "Not selected." );
+        logFileName->setText( "Not selected." );
+        restartFilename->setText( "Not selected." );
+        baseMapFilename->setText( "Not selected." );
+
 
         QTextStream in(&file);
         QString line;
@@ -242,6 +262,11 @@ void ConfigWindow::OpenConfig()
                 scenarioFilename->setText( QString(divLine[1]).trimmed() );
 
             }
+            else if( tag == QString("Base-Map Files") ){
+
+                baseMapFilename->setText( QString(divLine[1]).trimmed() );
+
+            }
             else if( tag == QString("Log Output Folder") ){
 
                 logSaveFolder->setText( QString(divLine[1]).trimmed() );
@@ -254,8 +279,12 @@ void ConfigWindow::OpenConfig()
             }
             else if( tag == QString("Restart File") ){
 
-                restartFilename->setText( QString(divLine[1]).trimmed() );
-
+                if( QString(divLine[1]).trimmed().isEmpty() ){
+                    restartFilename->setText( "Not selected." );
+                }
+                else{
+                    restartFilename->setText( QString(divLine[1]).trimmed() );
+                }
             }
             else if( tag == QString("Calculation Time Step") ){
 
@@ -338,6 +367,10 @@ void ConfigWindow::SaveConfig()
             out << "Scenario File ; " << scenarioFilename->text() << "\n";
         }
 
+        if( baseMapFilename->text().contains("Not selected") == false ){
+            out << "Base-Map Files ; " << baseMapFilename->text() << "\n";
+        }
+
         out << "Calculation Time Step ; " << calTimeStep->value() << "\n";
         out << "\n";
         out << "Output Log File ; ";
@@ -349,7 +382,11 @@ void ConfigWindow::SaveConfig()
         }
         out << "Log Output Folder ; " << logSaveFolder->text() << "\n";
         out << "CSV Output File ; " << logFileName->text() << "\n";
-        out << "Restart File ; " << restartFilename->text() << "\n";
+
+        if( restartFilename->text().contains("Not selected") == false ){
+            out << "Restart File ; " << restartFilename->text() << "\n";
+        }
+
 
         file.close();
 
@@ -378,6 +415,30 @@ void ConfigWindow::SelectScenario()
     }
     else{
         qDebug() << "   filename is null";
+    }
+
+    setFixedSize( sizeHint() );
+}
+
+
+void ConfigWindow::SelectBaseMap()
+{
+    qDebug() << "[SelectBaseMap]";
+
+    QString fileName = QFileDialog::getOpenFileName(this,
+                                                    tr("Choose Base-Map Image File"),
+                                                    ".",
+                                                    tr("base-map image file(*.txt)"));
+
+    if( fileName.isNull() == false ){
+        qDebug() << "   filename = " << fileName;
+        baseMapFilename->setText( fileName );
+        setWindowModified(true);
+    }
+    else{
+        qDebug() << "   filename is null";
+        baseMapFilename->setText( "Not selected." );
+        setWindowModified(true);
     }
 
     setFixedSize( sizeHint() );
@@ -451,7 +512,7 @@ void ConfigWindow::SelectRestartFile()
     }
     else{
         qDebug() << "   filename is null; clear restart file";
-        restartFilename->clear();
+        restartFilename->setText( "Not selected." );
         setWindowModified(true);
     }
 

@@ -23,10 +23,14 @@
 extern QMutex *mutex;
 extern QWaitCondition *cond;
 extern int g_DSTimingFlag;
+extern int g_SInterEmbedFlag;
+extern int g_simulationCount;
 
 extern QMutex *mutex_sync;
 extern QWaitCondition *cond_sync;
 extern int allowDataGetForDS;
+
+extern bool invalidXPivotData;
 
 
 LARGE_INTEGER start_time, end_time;
@@ -47,13 +51,16 @@ UDPThread::UDPThread(QObject *parent) :
     numberTrafficSignal = 0;
     syncSigCount = 0;
 
-    maxAgentDataSend = 50;
+    maxAgentDataSend = 200;
+    maxAgentDataSendToFE = 60;
     maxTSDataSend = 40;
 
     HasFuncExtender = false;
 
     agentCalFinished = false;
     SInterfaceDataEmbeded = false;
+
+    simState = 0;
 
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&start_time);
@@ -406,6 +413,8 @@ void UDPThread::ReadUDPData()
         char *com = datagram.data();
         int comSize = datagram.size();
 
+//        qDebug() << "[ReadUDPData] comSize = " << comSize;
+
 //        QueryPerformanceCounter(&end_time);
 //        double cal_time = static_cast<double>(end_time.QuadPart - start_time.QuadPart) * 1000.0 / freq.QuadPart;
 //        start_time = end_time;
@@ -416,6 +425,8 @@ void UDPThread::ReadUDPData()
         int index = 0;
 //        while( index < comSize ){
 
+//            qDebug() << "index=" << index << " comSize = " << comSize << " data=" << com[index];
+
             if( com[index+0] == 'C' ){  // Command from SCore
 
                 if( com[index+1] == 'C' ){  // Check network connection
@@ -425,7 +436,7 @@ void UDPThread::ReadUDPData()
                     res[0] = 'C';
                     res[1] = 'C';
                     res[2] = 'R';
-                    res[2] = 'S';
+                    res[3] = 'S';
 
                     if( scoreSendSockIndex >= 0 ){
                         sendSocks[scoreSendSockIndex]->sock.writeDatagram( res,
@@ -437,6 +448,8 @@ void UDPThread::ReadUDPData()
                     }
 
                     index += 2;
+
+                    qDebug() << "[ReadUDPData] Data = CC";
                 }
                 else if( com[index+1] == 'I' ){  // Initialize model
 
@@ -465,9 +478,17 @@ void UDPThread::ReadUDPData()
                         qDebug() << " invalid scoreSendSockIndex = " << scoreSendSockIndex;
                     }
 
+                    qDebug() << "[ReadUDPData] Data = CI";
+
                     index += 6;
+
+                    emit RedrawRequest();
+
+                    simState = 1;
                 }
                 else if( com[index+1] == 'S' ){  // Start Simulation
+
+                    qDebug() << "[ReadUDPData] Data = CS";
 
                     //
                     // Add code here if necessary
@@ -477,8 +498,11 @@ void UDPThread::ReadUDPData()
 
                     index += 2;
 
+                    simState = 2;
                 }
                 else if( com[index+1] == 'T' ){  // Termination
+
+                    qDebug() << "[ReadUDPData] Data = CT";
 
                     qDebug() << "Received Stop Simulation Command";
                     qDebug() << "recved sync signal count = " << syncSigCount;
@@ -498,8 +522,12 @@ void UDPThread::ReadUDPData()
 
                     index += 2;
 
+                    simState = 3;
+
                 }
                 else if( com[index+1] == 'R' ){  // Check network connection with UE4, FuncExtend
+
+                    qDebug() << "[ReadUDPData] Data = CR";
 
                     char res[255];
                     memset(res,0,255);
@@ -527,12 +555,17 @@ void UDPThread::ReadUDPData()
 
                     index += 2;
                 }
+                else{
+                    index++;
+                }
             }
             else if( com[index+0] == 'S' ){  // Data from S-Interface
 
                 if( com[index+1] == 'I' ){
 
                     if( com[index+2] == 'c' ){
+
+                        qDebug() << "[ReadUDPData] Data = SIc";
 
                         char res[255];
                         memset(res,0,255);
@@ -555,27 +588,95 @@ void UDPThread::ReadUDPData()
 
                         index += 3;
                     }
+                    else if( com[index+2] == 'i' ){
+
+                        int pos = 4;
+                        char SInterObjType = com[index+3];
+
+                        int  SInterObjID = -1;
+
+                        memcpy( &SInterObjID, &(com[index+pos]), sizeof(int) );
+                        pos += sizeof(int);
+
+                        if( SInterObjID >= 0 && SInterObjID < maxAgent ){
+
+                            float xVal = 0.0;
+                            memcpy( &xVal, &(com[index+pos]), sizeof(float) );
+                            pos += sizeof(float);
+
+                            float yVal = 0.0;
+                            memcpy( &yVal, &(com[index+pos]), sizeof(float) );
+                            pos += sizeof(float);
+
+                            float zVal = 0.0;
+                            memcpy( &zVal, &(com[index+pos]), sizeof(float) );
+                            pos += sizeof(float);
+
+                            float yawVal;
+                            memcpy( &yawVal, &(com[index+pos]), sizeof(float) );
+                            pos += sizeof(float);
+
+                            float wheelbase;
+                            memcpy( &wheelbase, &(com[index+pos]), sizeof(float) );
+                            pos += sizeof(float);
+
+                            // UE4 coordinate to Re:sim coordinate
+                            yVal *= -1.0;
+                            yawVal *= -1.0;
+
+                            qDebug() << "Received S-Interface Initial State Data:";
+                            qDebug() << "Type = " << SInterObjType;
+                            qDebug() << "ID = " << SInterObjID;
+                            qDebug() << "X = " << xVal;
+                            qDebug() << "Y = " << yVal;
+                            qDebug() << "Z = " << zVal;
+                            qDebug() << "Yaw = " << yawVal;
+                            qDebug() << "Wheelbase = " << wheelbase;
+
+                            emit ReceiveSInterInitState( SInterObjType, SInterObjID, xVal, yVal, zVal, yawVal, wheelbase );
+
+                            qDebug() << "Redraw requested.";
+                            emit RedrawRequest();
+                        }
+
+                    }
                     else if( com[index+2] == 'd' ){
+
+                        if( invalidXPivotData == true ){
+                            qDebug() << "[ReadUDPData] Data = SId; comsize = " << comSize;
+                        }
+
+                        int pos = 4;
 
                         if( comSize >= 72 ){
 
                             char SInterObjType = com[index+3];
+
                             int  SInterObjID = -1;
-                            int pos = 4;
+
                             memcpy( &SInterObjID, &(com[index+pos]), sizeof(int) );
                             pos += sizeof(int);
 
+
+                            if( invalidXPivotData == true || simState < 2 ){
+                                qDebug() << "SInterObjID = " << SInterObjID;
+                            }
+
                             if( SInterObjID >= 0 && SInterObjID < maxAgent ){
 
-                                float xVal;
+                                float xVal = 0.0;
                                 memcpy( &xVal, &(com[index+pos]), sizeof(float) );
                                 pos += sizeof(float);
 
-                                float yVal;
+                                float yVal = 0.0;
                                 memcpy( &yVal, &(com[index+pos]), sizeof(float) );
                                 pos += sizeof(float);
 
-                                float zVal;
+                                if( invalidXPivotData == true ){
+                                    qDebug() << "xVal = " << xVal << " yVal = " << yVal;
+                                }
+
+                                float zVal = 0.0;
                                 memcpy( &zVal, &(com[index+pos]), sizeof(float) );
                                 pos += sizeof(float);
 
@@ -661,6 +762,9 @@ void UDPThread::ReadUDPData()
                                 pos += sizeof(float);
 
 
+                                memset( &asv, 0, sizeof(asv) );
+                                memset( &sov, 0, sizeof(sov) );
+
                                 asv.x = xVal;
                                 asv.y = yVal * (-1.0);
                                 asv.z = zVal;
@@ -721,6 +825,17 @@ void UDPThread::ReadUDPData()
                                     sov.highbeam = true;
                                 }
 
+
+                                sov.objID = SInterObjID;
+                                if( SInterObjType == 'v' || SInterObjType == 'm' ){
+                                    sov.objType = 0;
+                                }
+                                else if( SInterObjType == 'p' || SInterObjType == 'b' ){
+                                    sov.objType = 100;
+                                }
+
+
+                                // Copy data to Buffer
                                 emit ReceiveSInterObjData( SInterObjType, SInterObjID, &asv, &sov );
 
 
@@ -739,17 +854,24 @@ void UDPThread::ReadUDPData()
 
                                     if( SInterfaceDataEmbeded == true ){
                                         //
-                                        //  Start agent calculation
+                                        //  Allow to embed SInterface Object
                                         mutex->lock();
-                                        g_DSTimingFlag = 1;
+                                        g_SInterEmbedFlag = 1;
                                         cond->wakeAll();
                                         mutex->unlock();
+
                                     }
+                                }
+                                else{
+                                    qDebug() << "Cannot find SInterObjID = " << SInterObjID << " from SInterfaceObjIDs :" << SInterfaceObjIDs;
                                 }
                             }
                         }
 
-                        index += 72;
+                        index += pos;
+                    }
+                    else{
+                        index += 2;
                     }
                 }
             }
@@ -780,11 +902,16 @@ void UDPThread::ReadUDPData()
                             qDebug() << " send response data to " << sendSocks[scoreSendSockIndex]->sock.objectName() << " , data = " << res;
                         }
 
-                        index += 3;
+                        index += strlen(com);
 
+                    }
+                    else{
+                        index += 2;
                     }
                 }
                 else if( com[index+1] == 'D' && comSize >= 22){  // Tire hight data
+
+//                    qDebug() << "[ReadUDPData] Data = UD";
 
                     int targetID = -1;
                     int pos = 2;
@@ -816,14 +943,33 @@ void UDPThread::ReadUDPData()
 
                     emit ReceiveTireHeight( siObjectID, targetID, zFL, zFR, zRL, zRR );
 
-                    index += 22;
+                    index += pos;
+                }
+                else{
+                    index++;
                 }
             }
             else if( com[index+0] == 'D' ){  // Update command from SCore
 
                 if( com[index+1] == 'U' ){
 
+//                    qDebug() << "[ReadUDPData] Data = DU";
+
                     syncSigCount++;
+
+                    float simTimeFromScore = 0.0;
+                    memcpy( &simTimeFromScore, &(com[index+2]), sizeof(float) );
+
+                    int simCount = 0;
+                    if( comSize >= index+10 ){
+                        memcpy( &simCount, &(com[index+6]), sizeof(int) );
+                    }
+                    g_simulationCount = simCount;
+
+                    mutex->lock();
+                    g_DSTimingFlag = 1;
+                    cond->wakeAll();
+                    mutex->unlock();
 
 //                    QueryPerformanceCounter(&end_time);
 //                    double cal_time = static_cast<double>(end_time.QuadPart - start_time.QuadPart) * 1000.0 / freq.QuadPart;
@@ -831,13 +977,10 @@ void UDPThread::ReadUDPData()
 //                    qDebug() << cal_time;
 //                    time_record.append(cal_time);
 
-//                    QueryPerformanceCounter(&end_time);
-//                    double cal_time = static_cast<double>(end_time.QuadPart - start_time.QuadPart) * 1000.0 / freq.QuadPart;
-//                    start_time = end_time;
-//                    qDebug() << cal_time;
-
-
                     index += 2;
+                }
+                else{
+                    index++;
                 }
 
             }
@@ -865,63 +1008,73 @@ void UDPThread::ReadUDPData()
 
                     emit ReceiveTSColorChange( targetTSID, targetColor, duration );
 
-                    index += 15;
-                }
-                else if( com[index+1] == 'L' ){    // Log data from UE4to output from Re:sim
-
-                    int pos = 2;
-                    int nData = 0;
-                    memcpy( &nData, &(com[index+pos]), sizeof(int) );
-                    pos += sizeof(int);
-
-                    //qDebug() << "Log Data from FE: size = " << nData;
-                    if( nData > 0 && nData <= 4 && comSize >=  nData * 4 + 6 ){
-
-                        for(int i=0;i<nData;++i){
-                            char feval[10];
-                            memset( feval, 0, 10 );
-                            memcpy( feval, &(com[index+pos]), sizeof(char) * 4 );
-                            pos += 4;
-
-                            //qDebug() << "feval" << (i+1) << " = " << feval;
-
-                            emit FEDataReceived( i, QString(feval).trimmed() );
-                        }
-                    }
-
-                    index += nData * 4 + 6;
+                    index += pos;
                 }
                 else if( com[index+1] == 'W' ){    // Warp Scenario Vehicles
 
-                    int pos = 2;
+                    if( com[index+2] == 'a' ){
 
-                    int targetVID = -1;
-                    memcpy( &targetVID, &(com[index+pos]), sizeof(int) );
-                    pos += sizeof(int);
+                        int pos = 3;
 
-                    float moveX = 0.0;
-                    memcpy( &moveX, &(com[index+pos]), sizeof(float) );
-                    pos += sizeof(float);
+                        int targetVID = -1;
+                        memcpy( &targetVID, &(com[index+pos]), sizeof(int) );
+                        pos += sizeof(int);
 
-                    float moveY = 0.0;
-                    memcpy( &moveY, &(com[index+pos]), sizeof(float) );
-                    pos += sizeof(float);
+                        float moveX = 0.0;
+                        memcpy( &moveX, &(com[index+pos]), sizeof(float) );
+                        pos += sizeof(float);
 
-                    float moveDir = 0;
-                    memcpy( &moveDir, &(com[index+pos]), sizeof(float) );
-                    pos += sizeof(float);
+                        float moveY = 0.0;
+                        memcpy( &moveY, &(com[index+pos]), sizeof(float) );
+                        pos += sizeof(float);
 
-                    qDebug() << "x=" << moveX << " y=" << moveY << " dir=" << moveDir;
+                        float moveDir = 0;
+                        memcpy( &moveDir, &(com[index+pos]), sizeof(float) );
+                        pos += sizeof(float);
 
-                    // UE4 coordinate -> Re:sim coordinate
-                    moveY *= (-1.0);
-                    moveDir *= (-1.0);
+                        qDebug() << "x=" << moveX << " y=" << moveY << " dir=" << moveDir;
 
-                    if( targetVID >= 0 && targetVID < maxAgent ){
-                        emit WarpVehicle( targetVID, moveX, moveY, moveDir );
+                        // UE4 coordinate -> Re:sim coordinate
+                        moveY *= (-1.0);
+                        moveDir *= (-1.0);
+
+                        if( targetVID >= 0 && targetVID < maxAgent ){
+                            emit WarpVehicleAdjustPosToLane( targetVID, moveX, moveY, moveDir );
+                        }
+
+                        index += pos;
                     }
+                    else{
+                        int pos = 2;
 
-                    index += 18;
+                        int targetVID = -1;
+                        memcpy( &targetVID, &(com[index+pos]), sizeof(int) );
+                        pos += sizeof(int);
+
+                        float moveX = 0.0;
+                        memcpy( &moveX, &(com[index+pos]), sizeof(float) );
+                        pos += sizeof(float);
+
+                        float moveY = 0.0;
+                        memcpy( &moveY, &(com[index+pos]), sizeof(float) );
+                        pos += sizeof(float);
+
+                        float moveDir = 0;
+                        memcpy( &moveDir, &(com[index+pos]), sizeof(float) );
+                        pos += sizeof(float);
+
+                        qDebug() << "x=" << moveX << " y=" << moveY << " dir=" << moveDir;
+
+                        // UE4 coordinate -> Re:sim coordinate
+                        moveY *= (-1.0);
+                        moveDir *= (-1.0);
+
+                        if( targetVID >= 0 && targetVID < maxAgent ){
+                            emit WarpVehicle( targetVID, moveX, moveY, moveDir );
+                        }
+
+                        index += pos;
+                    }
                 }
                 else if( com[index+1] == 'A' && com[index+2] == 'd' ){   // Set Dispose flag to Agent instance
 
@@ -950,8 +1103,8 @@ void UDPThread::ReadUDPData()
                 else if( com[index+1] == 'A' && com[index+2] == 'e' && com[index+3] == 'b' ){   // Embed behavior data from FE
 
                     int aID = -1;
-                    int pos = 4;
-                    memcpy( &aID, &(com[index+pos]), sizeof(int) );
+                    int pos = index + 4;
+                    memcpy( &aID, &(com[pos]), sizeof(int) );
                     pos += sizeof(int);
 
                     if( aID >= 0 && aID < maxAgent ){
@@ -959,39 +1112,39 @@ void UDPThread::ReadUDPData()
                         float embedData[9];
 
                         float X = 0.0;
-                        memcpy( &X, &(com[index+pos]), sizeof(float) );
+                        memcpy( &X, &(com[pos]), sizeof(float) );
                         pos += sizeof(float);
 
                         float Y = 0.0;
-                        memcpy( &Y, &(com[index+pos]), sizeof(float) );
+                        memcpy( &Y, &(com[pos]), sizeof(float) );
                         pos += sizeof(float);
 
                         float Z = 0.0;
-                        memcpy( &Z, &(com[index+pos]), sizeof(float) );
+                        memcpy( &Z, &(com[pos]), sizeof(float) );
                         pos += sizeof(float);
 
                         float Roll = 0.0;
-                        memcpy( &Roll, &(com[index+pos]), sizeof(float) );
+                        memcpy( &Roll, &(com[pos]), sizeof(float) );
                         pos += sizeof(float);
 
                         float Pitch = 0.0;
-                        memcpy( &Pitch, &(com[index+pos]), sizeof(float) );
+                        memcpy( &Pitch, &(com[pos]), sizeof(float) );
                         pos += sizeof(float);
 
                         float Yaw = 0;
-                        memcpy( &Yaw, &(com[index+pos]), sizeof(float) );
+                        memcpy( &Yaw, &(com[pos]), sizeof(float) );
                         pos += sizeof(float);
 
                         float V = 0;
-                        memcpy( &V, &(com[index+pos]), sizeof(float) );
+                        memcpy( &V, &(com[pos]), sizeof(float) );
                         pos += sizeof(float);
 
                         float Steer = 0;
-                        memcpy( &Steer, &(com[index+pos]), sizeof(float) );
+                        memcpy( &Steer, &(com[pos]), sizeof(float) );
                         pos += sizeof(float);
 
                         float Brake = 0;
-                        memcpy( &Brake, &(com[index+pos]), sizeof(float) );
+                        memcpy( &Brake, &(com[pos]), sizeof(float) );
                         pos += sizeof(float);
 
                         // UE4 coordinate -> Re:sim coordinate
@@ -1018,7 +1171,37 @@ void UDPThread::ReadUDPData()
                         emit EmbedBehavior(aID, embedData, 9 );
                     }
 
-                    index += pos;
+                    index = pos;
+                }
+                else if( com[index+1] == 'A' && com[index+2] == 'S' && com[index+3] == 'M' ){   // Reference Speed Determine Mode for Agents
+
+                    int spmode = -1;
+                    memcpy( &spmode, &(com[index+4]), sizeof(int) );
+
+                    if( spmode == 0 || spmode == 1 ){
+                        int aID = -1;
+                        memcpy( &aID, &(com[index+8]), sizeof(int) );
+
+                        emit SetTargetSpeedMode( spmode, aID );
+
+                        index += 12;
+                    }
+                    else if( spmode == 2 || spmode == 3 ){
+                        int nTarget = -1;
+                        memcpy( &nTarget, &(com[index+8]), sizeof(int) );
+
+                        index += 12;
+                        for(int n=0;n<nTarget;++n){
+
+                            int aID = -1;
+                            memcpy( &aID, &(com[index]), sizeof(int) );
+
+                            emit SetTargetSpeedMode( spmode, aID );
+
+                            index += 4;
+                        }
+                    }
+
                 }
                 else if( com[index+1] == 'C' && com[index+2] == 'R' && com[index+3] == 'S'){   // Change Reference Speed
 
@@ -1033,7 +1216,6 @@ void UDPThread::ReadUDPData()
                     }
 
                     index += 12;
-
                 }
                 else if( com[index+1] == 'C' && com[index+2] == 'P' ){   // Copy Path Data
 
@@ -1048,6 +1230,74 @@ void UDPThread::ReadUDPData()
                     }
 
                     index += 11;
+
+                }
+                else if( com[index+1] == 'C' && com[index+2] == 'L' ){   // Change Lane command
+
+                    int aID = -1;
+                    memcpy( &aID, &(com[index+3]), sizeof(int) );
+
+                    int dir = -1;
+                    memcpy( &dir, &(com[index+7]), sizeof(int) );
+
+                    int mode = -1;
+                    memcpy( &mode, &(com[index+11]), sizeof(int) );
+
+                    if( aID >= 0 && aID < maxAgent ){
+
+                        qDebug() << "Received Lane Change Command: aID = " << aID
+                                 << " dir = " << dir << " mode = " << mode;
+
+                        emit RequestLaneChange( aID, dir, mode );
+                    }
+
+                    index += 15;
+
+                }
+                else if( com[index+1] == 'C' && com[index+2] == 'A' && com[index+3] == 'L' ){   // Change to Assigned Lane command
+
+                    int aID = -1;
+                    memcpy( &aID, &(com[index+4]), sizeof(int) );
+
+                    int dir = -1;
+                    memcpy( &dir, &(com[index+8]), sizeof(int) );
+
+                    int mode = -1;
+                    memcpy( &mode, &(com[index+12]), sizeof(int) );
+
+                    float moveLatDist = -1.0;
+                    memcpy( &moveLatDist, &(com[index+16]), sizeof(float) );
+
+                    if( aID >= 0 && aID < maxAgent ){
+
+                        qDebug() << "Received Assigned Lane Change Command: aID = " << aID
+                                 << " dir = " << dir << " mode = " << mode << " moveLatDist = " << moveLatDist;
+
+                        emit RequestAssignedLaneChange( aID, dir, mode, moveLatDist );
+                    }
+
+                    index += 20;
+
+                }
+                else if( com[index+1] == 'O' && com[index+2] == 'A' && com[index+3] == 'P'){   // Overwrite Agent Parameter
+                    int aID = -1;
+                    memcpy( &aID, &(com[index+4]), sizeof(int) );
+
+                    int paramID = 0;
+                    memcpy( &paramID, &(com[index+8]), sizeof(int) );
+
+                    float val = 0.0;
+                    memcpy( &val, &(com[index+12]), sizeof(float) );
+
+                    if( aID >= 0 && aID < maxAgent ){
+
+                        qDebug() << "Received Overwrite Agent Parameter Command: aID = " << aID
+                                 << " paramID = " << paramID << " val = " << val;
+
+                        emit OverwriteAgentParameter( aID, paramID, val );
+                    }
+
+                    index += 16;
 
                 }
                 else if( com[index+1] == 'C' && com[index+2] == 'C' && com[index+3] == 'S' ){   // Change Control-mode to Stop-at
@@ -1131,6 +1381,144 @@ void UDPThread::ReadUDPData()
 
                     index += 16;
                 }
+                else if( com[index+1] == 'C' && com[index+2] == 'C' && com[index+3] == 'D' ){
+
+                    int aID = -1;
+                    memcpy( &aID, &(com[index+4]), sizeof(int) );
+                    if( aID >= 0 && aID < maxAgent ){
+
+                        float a_com = 0.0;
+                        memcpy( &a_com, &(com[index+8]), sizeof(float) );
+
+                        emit DirectAssignAcceleration( aID, a_com );
+                    }
+
+                    index += 12;
+                }
+                else if( com[index+1] == 'V' && com[index+2] == 'C' && com[index+3] == 'P' ){
+
+                    float refVforDev = 0.0;
+                    memcpy( &refVforDev, &(com[index+4]), sizeof(float) );
+
+                    float vDevP = 0.0;
+                    memcpy( &vDevP, &(com[index+8]), sizeof(float) );
+
+                    float vDevM = 0.0;
+                    memcpy( &vDevM, &(com[index+12]), sizeof(float) );
+
+                    float accel = 0.0;
+                    memcpy( &accel, &(com[index+16]), sizeof(float) );
+
+                    float decel = 0.0;
+                    memcpy( &decel, &(com[index+20]), sizeof(float) );
+
+                    int selMode = -1;
+                    memcpy( &selMode, &(com[index+24]), sizeof(int) );
+
+                    int nTarget = -1;
+                    memcpy( &nTarget, &(com[index+28]), sizeof(int) );
+
+                    index += 32;
+
+                    QList<int> aIDs;
+
+                    for(int k=0;k<nTarget;++k){
+
+                        int aid = -1;
+                        memcpy( &aid, &(com[index]), sizeof(int) );
+                        index += sizeof(int);
+
+                        aIDs.append( aid );
+                    }
+
+                    refVforDev /= 3.6;
+                    vDevP /= 3.6;
+                    vDevM = fabs(vDevM) / 3.6;
+                    decel = fabs(decel);
+
+                    qDebug() << "Receive FVCP command: ";
+                    qDebug() << "  refVforDev = " << refVforDev << "[m/s]";
+                    qDebug() << "  vDevP = " << vDevP << "[m/s]";
+                    qDebug() << "  vDevM = " << vDevM << "[m/s]";
+                    qDebug() << "  accel = " << accel << "[m/s^2]";
+                    qDebug() << "  decel = " << decel << "[m/s^2]";
+                    qDebug() << "  select = " << selMode;
+                    qDebug() << "  nTarget = " << nTarget << "  size of aIDs = " << aIDs.size();
+
+                    emit ChangeVelocityControlParameters(refVforDev,vDevP,vDevM,accel,decel,selMode,aIDs);
+                }
+                else if( com[index+1] == 'L' && com[index+2] == 'S' && com[index+3] == 'V' ){
+
+                    float refVforDev = 0.0;
+                    memcpy( &refVforDev, &(com[index+4]), sizeof(float) );
+
+                    float vDevP = 0.0;
+                    memcpy( &vDevP, &(com[index+8]), sizeof(float) );
+
+                    float vDevM = 0.0;
+                    memcpy( &vDevM, &(com[index+12]), sizeof(float) );
+
+                    float accel = 0.0;
+                    memcpy( &accel, &(com[index+16]), sizeof(float) );
+
+                    float decel = 0.0;
+                    memcpy( &decel, &(com[index+20]), sizeof(float) );
+
+                    int nTarget = -1;
+                    memcpy( &nTarget, &(com[index+24]), sizeof(int) );
+
+                    index += 28;
+
+                    QList<int> laneIDs;
+
+                    for(int k=0;k<nTarget;++k){
+
+                        int lid = -1;
+                        memcpy( &lid, &(com[index]), sizeof(int) );
+                        index += sizeof(int);
+
+                        laneIDs.append( lid );
+                    }
+
+                    refVforDev /= 3.6;
+                    vDevP /= 3.6;
+                    vDevM = fabs(vDevM) / 3.6;
+                    decel = fabs(decel);
+
+                    qDebug() << "Receive FLSV command: ";
+                    qDebug() << "  refVforDev = " << refVforDev << "[m/s]";
+                    qDebug() << "  vDevP = " << vDevP << "[m/s]";
+                    qDebug() << "  vDevM = " << vDevM << "[m/s]";
+                    qDebug() << "  accel = " << accel << "[m/s^2]";
+                    qDebug() << "  decel = " << decel << "[m/s^2]";
+                    qDebug() << "  nTarget = " << nTarget << "  size of laneIDs = " << laneIDs.size();
+
+                    emit ChangeLaneAssignedVelocityControlParameters(refVforDev,vDevP,vDevM,accel,decel,laneIDs);
+                }
+                else if( com[index+1] == 'L' ){    // Log data from UE4to output from Re:sim
+
+                    int pos = 2;
+                    int nData = 0;
+                    memcpy( &nData, &(com[index+pos]), sizeof(int) );
+                    pos += sizeof(int);
+
+                    //qDebug() << "Log Data from FE: size = " << nData;
+                    if( nData > 0 && nData <= 4 && comSize >=  nData * 4 + 6 ){
+
+                        for(int i=0;i<nData;++i){
+                            char feval[10];
+                            memset( feval, 0, 10 );
+                            memcpy( feval, &(com[index+pos]), sizeof(char) * 4 );
+                            pos += 4;
+
+                            //qDebug() << "feval" << (i+1) << " = " << feval;
+
+                            emit FEDataReceived( i, QString(feval).trimmed() );
+                        }
+                    }
+
+                    index = pos;
+                }
                 else if( com[index+1] == 'C' && com[index+2] == 'S' && com[index+3] == 'D' ){   // Copy Scenario Data
 
                     int fromAID = -1;
@@ -1206,9 +1594,9 @@ void UDPThread::ReadUDPData()
                         }
                     }
 
-                    index += nData * 4 + 8;
+                    index = pos;
                 }
-                else if( com[index+1] == 'A' && com[index+2] == 'r' && com[index+3] == 'a' ){  // Stop Agent Generation Temporally
+                else if( com[index+1] == 'A' && com[index+2] == 'r' && com[index+3] == 'a' ){  // Resume Agent Generation
 
                     int nData = -1;
                     memcpy( &nData, &(com[index+4]), sizeof(int) );
@@ -1224,7 +1612,7 @@ void UDPThread::ReadUDPData()
                         }
                     }
 
-                    index += nData * 4 + 8;
+                    index = pos;
                 }
                 else if( com[index+1] == 'F' && com[index+2] == 'C' && com[index+3] == 'S'){   // Force Change Speed
 
@@ -1238,16 +1626,156 @@ void UDPThread::ReadUDPData()
 
                         emit ForceChangeSpeed( aID, Speed );
 
-                        qDebug() << "Force Change Speed: targetID=" << aID << " speed=" << (Speed * 3.6);
+                        //qDebug() << "Force Change Speed: targetID=" << aID << " speed=" << (Speed * 3.6);
                     }
 
                     index += 12;
+                }
+                else if( com[index+1] == 'S' && com[index+2] == 'C' && com[index+3] == 'P' ){  // Change Scenario Speed Profile Data
 
+                    int aID = -1;
+                    memcpy( &aID, &(com[index+4]), sizeof(int) );
+
+                    int nPoint = 0;
+                    memcpy( &nPoint, &(com[index+8]), sizeof(int) );
+
+                    int pos = index + 12;
+
+                    if( aID >= 0 && aID < maxAgent && nPoint > 0 ){
+
+                        QList<float> td;
+                        QList<float> vd;
+
+                        for(int k=0;k<nPoint;++k){
+
+                            float t = 0.0;
+                            memcpy( &t, &(com[pos]), sizeof(float) );
+                            pos += sizeof(float);
+
+                            td.append( t );
+
+                            float v = 0.0;
+                            memcpy( &v, &(com[pos]), sizeof(float) );
+                            pos += sizeof(float);
+
+                            v /= 3.6;
+
+                            vd.append( v );
+                        }
+
+                        qDebug() << "Change Scenario Speed Profile: id= " << aID;
+                        qDebug() << " t = " << td;
+                        qDebug() << " v = " << vd;
+
+                        emit ChangeSpeedProfile( aID, td, vd );
+                    }
+
+                    index += pos;
+                }
+                else if( com[index+1] == 'R' && com[index+2] == 'L' && com[index+3] == 'S' ){  // Change Road Lane SpeedLimit Data
+
+                    int nLane = 0;
+                    memcpy( &nLane, &(com[index+4]), sizeof(int) );
+
+                    int pos = index + 8;
+
+                    if( nLane > 0 ){
+
+                        QList<int> td;
+                        QList<float> vd;
+
+                        for(int k=0;k<nLane;++k){
+
+                            int t = -1;
+                            memcpy( &t, &(com[pos]), sizeof(int) );
+                            pos += sizeof(int);
+
+                            td.append( t );
+
+                            float v = 0.0;
+                            memcpy( &v, &(com[pos]), sizeof(float) );
+                            pos += sizeof(float);
+
+                            v /= 3.6;
+
+                            vd.append( v );
+                        }
+
+                        emit ChangeRoadLaneSpeedLimit( td, vd );
+                    }
+
+                    index = pos;
+                }
+                else if( com[index+1] == 'P' && com[index+2] == 'M' && com[index+3] == 'S' ){  // Change Move Speed of Pedestrian
+
+                    float vChild = 0;
+                    memcpy( &vChild, &(com[index+4]), sizeof(float) );
+
+                    float vAdult = 0;
+                    memcpy( &vAdult, &(com[index+8]), sizeof(float) );
+
+                    float vAged = 0;
+                    memcpy( &vAged, &(com[index+12]), sizeof(float) );
+
+                    QList<float> vPedest;
+                    vPedest.append( vChild );
+                    vPedest.append( vAdult );
+                    vPedest.append( vAged );
+
+                    emit ChangeMoveSpeedPedestrian( vPedest );
+
+                    index += 16;
+                }
+                else if( com[index+1] == 'O' && com[index+2] == 'I' && com[index+3] == 'P' ){   // Set Optional Image Paramter
+
+                    int idf = 0;
+                    memcpy( &idf, &(com[index+4]), sizeof(int) );
+
+                    int statf = 0;
+                    memcpy( &statf, &(com[index+8]), sizeof(int) );
+
+                    int pos = index + 12;
+
+                    QList<float> p;
+                    p.append( idf );
+                    p.append( statf );
+
+                    float x = 0.0;
+                    memcpy( &x, &(com[pos]), sizeof(float) );
+                    pos += sizeof(float);
+                    p.append( x );
+
+                    float y = 0.0;
+                    memcpy( &y, &(com[pos]), sizeof(float) );
+                    pos += sizeof(float);
+                    p.append( y );
+
+                    float z = 0.0;
+                    memcpy( &z, &(com[pos]), sizeof(float) );
+                    pos += sizeof(float);
+                    p.append( z );
+
+                    float rot = 0.0;
+                    memcpy( &rot, &(com[pos]), sizeof(float) );
+                    pos += sizeof(float);
+                    p.append( rot );
+
+                    float scale = 0.0;
+                    memcpy( &scale, &(com[pos]), sizeof(float) );
+                    pos += sizeof(float);
+                    p.append( scale );
+
+                    emit ChangeOptionalImageParams( p );
+
+                    index = pos;
+                }
+                else{
+                    index++;
                 }
             }
-//            else{
-//                index++;
-//            }
+            else{
+                index++;
+            }
 //        }
     }
 }

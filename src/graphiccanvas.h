@@ -72,6 +72,7 @@ struct VehicleModel
 struct PersonModel
 {
     int id;
+    float width;
     QVector<GLfloat> personPolygon;
     QOpenGLBuffer *personPolygonBuffer;
     QOpenGLVertexArrayObject personPolygonArray;
@@ -91,6 +92,13 @@ struct TrafficSignalPolygon
     QOpenGLVertexArrayObject TSPolygonsArray;
 };
 
+struct RectPoly
+{
+    bool isValid;
+    QOpenGLVertexArrayObject array;
+    QOpenGLBuffer *buffer;
+    QVector<GLfloat> vertex;
+};
 
 struct Character {
     GLuint TextureID;
@@ -100,6 +108,36 @@ struct Character {
 };
 
 
+struct baseMapImage
+{
+    QString path;
+    QString filename;
+    float scale;
+    float x;
+    float y;
+    float rotate;
+    float halfWidth;
+    float halfHeight;
+    GLuint textureID;
+    bool isValid;
+};
+
+
+struct OptionalImage
+{
+    QString path;
+    QString filename;
+    float scale;
+    float x;
+    float y;
+    float z;
+    float rotate;
+    float halfWidth;
+    float halfHeight;
+    GLuint textureID;
+    bool isValid;
+    bool showImage;
+};
 
 
 class GraphicCanvas : public QOpenGLWidget, protected QOpenGLFunctions
@@ -120,6 +158,9 @@ public:
     void SetRoadData();
     void SetTrafficParticipantsData();
 
+    void SetPathCGFlag(bool v){ showPathCG = v; }
+    void SetTSCGFlag(bool v){ showTSCG = v; }
+    void SetBaseMapFlag(bool v){ showMapImage = v; }
 
     void SetVIDFlag(bool v){ showVID = v; }
     void SetPathIDFlag(bool v){ showPathID = v; }
@@ -133,7 +174,10 @@ public:
     float GetXeye(){ return X_eye; }
     float GetYeye(){ return Y_eye; }
     float GetZeye(){ return Z_eye; }
+    void SetZeye(float z){ Z_eye = z;}
 
+    void LoadMapImage(struct baseMapImage *);
+    void LoadOptionalImage();
 
     Agent **agent;
     int maxAgent;
@@ -142,6 +186,10 @@ public:
     int numTrafficSignal;
 
     Road *road;
+
+    QList<struct baseMapImage*> baseMapImages;
+    QList<struct OptionalImage*> optionalImages;
+
 
     bool trackingMode;
     int trackingObjID;
@@ -168,6 +216,12 @@ signals:
     void DSMove(float x,float Y);
 
 
+public slots:
+    void SetBasemapFile(QString filename,QString settingFileFolder);
+    void ResetView();
+    void SetScaleSInterface(int);
+
+
 protected:
     void mousePressEvent(QMouseEvent *e);
     void mouseMoveEvent(QMouseEvent *e);
@@ -191,6 +245,10 @@ private:
     float last_Y_eye;
     float last_Z_eye;
 
+    float xmin;
+    float xmax;
+    float ymin;
+    float ymax;
 
     QVector2D mousePressPosition;
     float sx;
@@ -218,6 +276,8 @@ private:
 
     struct PathPolygon *pathPolygons;
 
+    struct RectPoly rectPoly;
+
 
     // Shader Files
     QString vertexShaderProgramFile;
@@ -241,7 +301,13 @@ private:
     bool showPathID;
     bool showTSID;
 
+    bool showPathCG;
+    bool showTSCG;
+    bool showMapImage;
+    bool backMapImage;
+
     int fontScale;
+    int sInterfaceObjScale;
 };
 
 #endif // GRAPHICCANVAS_H

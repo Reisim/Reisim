@@ -39,6 +39,12 @@ Agent::Agent()
     memory.speedProfileCount = 0;
     memory.doSteerControl = true;
     memory.activeBrakeInVelocityControl = false;
+
+    memory.setTargetSpeedByScenarioFlag = false;
+    memory.targetSpeedByScenario = 0.0;
+
+    memory.lateralDeviationFromTargetPath = 0.0;
+    memory.lateralDeviationFromTargetPathAtPreviewPoint = 0.0;
 		
     memory.doHeadwayDistanceControl = false;
 
@@ -60,16 +66,26 @@ Agent::Agent()
     memory.LCInfoGetCount = 0;
     memory.laneChangeTargetPathList.clear();
     memory.laneChangePathLength.clear();
+    memory.LCbyEventMode = 0;
 
+    memory.runOncomingLane = false;
 
     // Default parameters
-    param.accelControlGain = 0.35 * 9.81;
-    param.deadZoneSpeedControl = 5.0 / 3.6;
-    param.maxDeceleration = 0.6 * 9.81;
+    param.accelControlGain = 0.25 * 9.81;
+    param.deadZoneSpeedControl = 2.5 / 3.6;
+    param.maxDeceleration = 0.75 * 9.81;
     param.accelOffDeceleration = 0.06 * 9.81;
     param.steeringControlGain = 2.0;
     param.latAccelAtTurn = 0.20 * 9.81;
-    param.headwayTime = 1.5;
+
+    param.headwayTime = rndGen.GetNormalDist(2.0,1.0);
+    if( param.headwayTime < 1.0 ){
+        param.headwayTime = 1.0;
+    }
+    else if( param.headwayTime > 3.0 ){
+        param.headwayTime = 3.0;
+    }
+
     param.headwayControlGain = 2.0;
     param.minimumPerceptibleDecelerationOfPreceding = 0.3 * 9.81;
     param.minimumHeadwayDistanceAtStop = 4.5;
@@ -83,11 +99,20 @@ Agent::Agent()
 
     param.speedVariationFactor = 0.0;
 
+    param.vDevAllowPlus = 1.388;
+    param.vDevAllowMinus = 1.388;
+    param.accelAtVDev = 0.05 * 9.81;
+    param.decelAtVDev = 0.04 * 9.81;
+
+
     param.LCInfoGetTime = 2.0;
     param.LCCutInAllowTTC = 2.0;
+    param.maxLateralSpeedForLaneChange = 11.11 * 0.707;  // V=40[km/h] and relativeAttitude 45[deg]
 
+    refSpeedMode = 0;
 
     isScenarioObject   = false;
+    isOldScenarioType  = false;
     isSInterfaceObject = false;
     isBehaviorEmbeded  = false;
     justWarped = false;
@@ -107,10 +132,12 @@ Agent::Agent()
 
     memory.perceptedSignals.append( vts );
 
+    objIDForUE4 = -1;
     for(int i=0;i<10;++i){
         UE4ObjectID[i] = -1;
     }
 
+    
 #ifdef _PERFORMANCE_CHECK_AGENT
     QueryPerformanceFrequency(&freq);
     for(int i=0;i<10;++i){
@@ -132,12 +159,16 @@ void Agent::InitializeMemory()
     memory.distanceAdjustLowSpeed = 0.0;
     memory.speedProfileCount = 0;
 
+    memory.setTargetSpeedByScenarioFlag = false;
+    memory.targetSpeedByScenario = 0.0;
+
     if( memory.profileTime.size() > 0 ){
         memory.profileTime.clear();
     }
     if( memory.profileSpeed.size() > 0 ){
         memory.profileSpeed.clear();
     }
+    memory.protectProfileData = false;
 
     if( memory.targetPathList.size() > 0 ){
         memory.targetPathList.clear();
@@ -178,6 +209,11 @@ void Agent::InitializeMemory()
     memory.doHeadwayDistanceControl = false;
     memory.axHeadwayControl = 0.0;
 
+    memory.precedingVehicleID = -1;
+    memory.precedingVehicleIDByScenario = -1;
+    memory.scenarioPathSelectID = -1;
+    memory.precedingVehicleIndex = -1;
+
     memory.releaseStopCount = 0;
     memory.doStopControl = false;
     memory.distanceToStopPoint = 0.0;
@@ -198,14 +234,24 @@ void Agent::InitializeMemory()
     memory.steeringControlGainMultiplier = 1.0;
     memory.speedZeroCount = 0;
 
+    memory.lateralDeviationFromTargetPath = 0.0;
+    memory.lateralDeviationFromTargetPathAtPreviewPoint = 0.0;
+    memory.targetLateralShiftByScenario = 0.0;
+    memory.relativeAttitudeToLane = 0.0;
+
     memory.shouldYeild = false;
     memory.leftCrossCheckCount = 0;
     memory.rightCrossCheckCount = 0;
 
     memory.lateralShiftTarget = 0.0;
+    memory.lateralShiftTarget_backup = 0.0;
+    memory.distToAvoidTarget = 0.0;
+
     memory.avoidTarget = -1;
 
     memory.isChaningLane = false;
+    memory.alwaysMoveSide = false;
+    memory.requestTemporalDeceleratrion = false;
 
     memory.checkSideVehicleForLC = false;
     memory.LCCheckState = 0;
@@ -213,13 +259,27 @@ void Agent::InitializeMemory()
     memory.LCInfoGetCount = 0;
     memory.laneChangeTargetPathList.clear();
     memory.laneChangePathLength.clear();
+    memory.LCbyEventMode = 0;
 
     memory.currentPathInLCTargetPathList = -1;
     memory.latDeviFromLCTargetPathList = 0.0;
     memory.distFromSWPLCTargetPathList = 0.0;
 
+    memory.runOutChecked = false;
+    memory.exeRunOut = false;
+    memory.runOutState = 0;
+
+    memory.hazardusObject = -1;
+    memory.lastHazardusObject = -1;
+    memory.ignoreHazardusObject = -1;
+
+    memory.runOncomingLane = false;
+
+
     strForDebug         = QString("");
     strForDebugRiskEval = QString("");
+
+    objIDForUE4 = -1;
 
     for(int i=0;i<10;++i){
         UE4ObjectID[i] = -1;

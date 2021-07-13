@@ -151,7 +151,9 @@ void SimulationManager::RaiseEvent(Agent** pAgent,int maxAgentNumber, Road *pRoa
                             objID = currentEvent->targetObjectID;
                         }
 
-                        if( trigger->objectTigger[j]->triggerParam == 0 ){  // calculate TTC to object
+//                        qDebug() << "objID = " << objID << " triggerParam = " << trigger->objectTigger[j]->triggerParam;
+
+                        if( trigger->objectTigger[j]->triggerParam == 1 ){  // calculate TTC to object
 
                             int calID = trigger->objectTigger[j]->triggerParam2;
 
@@ -166,7 +168,7 @@ void SimulationManager::RaiseEvent(Agent** pAgent,int maxAgentNumber, Road *pRoa
                                 float f = pAgent[calID]->state.cosYaw * pAgent[objID]->state.cosYaw + pAgent[calID]->state.cosYaw * pAgent[objID]->state.cosYaw;
                                 float relV = pAgent[objID]->state.V - f * pAgent[calID]->state.V;
 
-                                if( ip >= 0.0 && relV > 0.1 && fabs(e) < 1.5 ){
+                                if( ip >= 0.0 && relV > 0.1 && fabs(e) < ip * 0.577 ){  // FOV = 60[deg]
                                     float ttc = ip / relV;
                                     if( ttc < trigger->objectTigger[j]->TTC ){
                                         trigger->objectTigger[j]->isTriggered = true;
@@ -176,15 +178,22 @@ void SimulationManager::RaiseEvent(Agent** pAgent,int maxAgentNumber, Road *pRoa
                                 }
                             }
                         }
-                        else if( trigger->objectTigger[j]->triggerParam == 1 ){ // calculate TTC to point
+                        else if( trigger->objectTigger[j]->triggerParam == 0 ){ // calculate TTC to point
 
                             float rx = trigger->objectTigger[j]->x - pAgent[objID]->state.x;
                             float ry = trigger->objectTigger[j]->y - pAgent[objID]->state.y;
                             float ip = rx * pAgent[objID]->state.cosYaw + ry * pAgent[objID]->state.sinYaw;
                             float e = rx * pAgent[objID]->state.sinYaw * (-1.0) + ry * pAgent[objID]->state.cosYaw;
 
-                            if( ip >= 0.0 && pAgent[objID]->state.V > 0.1 && fabs(e) < 1.5 ){
+//                            qDebug() << "tx = " << trigger->objectTigger[j]->x << " ty = " << trigger->objectTigger[j]->y
+//                                     << " vx=" << pAgent[objID]->state.x << " vy = " << pAgent[objID]->state.y;
+//                            qDebug() << "rx = " << rx << " ry = " << ry << " ip=" << ip << " e = " << e;
+
+                            if( ip >= 0.0 && pAgent[objID]->state.V > 0.1 && fabs(e) < ip * 0.577 ){  // FOV = 60[deg]
                                 float ttc = ip / pAgent[objID]->state.V;
+
+//                                qDebug() << "ttc = " << ttc << " TTC = " << trigger->objectTigger[j]->TTC;
+
                                 if( ttc < trigger->objectTigger[j]->TTC ){
                                     trigger->objectTigger[j]->isTriggered = true;
                                     nTriggered++;
@@ -299,7 +308,7 @@ void SimulationManager::RaiseEvent(Agent** pAgent,int maxAgentNumber, Road *pRoa
 
                             if( posTrigFired == true ){
 
-                                float xt, yt, psit;
+                                float xt=0.0, yt=0.0, psit=0.0;
                                 for(int j=0;j<currentEvent->eventTrigger->objectTigger.size();++j){
                                     if( currentEvent->eventTrigger->objectTigger[j]->triggerType == TRIGGER_TYPE::POSITION_TRIGGER ){
                                         xt = currentEvent->eventTrigger->objectTigger[j]->x;
@@ -441,6 +450,12 @@ void SimulationManager::RaiseEvent(Agent** pAgent,int maxAgentNumber, Road *pRoa
                                                                        pAgent[wIdx]->state.y,
                                                                        pAgent[wIdx]->state.z,
                                                                        pAgent[wIdx]->state.yaw);
+
+
+                                if( pAgent[wIdx]->vehicle.yawFiltered4CG != NULL ){
+                                    pAgent[wIdx]->vehicle.yawFiltered4CG->SetInitialValue( pAgent[wIdx]->state.yaw );
+                                }
+
 
                                 // Check Route
                                 float deviation,xt,yt,xd,yd,s;
@@ -717,6 +732,10 @@ void SimulationManager::RaiseEvent(Agent** pAgent,int maxAgentNumber, Road *pRoa
                                                                              pAgent[targetObjectID]->state.z,
                                                                              pAgent[targetObjectID]->state.yaw);
 
+                            if( pAgent[targetObjectID]->vehicle.yawFiltered4CG != NULL ){
+                                pAgent[targetObjectID]->vehicle.yawFiltered4CG->SetInitialValue( pAgent[targetObjectID]->state.yaw );
+                            }
+
                             // get current path
                             if( pAgent[targetObjectID]->memory.routeType == ROUTE_TYPE::PATH_LIST_TYPE ){
 
@@ -840,36 +859,44 @@ void SimulationManager::RaiseEvent(Agent** pAgent,int maxAgentNumber, Road *pRoa
                     memcpy( &(sendData[idx]), &nData, sizeof(int) );
                     idx += sizeof(int);
 
+                    qDebug() << "Send UDP to " << ipAddr << ", port = " << port;
+                    qDebug() << "nData = " << nData;
+
                     for(int j=0;j<nData;++j){
-                        if( j % 2 == 0 ){
-                            int val = (int)(currentEvent->eventFloatData[ 2*j ]);
-                            memcpy( &(sendData[idx]), &val, sizeof(int) );
-                            idx += sizeof(int);
-                        }
-                        else{
-                            float val = currentEvent->eventFloatData[ 2*j+1 ];
-                            memcpy( &(sendData[idx]), &val, sizeof(float) );
-                            idx += sizeof(float);
-                        }
+
+                        int ival = (int)(currentEvent->eventFloatData[ 2*j ]);
+                        memcpy( &(sendData[idx]), &ival, sizeof(int) );
+                        idx += sizeof(int);
+
+                        float fval = currentEvent->eventFloatData[ 2*j+1 ];
+                        memcpy( &(sendData[idx]), &fval, sizeof(float) );
+                        idx += sizeof(float);
+
+                        qDebug() << " ival = " << ival << " fval = " << fval;
                     }
 
                     QUdpSocket sock;
                     sock.writeDatagram( sendData, dataSize, QHostAddress(ipAddr), port);
                     sock.flush();
+                    sock.writeDatagram( sendData, dataSize, QHostAddress(ipAddr), port);  // For in case the data lost
+                    sock.flush();
 
-                    currentEvent->eventState = 2;
+                    currentEvent->eventState++;    // The data will send again twice to ensure arrival of data
 
-                    if( currentEvent->eventBooleanData.size() > 0 ){
-                        bool repeatFlag = currentEvent->eventBooleanData[0];
-                        if( repeatFlag == true ){
+                    if( currentEvent->eventState == 2 ){
 
-                            currentEvent->eventState = 0;
+                        if( currentEvent->eventBooleanData.size() > 0 ){
+                            bool repeatFlag = currentEvent->eventBooleanData[0];
+                            if( repeatFlag == true ){
 
-                            qDebug() << "Reset event to repeat";
+                                currentEvent->eventState = 0;
 
-                            for(int j=0;j<currentEvent->eventTrigger->objectTigger.size();++j){
-                                currentEvent->eventTrigger->objectTigger[j]->isTriggered = false;
-                                currentEvent->eventTrigger->objectTigger[j]->passCheckFlag = 0;
+                                qDebug() << "Reset event to repeat";
+
+                                for(int j=0;j<currentEvent->eventTrigger->objectTigger.size();++j){
+                                    currentEvent->eventTrigger->objectTigger[j]->isTriggered = false;
+                                    currentEvent->eventTrigger->objectTigger[j]->passCheckFlag = 0;
+                                }
                             }
                         }
                     }
@@ -911,6 +938,7 @@ void SimulationManager::RaiseEvent(Agent** pAgent,int maxAgentNumber, Road *pRoa
 
                                 pAgent[targetObjectID]->memory.precedingVehicleIDByScenario = ctrlTarget;
                                 pAgent[targetObjectID]->memory.targetSpeedByScenario = refSpeed / 3.6;
+                                pAgent[targetObjectID]->memory.setTargetSpeedByScenarioFlag = true;
                                 pAgent[targetObjectID]->memory.targetHeadwayTimeByScenario = refHWTime;
                                 pAgent[targetObjectID]->memory.targetHeadwayDistanceByScenario = refHWDist;
                                 pAgent[targetObjectID]->memory.targetStopAtX = refStopX;
@@ -919,11 +947,13 @@ void SimulationManager::RaiseEvent(Agent** pAgent,int maxAgentNumber, Road *pRoa
 
                                 int nPoint = currentEvent->eventIntData[iParaIdx++];
 
-                                pAgent[targetObjectID]->memory.profileTime.clear();
-                                pAgent[targetObjectID]->memory.profileSpeed.clear();
+                                if( pAgent[targetObjectID]->memory.protectProfileData == false ){
+                                    pAgent[targetObjectID]->memory.profileTime.clear();
+                                    pAgent[targetObjectID]->memory.profileSpeed.clear();
+                                }
                                 pAgent[targetObjectID]->memory.speedProfileCount = 0;
 
-                                if( pAgent[targetObjectID]->memory.controlMode == AGENT_CONTROL_MODE::SPEED_PROFILE && nPoint > 0 ){
+                                if( pAgent[targetObjectID]->memory.controlMode == AGENT_CONTROL_MODE::SPEED_PROFILE && nPoint > 0 && pAgent[targetObjectID]->memory.protectProfileData == false ){
 
                                     for(int k=0;k<nPoint;++k){
 
@@ -1085,35 +1115,39 @@ void SimulationManager::RaiseEvent(Agent** pAgent,int maxAgentNumber, Road *pRoa
                     idx += sizeof(int);
 
                     for(int j=0;j<nData;++j){
-                        if( j % 2 == 0 ){
-                            int val = (int)(currentEvent->eventFloatData[ 2*j ]);
-                            memcpy( &(sendData[idx]), &val, sizeof(int) );
-                            idx += sizeof(int);
-                        }
-                        else{
-                            float val = currentEvent->eventFloatData[ 2*j+1 ];
-                            memcpy( &(sendData[idx]), &val, sizeof(float) );
-                            idx += sizeof(float);
-                        }
+
+                        int ival = (int)(currentEvent->eventFloatData[ 2*j ]);
+                        memcpy( &(sendData[idx]), &ival, sizeof(int) );
+                        idx += sizeof(int);
+
+                        float fval = currentEvent->eventFloatData[ 2*j+1 ];
+                        memcpy( &(sendData[idx]), &fval, sizeof(float) );
+                        idx += sizeof(float);
+
                     }
 
                     QUdpSocket sock;
                     sock.writeDatagram( sendData, dataSize, QHostAddress(ipAddr), port);
                     sock.flush();
+                    sock.writeDatagram( sendData, dataSize, QHostAddress(ipAddr), port);  // For in case the data lost
+                    sock.flush();
 
-                    currentEvent->eventState = 2;
+                    currentEvent->eventState++;  // The data will send again twice to ensure arrival of data
 
-                    if( currentEvent->eventBooleanData.size() > 0 ){
-                        bool repeatFlag = currentEvent->eventBooleanData[0];
-                        if( repeatFlag == true ){
+                    if( currentEvent->eventState == 2 ){
 
-                            currentEvent->eventState = 0;
+                        if( currentEvent->eventBooleanData.size() > 0 ){
+                            bool repeatFlag = currentEvent->eventBooleanData[0];
+                            if( repeatFlag == true ){
 
-                            qDebug() << "Reset event to repeat";
+                                currentEvent->eventState = 0;
 
-                            for(int j=0;j<currentEvent->eventTrigger->objectTigger.size();++j){
-                                currentEvent->eventTrigger->objectTigger[j]->isTriggered = false;
-                                currentEvent->eventTrigger->objectTigger[j]->passCheckFlag = 0;
+                                qDebug() << "Reset event to repeat";
+
+                                for(int j=0;j<currentEvent->eventTrigger->objectTigger.size();++j){
+                                    currentEvent->eventTrigger->objectTigger[j]->isTriggered = false;
+                                    currentEvent->eventTrigger->objectTigger[j]->passCheckFlag = 0;
+                                }
                             }
                         }
                     }
@@ -1470,7 +1504,10 @@ void SimulationManager::RaiseEvent(Agent** pAgent,int maxAgentNumber, Road *pRoa
                 }
             }
         }
-
     }
+
+
+
+
 
 }

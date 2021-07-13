@@ -76,6 +76,7 @@ public:
 
 
     int GetMaxAgentDataSend(){ return maxAgentDataSend; }
+    int GetMaxAgentDataSendToFE(){ return maxAgentDataSendToFE; }
     int GetMaxTSDataSend(){ return maxTSDataSend; }
     int GetSizeSInterfaceObjIDs(){ return SInterfaceObjIDs.size(); }
     int GetSInterfaceObjID(int idx){ return SInterfaceObjIDs[idx]; }
@@ -94,17 +95,22 @@ signals:
     void SimulationStart();
     void SimulationStop();
     void ExitProgram();
+    void RedrawRequest();
     void ReceiveContinueCommand();
     void SetSimulationFrequency(int);
     void ReceiveTireHeight(int,int,float,float,float,float);
+    void ReceiveSInterInitState(char,int,float,float,float,float,float);
     void ReceiveSInterObjData( char, int, struct AgentState *,struct SInterObjInfo *);
     void ReceiveTSColorChange(int,int,float);
     void WarpVehicle(int,float,float,float);
+    void WarpVehicleAdjustPosToLane(int,float,float,float);
     void DisposeAgent(int);
     void AppearAgent(int);
     void EmbedBehavior(int,float*,int);
     void ChangeReferenceSpeed(int,float);
     void CopyPathData(int,int);
+    void RequestLaneChange(int,int,int);
+    void RequestAssignedLaneChange(int,int,int,float);
     void ChangeControlModeStopAt(int,float,float);
     void ChangeControlModeHeadwayControl(int,float,float,float,float,int);
     void FEDataReceived(int, QString);
@@ -117,6 +123,15 @@ signals:
     void SetAgentGenerationNotAllowFlag(int, bool);
     void ForceChangeSpeed(int,float);
     void SetRestartData();
+    void ChangeSpeedProfile(int, QList<float>, QList<float>);
+    void DirectAssignAcceleration(int,float);
+    void SetTargetSpeedMode(int,int);
+    void ChangeRoadLaneSpeedLimit(QList<int>, QList<float>);
+    void ChangeVelocityControlParameters(float,float,float,float,float,int,QList<int>);
+    void ChangeLaneAssignedVelocityControlParameters(float,float,float,float,float,QList<int>);
+    void ChangeMoveSpeedPedestrian(QList<float>);
+    void OverwriteAgentParameter(int,int,float);
+    void ChangeOptionalImageParams(QList<float>);
 
 
 public slots:
@@ -130,6 +145,7 @@ private:
     volatile bool stopped;
 
     int maxAgentDataSend;
+    int maxAgentDataSendToFE;
     int maxTSDataSend;
 
     int maxAgent;
@@ -152,6 +168,8 @@ private:
 
     bool agentCalFinished;
     bool SInterfaceDataEmbeded;
+
+    int simState;
 };
 
 #endif // UDPTHREAD_H

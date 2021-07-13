@@ -125,6 +125,13 @@ struct Path
 
     int connectingNode;
     int connectingNodeInDir;
+
+    bool setSpeedVariationParam;
+    float vDevP;
+    float vDevM;
+    float refVforDev;
+    float accelAtDev;
+    float decelAtDev;
 };
 
 
@@ -205,6 +212,8 @@ struct Node
     QList<struct BoundaryWPs*> outBoundaryWPs;
     QList<struct LanePathList*> pathLists;
     QList<struct DirectionMap*> directionMap;
+    QList<int> nWPin;
+    QList<int> nWPout;
     bool hasTS;
     QList<int> relatedVTSIndex;
     QList<int> relatedPTSIndex;
@@ -261,6 +270,12 @@ struct ObjectCategoryAndSize
     float length;
     float width;
     float height;
+    int type;
+    int No;
+    int UE4ModelID;
+    float meanSpeed;
+    float stdDevSpeed;
+    int ageInfo;
 };
 
 
@@ -281,6 +296,10 @@ public:
     float CalculateCurvatureFromThreePoints(float x1,float y1,float x2,float y2,float x3,float y3);
 
     float GetPathLength(int pathID);
+    float GetPathMeanCurvature(int pathID);
+    
+    int GetTargetNodeOfPath(int pathID);
+
     int GetNearestPath(float xp, float yp,float yawAngle,
                        float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP,
                        bool negrectYawAngleInfo = false );
@@ -292,11 +311,20 @@ public:
                              float xp,float yp,float yawAngle,
                              float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP,
                              bool negrectYawAngleInfo = false );
+    int GetDeviationFromPathWithZ(int pathID,
+                                 float xp,float yp,float zp,float yawAngle,
+                                 float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP,
+                                 bool negrectYawAngleInfo = false );
+    int GetDeviationFromPathExtendEnd(int pathID,
+                                     float xp,float yp,float yawAngle,
+                                     float &deviation,float &xt,float &yt,float &xderiv,float &yderiv,float &distFromStartWP,
+                                     bool negrectYawAngleInfo = false );
 
     int GetNearestPedestPathSectionIndex(float xp,float yp,float &dist,int &overEdge,int objectID=-1);
     int GetDeviationFromPedestPath(int pedestPathID,int sectIndex,float xp,float yp,
                                    float &dev,float &z,float &xdir,float &ydir,float lateralShift = 0.0);
-    int GetDeviationFromPedestPathAllSection(int pedestPathID,float xp,float yp, float &dev);
+    float GetSpeedAdjustFactorPedestPath(int pedestPathID,int sectIndex,float xp,float yp,float V);
+    int GetDeviationFromPedestPathAllSection(int pedestPathID,float xp,float yp, float &dev,float &dist,float &xdir, float& ydir);
 
 
     void CheckSideBoundaryWPs(struct Node *);
@@ -310,6 +338,7 @@ public:
                                             float w,
                                             bool isCrossWalk,
                                             int roadSideInfo);
+    float GetPedestPathWidth(int pedestPathID, int sectionID);
     void CheckPedestPathConnection();
     void SetPedestPathArrivalTimes();
 
@@ -332,6 +361,8 @@ public:
     QList<struct ODRouteData*> odRoute;
     QList<struct ObjectCategoryAndSize*> vehicleKind;
     QList<struct ObjectCategoryAndSize*> pedestrianKind;
+    int numActorForUE4Model;
+    int maxActorInUE4;
 
     int LeftOrRight;
 };

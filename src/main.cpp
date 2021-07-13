@@ -55,6 +55,31 @@ QWaitCondition *condSimMain;
 
 QFile sysLogOutFile;
 
+bool WindowPosAssign = false;
+int xGUIPos = 0;
+int yGUIPos = 0;
+int xConsolePos = 0;
+int yConsolePos = 0;
+
+
+int monitorCount = 0;
+QList<QList<int>> monitorInfo;
+
+BOOL CALLBACK MonitorEnumProc(HMONITOR hM, HDC hdcM, LPRECT lprcM,LPARAM dwData)
+{
+    monitorCount++;
+
+    qDebug() << "Monitor " << monitorCount << ": Left = " << lprcM->left << " top = " << lprcM->top
+             << " width =" << (lprcM->right - lprcM->left)
+             << " height = " << (lprcM->bottom - lprcM->top);
+
+    QList<int> mInfo;
+    mInfo << (lprcM->right - lprcM->left) << (lprcM->bottom - lprcM->top) << lprcM->left << lprcM->top;
+    monitorInfo.append( mInfo );
+
+    return TRUE;
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -65,6 +90,77 @@ int main(int argc, char *argv[])
     QString SysFilePath      = QString();
     QString ConfFilePath     = QString();
 
+
+    {
+        qDebug() << "Monitor Information";
+        qDebug() << "------------------------------------";
+        EnumDisplayMonitors(NULL,NULL,MonitorEnumProc,0);
+        qDebug() << "------------------------------------";
+
+        if( monitorCount >= 2 ){
+
+            int primMon = 0;
+            int secondMon = 1;
+            if( monitorInfo[0][0] * monitorInfo[0][1] < monitorInfo[1][0] * monitorInfo[1][1] ){
+                primMon = 1;
+                secondMon = 0;
+            }
+
+            WindowPosAssign = true;
+
+            xConsolePos = monitorInfo[secondMon][2];
+            yConsolePos = monitorInfo[secondMon][3];
+
+            xGUIPos = monitorInfo[secondMon][0] / 2 + monitorInfo[secondMon][2];
+            yGUIPos = monitorInfo[secondMon][1] / 2 + monitorInfo[secondMon][3];
+
+            qDebug() << "xGUIPos = " << xGUIPos << " yGUIPos = " << yGUIPos;
+
+        }
+        else if( monitorCount == 1 ){
+            QFile wpFile( QApplication::applicationDirPath() + QString("/windowPosAssign.txt") );
+            if( wpFile.open( QIODevice::ReadOnly | QIODevice::Text ) == true ){
+
+                QTextStream wpIn(&wpFile);
+
+                QString rLine = wpIn.readAll();
+                QStringList rLineDiv = rLine.split("\n");
+                for(int i=0;i<rLineDiv.size();++i){
+                    if( QString(rLineDiv[i]).contains("Assign Position") == true ){
+                        if( QString(rLineDiv[i]).contains("yes") == true ){
+                            WindowPosAssign = true;
+                        }
+                    }
+                    else if( QString(rLineDiv[i]).contains("GUI X") == true ){
+                        xGUIPos = QString(rLineDiv[i]).remove("GUI X:").trimmed().toInt();
+                    }
+                    else if( QString(rLineDiv[i]).contains("GUI Y") == true ){
+                        yGUIPos = QString(rLineDiv[i]).remove("GUI Y:").trimmed().toInt();
+                    }
+                    else if( QString(rLineDiv[i]).contains("CONSOLE X") == true ){
+                        xConsolePos = QString(rLineDiv[i]).remove("CONSOLE X:").trimmed().toInt();
+                    }
+                    else if( QString(rLineDiv[i]).contains("CONSOLE Y") == true ){
+                        yConsolePos = QString(rLineDiv[i]).remove("CONSOLE Y:").trimmed().toInt();
+                    }
+                }
+
+                wpFile.close();
+            }
+        }
+
+    }
+
+
+    if( WindowPosAssign == true ){
+
+        RECT consoleRec;
+        GetClientRect( GetConsoleWindow(),  &consoleRec);
+        int consoleWidth = consoleRec.right - consoleRec.left;
+        int consoleHeight = consoleRec.bottom - consoleRec.top;
+        MoveWindow( GetConsoleWindow(), xConsolePos, yConsolePos, consoleWidth, consoleHeight, TRUE );
+
+    }
 
     qDebug() << "Application Directory = " << QApplication::applicationDirPath();
 
@@ -173,6 +269,22 @@ int main(int argc, char *argv[])
     w.setWindowIcon( QIcon(":images/resim-icon.png") );
     w.show();
 
+
+    if( WindowPosAssign == true ){
+        if( monitorCount > 1 ){
+            qDebug() << "Main Window Size = " << w.size();
+            qDebug() << "Move to "
+                     << (xGUIPos - w.size().width() / 2) << " , "
+                     << (yGUIPos - w.size().height() / 2);
+
+            w.move( xGUIPos - w.sizeHint().width() / 2, yGUIPos - w.sizeHint().height() / 2 );
+            w.setWindowState(Qt::WindowMaximized);
+        }
+        else{
+            w.move( xGUIPos, yGUIPos );
+        }
+    }
+
     if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
         QTextStream sysLogOut(&sysLogOutFile);
         sysLogOut << "Main Windows created." << "\n";
@@ -220,6 +332,15 @@ int main(int argc, char *argv[])
     }
 
 
+    if( w.GetStopGraphicUpdate() == true ){
+        sys->SetStopGraphicUpdate( true );
+    }
+
+    if( w.GetFixCameraToObj() == true ){
+        w.FixCameraToObjChanged( true );
+    }
+
+
 
     //
     //  Set connections
@@ -239,6 +360,8 @@ int main(int argc, char *argv[])
     QObject::connect( &w, SIGNAL(SetSpeedAdjustVal(int)), sys, SLOT(SetSpeedAdjustVal(int)) );
     QObject::connect( &w, SIGNAL(SetStopGraphicUpdate(bool)), sys, SLOT(SetStopGraphicUpdate(bool)) );
 
+    QObject::connect( &w, SIGNAL(SetBasemapFile(QString,QString)), w.GetPointerGraphicCanvas(), SLOT(SetBasemapFile(QString,QString)) );
+
     QObject::connect( w.GetPointerGraphicCanvas(), SIGNAL(ShowAgentData(float,float)),sys, SLOT(ShowAgentData(float,float)) );
     QObject::connect( w.GetPointerGraphicCanvas(), SIGNAL(DSMove(float,float)),sys, SLOT(DSMove(float,float)) );
 
@@ -256,6 +379,9 @@ int main(int argc, char *argv[])
     QObject::connect( sys, SIGNAL(SetRoadPointer(Road*)), &w, SLOT(SetRoadDataToCanvas(Road*)) );
     QObject::connect( sys, SIGNAL(TmpStopSimulation()), &w, SLOT(PauseSimulation()) );
     QObject::connect( sys, SIGNAL(ExitProgram()), &w, SLOT(ExitProgram()) );
+    QObject::connect( sys, SIGNAL(ShowOptionalImage(int,float,float,float,float,float)), &w, SLOT(ShowOptionalImage(int,float,float,float,float,float)) );
+    QObject::connect( sys, SIGNAL(HideOptionalImage(int)), &w, SLOT(HideOptionalImage(int)) );
+
 
     for(int i=0;i<maxWorkerThread;++i){
         QObject::connect( sys, SIGNAL(SetAgentPointer(Agent**)), workerThread[i], SLOT(SetAgentPointer(Agent**)) );
@@ -351,6 +477,9 @@ int main(int argc, char *argv[])
                 }
 
             }
+        }
+        else if( tmpStr.startsWith("ExpID=") ){
+            sys->SetExpIDText( tmpStr.remove("ExpID=") );
         }
     }
 

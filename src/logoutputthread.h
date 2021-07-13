@@ -50,6 +50,7 @@ public:
     void SetLogOutputInterval(int interval){ logInterval = interval; }
     void CloseFile();
     void SetStopFlag(){ stopFlag = true; }
+    void SetExpID(QString t){ expID = t; }
 
 
 public slots:
@@ -73,6 +74,8 @@ private:
     int logIntervalCount;
 
     QString FEData[4];
+
+    QString expID;
 };
 
 #endif // LOGOUTPUTTHREAD_H

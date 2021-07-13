@@ -28,6 +28,8 @@
 #include <QSlider>
 #include <QCheckBox>
 #include <QSpinBox>
+#include <QMap>
+#include <QThread>
 
 #include "graphiccanvas.h"
 #include "configwindow.h"
@@ -41,8 +43,13 @@ public:
     MainWindow(QWidget *parent = 0);
     ~MainWindow();
 
-    void LoadSettingFile(QString);
+    void LoadSettingFile(QString,bool withArg = true);
     GraphicCanvas *GetPointerGraphicCanvas() { return canvas; }
+    bool GetStopGraphicUpdate(){ return cbStopGraphicUpdate->isChecked(); }
+    bool GetFixCameraToObj(){ return cbFixCameraToObj->isChecked(); }
+    void ReadPreferenceSetting();
+    void WritePreferenceSetting();
+
 
 protected:
     void keyPressEvent(QKeyEvent *);
@@ -50,6 +57,7 @@ protected:
 signals:
     void SetScenraioFile(QString);
     void SetSupplementFile(QString);
+    void SetBasemapFile(QString,QString);
     void SetDSMode();
     void SetStartTrigger(int);
     void SetLogOutputFolder(QString);
@@ -83,7 +91,11 @@ public slots:
     void SetRoadDataToCanvas(Road*);
     void ShowConfigWindow();
     void ResetSpeedAdjuster();
+    void ResetZeye();
     void SpeedAdjustMoved(int);
+    void ShowPathCGChanged(bool);
+    void ShowTSCGChanged(bool);
+    void ShowBaseMapChanged(bool);
     void ShowVIDChanged(bool);
     void ShowPathIDChanged(bool);
     void ShowTSIDChanged(bool);
@@ -92,7 +104,8 @@ public slots:
     void FixCameraToObjChanged(bool);
     void SetFontScale(int);
     void OutputRestartData();
-
+    void ShowOptionalImage(int,float,float,float,float,float);
+    void HideOptionalImage(int);
 
 private:
     GraphicCanvas *canvas;
@@ -112,12 +125,21 @@ private:
     QSpinBox *animeSpeedAdjusterByValue;
     QSlider *animeSpeedAdjuster;
     QPushButton *resetSpeedAdjuster;
+    QPushButton *resetZeye;
+
+    QCheckBox *cbShowPathCG;
+    QCheckBox *cbShowBaseMap;
+    QCheckBox *cbShowTSCG;
+
     QCheckBox *cbShowVID;
     QCheckBox *cbShowPathID;
     QCheckBox *cbShowTSID;
     QCheckBox *cbStopGraphicUpdate;
     QSlider *fontScaler;
     QPushButton *snapshotBtn;
+
+    QLabel *SInterfaceScalerLabel;
+    QSlider *SInterfaceScaler;
 
     QCheckBox *cbFixCameraToObj;
     QSpinBox *cameraFixToObjID;
@@ -126,6 +148,8 @@ private:
 
     bool DSMode;
     int simState;
+
+    QMap<QString,int> preferenceSetting;
 };
 
 #endif // MAINWINDOW_H
