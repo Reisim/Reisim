@@ -164,6 +164,8 @@ void Road::LoadRoadData(QString filename)
     numActorForUE4Model = 10;
     maxActorInUE4 = 1000;
 
+    QList<struct StopPoint*> tmpStopPointsData;
+
     while( in.atEnd() == false ){
 
         line = in.readLine();
@@ -199,6 +201,9 @@ void Road::LoadRoadData(QString filename)
             wp->pos.setY( QString(elem[2]).trimmed().toFloat() );
             wp->pos.setZ( QString(elem[3]).trimmed().toFloat() );
             wp->direct = QString(elem[4]).trimmed().toFloat();
+
+            wp->cosDirect = cos(wp->direct);
+            wp->sinDirect = sin(wp->direct);
 
             wp->scenarioObjectID = -1;
             wp->order            = -1;
@@ -337,6 +342,8 @@ void Road::LoadRoadData(QString filename)
                             sp->relatedDir = QString( spData[9] ).trimmed().toInt();
 
                             paths[i]->stopPoints.append( sp );
+
+                            tmpStopPointsData.append( sp );
                         }
                         else{
                             qDebug() << "Invalid Data : StopPoint of Path " << pathID << ", size of spData = " << spData.size();
@@ -409,6 +416,12 @@ void Road::LoadRoadData(QString filename)
             }
 
             node->hasTS  = QString( elem[5] ).trimmed().toInt();
+
+            for(int i=0;i<tmpStopPointsData.size();++i){
+                if( tmpStopPointsData[i]->relatedNode == node->id ){
+                    node->stopPoints.append( tmpStopPointsData[i] );
+                }
+            }
 
             nodes.append( node );
         }
@@ -655,6 +668,7 @@ void Road::LoadRoadData(QString filename)
             odr->NextAppearTime = -1.0;
 
             odr->onlyForScenarioVehicle = false;
+            odr->allowAgentGeneration = true;
 
             odRoute.append( odr );
         }
@@ -806,7 +820,12 @@ void Road::LoadRoadData(QString filename)
                 k->height = QString( elem[4] ).trimmed().toFloat();
 
                 if( elem.size() >= 6 ){
-                    k->UE4ModelID  = QString( elem[5] ).trimmed().toInt();
+                    if( QString( elem[5] ).isNull() == false && QString( elem[5] ).isEmpty() == false ){
+                        k->UE4ModelID  = QString( elem[5] ).trimmed().toInt();
+                    }
+                    else{
+                        k->UE4ModelID  = -1;
+                    }
                 }
                 else{
                     k->UE4ModelID  = -1;
@@ -849,10 +868,30 @@ void Road::LoadRoadData(QString filename)
                 }
 
                 if( elem.size() >= 9 ){
-                    k->UE4ModelID  = QString( elem[5] ).trimmed().toInt();
-                    k->meanSpeed   = QString( elem[6] ).trimmed().toFloat();
-                    k->stdDevSpeed = QString( elem[7] ).trimmed().toFloat();
-                    k->ageInfo     = QString( elem[8] ).trimmed().toFloat();
+                    if( QString( elem[5] ).isNull() == false && QString( elem[5] ).isEmpty() == false ){
+                        k->UE4ModelID  = QString( elem[5] ).trimmed().toInt();
+                    }
+                    else{
+                        k->UE4ModelID  = -1;
+                    }
+                    if( QString( elem[6] ).isNull() == false && QString( elem[6] ).isEmpty() == false ){
+                        k->meanSpeed   = QString( elem[6] ).trimmed().toFloat();
+                    }
+                    else{
+                        k->meanSpeed = 0.0;
+                    }
+                    if( QString( elem[7] ).isNull() == false && QString( elem[7] ).isEmpty() == false ){
+                        k->stdDevSpeed = QString( elem[7] ).trimmed().toFloat();
+                    }
+                    else{
+                        k->stdDevSpeed = 0.0;
+                    }
+                    if( QString( elem[8] ).isNull() == false && QString( elem[8] ).isEmpty() == false ){
+                        k->ageInfo     = QString( elem[8] ).trimmed().toFloat();
+                    }
+                    else{
+                        k->ageInfo = 0;
+                    }
                 }
                 else{
                     k->UE4ModelID  = -1;
@@ -883,6 +922,8 @@ void Road::LoadRoadData(QString filename)
     }
 
     file.close();
+
+    tmpStopPointsData.clear();
 
 
     // Set Dummy Vehicle Size Data if no data supplied
@@ -1140,10 +1181,12 @@ void Road::LoadRoadData(QString filename)
 
         }
 
-        qDebug() << "mergeLanesInfo for odRoute[" << i << "]";
-        for(int j=0;j<odRoute[i]->mergeLanesInfo.size();++j){
-            qDebug() << odRoute[i]->mergeLanesInfo[j];
-        }
+        if( odRoute[i]->mergeLanesInfo.size() > 0 &&  odRoute[i]->mergeLanesInfo[0].isEmpty() == false ){
+        	qDebug() << "mergeLanesInfo for odRoute[" << i << "]";
+        	for(int j=0;j<odRoute[i]->mergeLanesInfo.size();++j){
+            	qDebug() << odRoute[i]->mergeLanesInfo[j];
+        	}
+    	}
     }
 
 
@@ -1621,7 +1664,7 @@ void Road::CheckSideBoundaryWPs(struct Node *n)
             for(int j=1;j<checkWPs.size();++j){
                 int wpIdx2 = wpId2Index.indexOf( checkWPs[j] );
                 QVector3D diff_pos = wps[wpIdx2]->pos - wps[wpIdx1]->pos;
-                float tmpDist = diff_pos.x() * wps[wpIdx1]->sinDirect * (-1.0) + diff_pos.y() * wps[wpIdx1]->cosDirect;
+                float tmpDist = diff_pos.x() * wps[wpIdx1]->sinDirect + diff_pos.y() * wps[wpIdx1]->cosDirect * (-1.0);
                 dist.append( tmpDist );
             }
 
@@ -1640,6 +1683,7 @@ void Road::CheckSideBoundaryWPs(struct Node *n)
 
                 laneNo++;
                 dist.removeAt( minIdx );
+                tIndex.removeAt( minIdx );
             }
 
             for( laneNo = 0; laneNo < tIndex.size(); ++laneNo ){
@@ -1682,7 +1726,7 @@ void Road::CheckSideBoundaryWPs(struct Node *n)
             for(int j=1;j<checkWPs.size();++j){
                 int wpIdx2 = wpId2Index.indexOf( checkWPs[j] );
                 QVector3D diff_pos = wps[wpIdx2]->pos - wps[wpIdx1]->pos;
-                float tmpDist = diff_pos.x() * wps[wpIdx1]->sinDirect * (-1.0) + diff_pos.y() * wps[wpIdx1]->cosDirect;
+                float tmpDist = diff_pos.x() * wps[wpIdx1]->sinDirect + diff_pos.y() * wps[wpIdx1]->cosDirect * (-1.0);
                 dist.append( tmpDist );
             }
 
@@ -1701,6 +1745,7 @@ void Road::CheckSideBoundaryWPs(struct Node *n)
 
                 laneNo++;
                 dist.removeAt( minIdx );
+                tIndex.removeAt( minIdx );
             }
 
             for( laneNo = 0; laneNo < tIndex.size(); ++laneNo ){

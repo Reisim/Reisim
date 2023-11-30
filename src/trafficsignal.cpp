@@ -39,6 +39,12 @@ TrafficSignal::TrafficSignal()
     flushTimeCheck = 0.0;
 
     displayOff = false;
+
+    isSensorType = 0;
+    timeChangeBySensor = 0;
+    sensorState = 0;
+    changeToCount = 0.0;
+    setSensorPos = false;
 }
 
 
@@ -115,9 +121,33 @@ int TrafficSignal::GetCurrentDisplayInfo()
 }
 
 
-void TrafficSignal::CheckDisplayInfoUpdate(float cSimTimFVal)
+void TrafficSignal::CheckDisplayInfoUpdate(float cSimTimFVal, float dt)
 {
     currentSimTime = cSimTimFVal;
+
+    if( isSensorType > 0 && sensorState != 2 ){
+        if( sensorState < 0 ){
+            sensorState++;
+            remainingTimeToNextDisplay = timeChangeBySensor - sensorState * dt;
+        }
+        else if( sensorState == 1 ){  // detect vehicle stopping at stop line
+            changeToCount += dt;
+
+            //qDebug() << "changeToCount = " << changeToCount;
+
+            if( changeToCount + dt >= timeChangeBySensor ){
+                sensorState = 2;
+                //qDebug() << "sensorState = " << sensorState;
+            }
+            remainingTimeToNextDisplay = timeChangeBySensor - changeToCount;
+        }
+        else{
+            remainingTimeToNextDisplay = timeChangeBySensor;
+        }
+        elapsedTimeCurrentDisplay  = cSimTimFVal - lastUpdateTimeFVal;
+        nextUpdateTimeFVal = currentSimTime + dt;
+        return;
+    }
 
     if( currentDisplayIndex >= 0 && currentDisplayIndex < displayPattern.size() ){
         if( displayPattern[currentDisplayIndex]->duration < 0.0 ){  // if duration is negative, no update
@@ -129,6 +159,11 @@ void TrafficSignal::CheckDisplayInfoUpdate(float cSimTimFVal)
         currentDisplayIndex++;
         if( currentDisplayIndex >= displayPattern.size() ){
             currentDisplayIndex = 0;
+
+            if( isSensorType > 0 ){
+                sensorState = -(displayPattern[currentDisplayIndex]->duration) / dt;
+                changeToCount = 0.0;
+            }
         }
         lastUpdateTimeFVal = nextUpdateTimeFVal;
         nextUpdateTimeFVal += displayPattern[currentDisplayIndex]->duration;

@@ -349,6 +349,13 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             }
 
 
+            //
+            //  Stop Generation ; directed by FE
+            //
+            if( rd->allowAgentGeneration == false ){
+                continue;
+            }
+
 
             //
             //  Generate Agent
@@ -739,7 +746,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                 pAgent[objID]->param.speedVariationFactor = -0.8;
             }
 
-            pAgent[objID]->param.latAccelAtTurn = ( 0.20 + pAgent[objID]->param.speedVariationFactor * 0.07) * 9.81;
+            pAgent[objID]->param.latAccelAtTurn = ( 0.30 + pAgent[objID]->param.speedVariationFactor * 0.07) * 9.81;
 
             pAgent[objID]->SetTargetSpeedIndividual( pRoad->paths[tpIdx]->speed85pt );
 
@@ -765,6 +772,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
             pAgent[objID]->BackupMemory();
 
+            pAgent[objID]->TimeOfAppear = GetSimulationTimeInSec();
 
 //            pAgent[objID]->memory.runOncomingLane = true;
 
@@ -790,6 +798,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objID]->vehicle.steerFiltered4CG = new LowPassFilter(1, simTime.dt, 6.0 , 0.0);
                 }
                 else{
+                    pAgent[objID]->vehicle.steerFiltered4CG->SetParam(1, simTime.dt, 6.0 , 0.0);
                     pAgent[objID]->vehicle.steerFiltered4CG->Reset();
                 }
 
@@ -797,6 +806,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objID]->vehicle.axFiltered4CG = new LowPassFilter(1, simTime.dt, 6.0 , 0.0);
                 }
                 else{
+                    pAgent[objID]->vehicle.axFiltered4CG->SetParam(1, simTime.dt, 6.0 , 0.0);
                     pAgent[objID]->vehicle.axFiltered4CG->Reset();
                 }
 
@@ -804,7 +814,8 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objID]->vehicle.ayFiltered4CG = new LowPassFilter(1, simTime.dt, 6.0 , 0.0);
                 }
                 else{
-                    pAgent[objID]->vehicle.axFiltered4CG->Reset();
+                    pAgent[objID]->vehicle.ayFiltered4CG->SetParam(1, simTime.dt, 6.0 , 0.0);
+                    pAgent[objID]->vehicle.ayFiltered4CG->Reset();
                 }
 
 
@@ -812,6 +823,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objID]->vehicle.suspentionFL4CG = new LowPassFilter(2, simTime.dt, 10.0 , 0.6);
                 }
                 else{
+                    pAgent[objID]->vehicle.suspentionFL4CG->SetParam(2, simTime.dt, 10.0 , 0.6);
                     pAgent[objID]->vehicle.suspentionFL4CG->Reset();
                 }
 
@@ -819,6 +831,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objID]->vehicle.suspentionFR4CG = new LowPassFilter(2, simTime.dt, 10.0 , 0.6);
                 }
                 else{
+                    pAgent[objID]->vehicle.suspentionFR4CG->SetParam(2, simTime.dt, 10.0 , 0.6);
                     pAgent[objID]->vehicle.suspentionFR4CG->Reset();
                 }
 
@@ -826,6 +839,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objID]->vehicle.suspentionRL4CG = new LowPassFilter(2, simTime.dt, 10.0 , 0.6);
                 }
                 else{
+                    pAgent[objID]->vehicle.suspentionRL4CG->SetParam(2, simTime.dt, 10.0 , 0.6);
                     pAgent[objID]->vehicle.suspentionRL4CG->Reset();
                 }
 
@@ -833,46 +847,46 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objID]->vehicle.suspentionRR4CG = new LowPassFilter(2, simTime.dt, 10.0 , 0.6);
                 }
                 else{
+                    pAgent[objID]->vehicle.suspentionRR4CG->SetParam(2, simTime.dt, 10.0 , 0.6);
                     pAgent[objID]->vehicle.suspentionRR4CG->Reset();
                 }
 
 
                 if( pAgent[objID]->vehicle.tireFL4CG == NULL ){
-//                    pAgent[objID]->vehicle.tireFL4CG = new LowPassFilter(2, simTime.dt, 20.0 , 1.0);
                     pAgent[objID]->vehicle.tireFL4CG = new LowPassFilter(1, simTime.dt, 5.0 , 0.0);
                 }
                 else{
+                    pAgent[objID]->vehicle.tireFL4CG->SetParam(1, simTime.dt, 5.0 , 0.0);
                     pAgent[objID]->vehicle.tireFL4CG->Reset();
                 }
 
                 if( pAgent[objID]->vehicle.tireFR4CG == NULL ){
-//                    pAgent[objID]->vehicle.tireFR4CG = new LowPassFilter(2, simTime.dt, 20.0 , 1.0);
                     pAgent[objID]->vehicle.tireFR4CG = new LowPassFilter(1, simTime.dt, 5.0 , 0.0);
                 }
                 else{
+                    pAgent[objID]->vehicle.tireFR4CG->SetParam(1, simTime.dt, 5.0 , 0.0);
                     pAgent[objID]->vehicle.tireFR4CG->Reset();
                 }
 
                 if( pAgent[objID]->vehicle.tireRL4CG == NULL ){
-//                    pAgent[objID]->vehicle.tireRL4CG = new LowPassFilter(2, simTime.dt, 20.0 , 1.0);
                     pAgent[objID]->vehicle.tireRL4CG = new LowPassFilter(1, simTime.dt, 5.0 , 0.0);
                 }
                 else{
+                    pAgent[objID]->vehicle.tireRL4CG->SetParam(1, simTime.dt, 5.0 , 0.0);
                     pAgent[objID]->vehicle.tireRL4CG->Reset();
                 }
 
                 if( pAgent[objID]->vehicle.tireRR4CG == NULL ){
-//                    pAgent[objID]->vehicle.tireRR4CG = new LowPassFilter(2, simTime.dt, 20.0 , 1.0);
                     pAgent[objID]->vehicle.tireRR4CG = new LowPassFilter(1, simTime.dt, 5.0 , 0.0);
                 }
                 else{
+                    pAgent[objID]->vehicle.tireRR4CG->SetParam(1, simTime.dt, 5.0 , 0.0);
                     pAgent[objID]->vehicle.tireRR4CG->Reset();
                 }
 
                 if( pAgent[objID]->vehicle.yawFiltered4CG == NULL ){
                     pAgent[objID]->vehicle.yawFiltered4CG = new LowPassFilter(1, simTime.dt, 3.0 , 0.0);
                 }
-
                 pAgent[objID]->vehicle.yawFiltered4CG->SetParam(1,simTime.dt, 3.0 , 0.0);
                 pAgent[objID]->vehicle.yawFiltered4CG->SetInitialValue( YAi );
             }
@@ -1122,12 +1136,13 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
             pAgent[objID]->BackupMemory();
 
+            pAgent[objID]->TimeOfAppear = GetSimulationTimeInSec();
+
             if( DSMode == true ){
 
                 if( pAgent[objID]->vehicle.yawFiltered4CG == NULL ){
                     pAgent[objID]->vehicle.yawFiltered4CG = new LowPassFilter(1, simTime.dt, 10.0 , 0.0);
                 }
-
                 pAgent[objID]->vehicle.yawFiltered4CG->SetParam(1,simTime.dt, 10.0 , 0.0);
                 pAgent[objID]->vehicle.yawFiltered4CG->SetInitialValue( pAgent[objID]->state.yaw );
 
@@ -1137,7 +1152,6 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
                 pAgent[objID]->vehicle.axFiltered4CG->SetParam(1,simTime.dt, 30.0 , 0.0);
                 pAgent[objID]->vehicle.axFiltered4CG->SetInitialValue( cos( pAgent[objID]->state.yaw ) );
-
 
                 if( pAgent[objID]->vehicle.ayFiltered4CG == NULL ){
                     pAgent[objID]->vehicle.ayFiltered4CG = new LowPassFilter(1, simTime.dt, 6.0 , 0.0);
@@ -1187,6 +1201,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             continue;
         }
 
+
         // Check trigger
         struct ScenarioTriggers* trigger = se->eventTrigger;
 
@@ -1196,7 +1211,34 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
             int nTriggered = 0;
 
+            bool afterCheckAfterTimeOrPosTrigger = false;
+            bool hasTimeTrigger = false;
+            if( trigger->combination == 0 && trigger->objectTigger.size() > 0 ){  // AND Combination
+                bool hasTimeOrPosTrigger = false;
+                bool hasVelOrTTCTrigger = false;
+                for(int j=0;j<trigger->objectTigger.size();++j){
+                    if( trigger->objectTigger[j]->triggerType == TRIGGER_TYPE::TIME_TRIGGER ){
+                        hasTimeTrigger = true;
+                    }
+                    if( trigger->objectTigger[j]->triggerType == TRIGGER_TYPE::TIME_TRIGGER ||
+                            trigger->objectTigger[j]->triggerType == TRIGGER_TYPE::POSITION_TRIGGER ){
+                        hasTimeOrPosTrigger = true;
+                    }
+                    if( trigger->objectTigger[j]->triggerType == TRIGGER_TYPE::VELOCITY_TRIGGER ||
+                            trigger->objectTigger[j]->triggerType == TRIGGER_TYPE::TTC_TRIGGER ){
+                        hasVelOrTTCTrigger = true;
+                    }
+                }
+                if( hasTimeOrPosTrigger == true && hasVelOrTTCTrigger == true ){
+                    afterCheckAfterTimeOrPosTrigger = true;
+                }
+            }
+
             for(int j=0;j<trigger->objectTigger.size();++j){
+
+                if( trigger->objectTigger[j]->triggerType == TRIGGER_TYPE::DELAY_TRIGGER ){
+                    continue;
+                }
 
                 if( trigger->objectTigger[j]->isTriggered == true ){
                     nTriggered++;
@@ -1217,70 +1259,193 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                 }
                 else if( trigger->objectTigger[j]->triggerType == TRIGGER_TYPE::POSITION_TRIGGER ){
 
-                    int objID = trigger->objectTigger[j]->targetObjectID;
-                    if( objID >= 0 && objID < maxAgentNumber && pAgent[objID]->agentStatus == 1 ){
-
-                        float rx = pAgent[objID]->state.x -  trigger->objectTigger[j]->x;
-                        float ry = pAgent[objID]->state.y -  trigger->objectTigger[j]->y;
-                        float ip = rx * trigger->objectTigger[j]->cosDirect + ry * trigger->objectTigger[j]->sinDirect;
-                        float e = rx * trigger->objectTigger[j]->sinDirect * (-1.0) + ry * trigger->objectTigger[j]->cosDirect;
-
-                        //qDebug() << "ip = " << ip << " e = " << e << " passCheckFlag = " << trigger->objectTigger[j]->passCheckFlag;
-
-                        float w = trigger->objectTigger[j]->widthHalf;
-
-                        if( trigger->objectTigger[j]->passCheckFlag == 0 && fabs(e) < w && ip < 0.0 && ip > -30.0 ){
-                            trigger->objectTigger[j]->passCheckFlag = 1;
-                            //qDebug() << "passCheckFlag = 1";
+                    bool evalPosTrig = true;
+                    if( hasTimeTrigger == true ){
+                        bool evaluedTimeTrig = false;
+                        for(int j=0;j<trigger->objectTigger.size();++j){
+                            if( trigger->objectTigger[j]->triggerType == TRIGGER_TYPE::TIME_TRIGGER ){
+                                if( trigger->objectTigger[j]->isTriggered == true ){
+                                    evaluedTimeTrig = true;
+                                    break;
+                                }
+                            }
                         }
-                        else if( trigger->objectTigger[j]->passCheckFlag == 1 && fabs(e) < w && ip >= 0.0 ){
-                            trigger->objectTigger[j]->passCheckFlag = 2;
-                            trigger->objectTigger[j]->isTriggered = true;
-                            nTriggered++;
-                            //qDebug() << "passCheckFlag = 2";
-                            continue;
+                        if( evaluedTimeTrig == false ){
+                            evalPosTrig = false;
+                        }
+                    }
+
+                    if( evalPosTrig == true ){
+                        int objID = trigger->objectTigger[j]->targetObjectID;
+                        if( objID >= 0 && objID < maxAgentNumber && pAgent[objID]->agentStatus == 1 ){
+
+                            if( pAgent[objID]->isSInterfaceObject == true && pAgent[objID]->isSInterObjDataSet == false ){
+                                continue;
+                            }
+
+                            float rx = pAgent[objID]->state.x -  trigger->objectTigger[j]->x;
+                            float ry = pAgent[objID]->state.y -  trigger->objectTigger[j]->y;
+                            float ip = rx * trigger->objectTigger[j]->cosDirect + ry * trigger->objectTigger[j]->sinDirect;
+                            float e = rx * trigger->objectTigger[j]->sinDirect * (-1.0) + ry * trigger->objectTigger[j]->cosDirect;
+
+                            //qDebug() << "ip = " << ip << " e = " << e << " passCheckFlag = " << trigger->objectTigger[j]->passCheckFlag;
+
+                            float w = trigger->objectTigger[j]->widthHalf;
+
+                            if( trigger->objectTigger[j]->passCheckFlag == 0 && fabs(e) < w && ip < 0.0 && ip > -30.0 ){
+                                trigger->objectTigger[j]->passCheckFlag = 1;
+                                //qDebug() << "passCheckFlag = 1";
+                            }
+                            else if( trigger->objectTigger[j]->passCheckFlag == 1 && fabs(e) < w && ip >= 0.0 ){
+                                trigger->objectTigger[j]->passCheckFlag = 2;
+                                trigger->objectTigger[j]->isTriggered = true;
+                                nTriggered++;
+                                //qDebug() << "passCheckFlag = 2";
+                                continue;
+                            }
                         }
                     }
                 }
                 else if( trigger->objectTigger[j]->triggerType == TRIGGER_TYPE::VELOCITY_TRIGGER ){
 
-                    int objID = trigger->objectTigger[j]->targetObjectID;
-                    if( objID >= 0 && objID < maxAgentNumber && pAgent[objID]->agentStatus == 1 ){
-
-                        float objV = pAgent[objID]->state.V;
-                        if( trigger->objectTigger[j]->triggerParam == 0 && objV < trigger->objectTigger[j]->speed ){
-                            trigger->objectTigger[j]->isTriggered = true;
-                            nTriggered++;
-                            continue;
+                    bool evalVelTrig = true;
+                    if( afterCheckAfterTimeOrPosTrigger == true ){
+                        bool evaluedTimeOrPosTrig = false;
+                        for(int j=0;j<trigger->objectTigger.size();++j){
+                            if( trigger->objectTigger[j]->triggerType == TRIGGER_TYPE::TIME_TRIGGER ||
+                                    trigger->objectTigger[j]->triggerType == TRIGGER_TYPE::POSITION_TRIGGER ){
+                                if( trigger->objectTigger[j]->isTriggered == true ){
+                                    evaluedTimeOrPosTrig = true;
+                                    break;
+                                }
+                            }
                         }
-                        else if( trigger->objectTigger[j]->triggerParam == 1 && objV > trigger->objectTigger[j]->speed ){
-                            trigger->objectTigger[j]->isTriggered = true;
-                            nTriggered++;
-                            continue;
+                        if( evaluedTimeOrPosTrig == false ){
+                            evalVelTrig = false;
                         }
                     }
 
+                    if( evalVelTrig == true ){
+
+                        int objID = trigger->objectTigger[j]->targetObjectID;
+                        //qDebug() << "[VEL_TRIG] objID = " << objID;
+
+                        if( objID >= 0 && objID < maxAgentNumber && pAgent[objID]->agentStatus == 1 ){
+
+                            //qDebug() << "[VEL_TRIG] objID = " << objID
+                            //         << " isSInterfaceObject = " << pAgent[objID]->isSInterfaceObject
+                            //         << " isSInterObjDataSet = " << pAgent[objID]->isSInterObjDataSet;
+
+                            if( pAgent[objID]->isSInterfaceObject == true && pAgent[objID]->isSInterObjDataSet == false ){
+                                continue;
+                            }
+
+                            float objV = pAgent[objID]->state.V;
+
+                            //qDebug() << "[VEL_TRIG] triggerParam = " << trigger->objectTigger[j]->triggerParam
+                            //         << " objV = " << objV << " speed = " << trigger->objectTigger[j]->speed;
+
+                            if( trigger->objectTigger[j]->triggerParam == 1 && objV < trigger->objectTigger[j]->speed ){
+                                trigger->objectTigger[j]->isTriggered = true;
+                                nTriggered++;
+
+                                //qDebug() << "[VEL_TRIG] Triggered; slower";
+
+                                continue;
+                            }
+                            else if( trigger->objectTigger[j]->triggerParam == 0 && objV > trigger->objectTigger[j]->speed ){
+                                trigger->objectTigger[j]->isTriggered = true;
+                                nTriggered++;
+
+                                //qDebug() << "[VEL_TRIG] Triggered; faster";
+
+                                continue;
+                            }
+                        }
+                    }
                 }
                 else if( trigger->objectTigger[j]->triggerType == TRIGGER_TYPE::TTC_TRIGGER ){
 
-                    if( trigger->objectTigger[j]->triggerParam == 0 ){  // calculate TTC to object
+                    //qDebug() << "[TTC_TRIG] triggerParam = " << trigger->objectTigger[j]->triggerParam;
 
-                        int objID = trigger->objectTigger[j]->targetObjectID;
-                        int calID = trigger->objectTigger[j]->triggerParam2;
+                    bool evalTTCTrig = true;
+                    if( afterCheckAfterTimeOrPosTrigger == true ){
+                        bool evaluedTimeOrPosTrig = false;
+                        for(int j=0;j<trigger->objectTigger.size();++j){
+                            if( trigger->objectTigger[j]->triggerType == TRIGGER_TYPE::TIME_TRIGGER ||
+                                    trigger->objectTigger[j]->triggerType == TRIGGER_TYPE::POSITION_TRIGGER ){
+                                if( trigger->objectTigger[j]->isTriggered == true ){
+                                    evaluedTimeOrPosTrig = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if( evaluedTimeOrPosTrig == false ){
+                            evalTTCTrig = false;
+                        }
+                    }
 
-                        if( objID >= 0 && objID < maxAgentNumber && pAgent[objID]->agentStatus == 1 &&
-                               calID >= 0 && calID < maxAgentNumber && pAgent[calID]->agentStatus == 1 ){
+                    if( evalTTCTrig == true ){
+                        if( trigger->objectTigger[j]->triggerParam == 1 ){    // calculate TTC to object
 
-                            float rx = pAgent[calID]->state.x - pAgent[objID]->state.x;
-                            float ry = pAgent[calID]->state.y - pAgent[objID]->state.y;
+                            int objID = trigger->objectTigger[j]->targetObjectID;
+                            int calID = trigger->objectTigger[j]->triggerParam2;
+
+                            //qDebug() << "[TTC_TRIG] objID = " << objID << " calID = " << calID;
+
+                            if( objID >= 0 && objID < maxAgentNumber && pAgent[objID]->agentStatus == 1 &&
+                                   calID >= 0 && calID < maxAgentNumber && pAgent[calID]->agentStatus == 1 ){
+
+                                if( pAgent[objID]->isSInterfaceObject == true && pAgent[objID]->isSInterObjDataSet == false ){
+                                    continue;
+                                }
+                                if( pAgent[calID]->isSInterfaceObject == true && pAgent[calID]->isSInterObjDataSet == false ){
+                                    continue;
+                                }
+
+                                float rx = pAgent[calID]->state.x - pAgent[objID]->state.x;
+                                float ry = pAgent[calID]->state.y - pAgent[objID]->state.y;
+                                float ip = rx * pAgent[objID]->state.cosYaw + ry * pAgent[objID]->state.sinYaw;
+                                float e = rx * pAgent[objID]->state.sinYaw * (-1.0) + ry * pAgent[objID]->state.cosYaw;
+
+                                float f = pAgent[calID]->state.cosYaw * pAgent[objID]->state.cosYaw + pAgent[calID]->state.sinYaw * pAgent[objID]->state.sinYaw;
+                                float relV = pAgent[objID]->state.V - f * pAgent[calID]->state.V;
+
+                                //qDebug() << "[TTC_TRIG] relV = " << relV << " ip = " << ip << " e = " << e;
+
+                                if( ip >= 0.0 && relV > 0.1 && fabs(e) < 1.5 ){
+                                    float ttc = ip / relV;
+
+                                    //qDebug() << "[TTC_TRIG] ttc = " << ttc;
+
+                                    if( ttc < trigger->objectTigger[j]->TTC ){
+                                        trigger->objectTigger[j]->isTriggered = true;
+                                        nTriggered++;
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                        else if( trigger->objectTigger[j]->triggerParam == 0 ){   // calculate TTC to point
+
+                            int objID = trigger->objectTigger[j]->targetObjectID;
+
+                            //qDebug() << "[TTC_TRIG] objID = " << objID;
+
+                            if( pAgent[objID]->isSInterfaceObject == true && pAgent[objID]->isSInterObjDataSet == false ){
+                                continue;
+                            }
+
+                            float rx = trigger->objectTigger[j]->x - pAgent[objID]->state.x;
+                            float ry = trigger->objectTigger[j]->y - pAgent[objID]->state.y;
                             float ip = rx * pAgent[objID]->state.cosYaw + ry * pAgent[objID]->state.sinYaw;
                             float e = rx * pAgent[objID]->state.sinYaw * (-1.0) + ry * pAgent[objID]->state.cosYaw;
 
-                            float f = pAgent[calID]->state.cosYaw * pAgent[objID]->state.cosYaw + pAgent[calID]->state.cosYaw * pAgent[objID]->state.cosYaw;
-                            float relV = pAgent[objID]->state.V - f * pAgent[calID]->state.V;
+                            if( ip >= 0.0 && pAgent[objID]->state.V > 0.1 && fabs(e) < 1.5 ){
+                                float ttc = ip / pAgent[objID]->state.V;
 
-                            if( ip >= 0.0 && relV > 0.1 && fabs(e) < 1.5 ){
-                                float ttc = ip / relV;
+                                //qDebug() << "[TTC_TRIG] ttc = " << ttc;
+
                                 if( ttc < trigger->objectTigger[j]->TTC ){
                                     trigger->objectTigger[j]->isTriggered = true;
                                     nTriggered++;
@@ -1288,25 +1453,6 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                                 }
                             }
                         }
-                    }
-                    else if( trigger->objectTigger[j]->triggerParam == 1 ){ // calculate TTC to point
-
-                        int objID = trigger->objectTigger[j]->targetObjectID;
-
-                        float rx = trigger->objectTigger[j]->x - pAgent[objID]->state.x;
-                        float ry = trigger->objectTigger[j]->y - pAgent[objID]->state.y;
-                        float ip = rx * pAgent[objID]->state.cosYaw + ry * pAgent[objID]->state.sinYaw;
-                        float e = rx * pAgent[objID]->state.sinYaw * (-1.0) + ry * pAgent[objID]->state.cosYaw;
-
-                        if( ip >= 0.0 && pAgent[objID]->state.V > 0.1 && fabs(e) < 1.5 ){
-                            float ttc = ip / pAgent[objID]->state.V;
-                            if( ttc < trigger->objectTigger[j]->TTC ){
-                                trigger->objectTigger[j]->isTriggered = true;
-                                nTriggered++;
-                                continue;
-                            }
-                        }
-
                     }
                 }
             }
@@ -1351,7 +1497,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             }
 
 
-            //qDebug() << "nTriggered = " << nTriggered << " size = " << trigger->objectTigger.size();
+//            qDebug() << "nTriggered = " << nTriggered << " size = " << trigger->objectTigger.size();
 
             if( exTrig == false ){
                 if( trigger->combination == 0 && (nTriggered < trigger->objectTigger.size() || trigger->objectTigger.size() == 0) ){
@@ -1508,6 +1654,11 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     int numLaneLists = pRoad->odRoute[i]->LCSupportLaneLists.last()->laneList.size();
 
                     int baseLane = se->eventIntData[1];
+                    if( baseLane < 0 ){
+                        float tdev,txt,tyt,txd,tyd,ts;
+                        baseLane = pRoad->GetNearestPath( xi, yi, YAi,
+                                                          tdev, txt, tyt, txd, tyd, ts );
+                    }
 
                     int selIdx = 0;
                     if( numLaneLists > 1 ){
@@ -1704,6 +1855,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             pAgent[objectID]->isBehaviorEmbeded  = false;
             pAgent[objectID]->justWarped = false;
 
+            pAgent[objectID]->TimeOfAppear = GetSimulationTimeInSec();
 
             // Fluctuation in Speed Control
             int tpIdx = pRoad->pedestPathID2Index.indexOf( pAgent[objectID]->memory.currentTargetPath );
@@ -1724,6 +1876,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objectID]->vehicle.steerFiltered4CG = new LowPassFilter(1, simTime.dt, 6.0 , 0.0);
                 }
                 else{
+                    pAgent[objectID]->vehicle.steerFiltered4CG->SetParam( 1, simTime.dt, 6.0 , 0.0 );
                     pAgent[objectID]->vehicle.steerFiltered4CG->Reset();
                 }
 
@@ -1731,6 +1884,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objectID]->vehicle.axFiltered4CG = new LowPassFilter(1, simTime.dt, 6.0 , 0.0);
                 }
                 else{
+                    pAgent[objectID]->vehicle.axFiltered4CG->SetParam( 1, simTime.dt, 6.0 , 0.0 );
                     pAgent[objectID]->vehicle.axFiltered4CG->Reset();
                 }
 
@@ -1738,7 +1892,8 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objectID]->vehicle.ayFiltered4CG = new LowPassFilter(1, simTime.dt, 6.0 , 0.0);
                 }
                 else{
-                    pAgent[objectID]->vehicle.axFiltered4CG->Reset();
+                    pAgent[objectID]->vehicle.ayFiltered4CG->SetParam( 1, simTime.dt, 6.0 , 0.0 );
+                    pAgent[objectID]->vehicle.ayFiltered4CG->Reset();
                 }
 
 
@@ -1746,6 +1901,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objectID]->vehicle.suspentionFL4CG = new LowPassFilter(2, simTime.dt, 10.0 , 0.6);
                 }
                 else{
+                    pAgent[objectID]->vehicle.suspentionFL4CG->SetParam(2, simTime.dt, 10.0 , 0.6);
                     pAgent[objectID]->vehicle.suspentionFL4CG->Reset();
                 }
 
@@ -1753,6 +1909,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objectID]->vehicle.suspentionFR4CG = new LowPassFilter(2, simTime.dt, 10.0 , 0.6);
                 }
                 else{
+                    pAgent[objectID]->vehicle.suspentionFR4CG->SetParam(2, simTime.dt, 10.0 , 0.6);
                     pAgent[objectID]->vehicle.suspentionFR4CG->Reset();
                 }
 
@@ -1760,6 +1917,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objectID]->vehicle.suspentionRL4CG = new LowPassFilter(2, simTime.dt, 10.0 , 0.6);
                 }
                 else{
+                    pAgent[objectID]->vehicle.suspentionRL4CG->SetParam(2, simTime.dt, 10.0 , 0.6);
                     pAgent[objectID]->vehicle.suspentionRL4CG->Reset();
                 }
 
@@ -1767,39 +1925,40 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                     pAgent[objectID]->vehicle.suspentionRR4CG = new LowPassFilter(2, simTime.dt, 10.0 , 0.6);
                 }
                 else{
+                    pAgent[objectID]->vehicle.suspentionRR4CG->SetParam(2, simTime.dt, 10.0 , 0.6);
                     pAgent[objectID]->vehicle.suspentionRR4CG->Reset();
                 }
 
 
                 if( pAgent[objectID]->vehicle.tireFL4CG == NULL ){
-//                    pAgent[objectID]->vehicle.tireFL4CG = new LowPassFilter(2, simTime.dt, 20.0 , 1.0);
                     pAgent[objectID]->vehicle.tireFL4CG = new LowPassFilter(1, simTime.dt, 5.0 , 0.0);
                 }
                 else{
+                    pAgent[objectID]->vehicle.tireFL4CG->SetParam(1, simTime.dt, 5.0 , 0.0);
                     pAgent[objectID]->vehicle.tireFL4CG->Reset();
                 }
 
                 if( pAgent[objectID]->vehicle.tireFR4CG == NULL ){
-//                    pAgent[objectID]->vehicle.tireFR4CG = new LowPassFilter(2, simTime.dt, 20.0 , 1.0);
                     pAgent[objectID]->vehicle.tireFR4CG = new LowPassFilter(1, simTime.dt, 5.0 , 0.0);
                 }
                 else{
+                    pAgent[objectID]->vehicle.tireFR4CG->SetParam(1, simTime.dt, 5.0 , 0.0);
                     pAgent[objectID]->vehicle.tireFR4CG->Reset();
                 }
 
                 if( pAgent[objectID]->vehicle.tireRL4CG == NULL ){
-//                    pAgent[objectID]->vehicle.tireRL4CG = new LowPassFilter(2, simTime.dt, 20.0 , 1.0);
                     pAgent[objectID]->vehicle.tireRL4CG = new LowPassFilter(1, simTime.dt, 5.0 , 0.0);
                 }
                 else{
+                    pAgent[objectID]->vehicle.tireRL4CG->SetParam(1, simTime.dt, 5.0 , 0.0);
                     pAgent[objectID]->vehicle.tireRL4CG->Reset();
                 }
 
                 if( pAgent[objectID]->vehicle.tireRR4CG == NULL ){
-//                    pAgent[objectID]->vehicle.tireRR4CG = new LowPassFilter(2, simTime.dt, 20.0 , 1.0);
                     pAgent[objectID]->vehicle.tireRR4CG = new LowPassFilter(1, simTime.dt, 5.0 , 0.0);
                 }
                 else{
+                    pAgent[objectID]->vehicle.tireRR4CG->SetParam(1, simTime.dt, 5.0 , 0.0);
                     pAgent[objectID]->vehicle.tireRR4CG->Reset();
                 }
 
@@ -1907,6 +2066,8 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
             pAgent[objectID]->BackupMemory();
 
+            pAgent[objectID]->TimeOfAppear = GetSimulationTimeInSec();
+
             if( DSMode == true ){
 
                 if( pAgent[objectID]->vehicle.yawFiltered4CG == NULL ){
@@ -1918,570 +2079,6 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
             }
         }
     }
-
-
-
-    //
-    //  Old version; to be deleted
-    //
-
-
-    int nItem = scenario[currentScenarioID]->scenarioItems.size();
-//    qDebug() << "nItem = " << nItem;
-
-//    if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
-//        QTextStream sysLogOut(&sysLogOutFile);
-//        sysLogOut << "nItem = " << nItem << "\n";
-//        sysLogOut.flush();
-//        sysLogOutFile.close();
-//    }
-
-
-
-    for(int i=0;i<nItem;++i){
-
-        int objectID = scenario[currentScenarioID]->scenarioItems[i]->objectID;
-
-//        qDebug() << "objectID = " << objectID;
-
-        if( pAgent[objectID]->agentStatus != 0 ){
-            // Already appear or Out from the stage
-            continue;
-        }
-
-//        if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
-//            QTextStream sysLogOut(&sysLogOutFile);
-//            sysLogOut << "check objectID = " << objectID << "\n";
-//            sysLogOut.flush();
-//            sysLogOutFile.close();
-//        }
-
-
-        if( scenario[currentScenarioID]->scenarioItems[i]->status == 1 &&
-                scenario[currentScenarioID]->scenarioItems[i]->repeat == false ){
-            continue;
-        }
-
-        if( pAgent[objectID]->notAllowedAppear == true ){
-            continue;
-        }
-
-        // Check trigger
-        ScenarioTriggers *trig = scenario[currentScenarioID]->scenarioItems[i]->appearTriggers;
-//        qDebug() << "objectID = " << objectID << " trigger mode = " << trig->mode;
-        if( trig->mode == TRIGGER_TYPE::TIME_TRIGGER ||
-            trig->mode == TRIGGER_TYPE::POSITION_TIME_TRIGGER ){
-
-            if( trig->timeTriggerInSec > simTimeSec ){
-                continue;
-            }
-        }
-
-        if( trig->mode == TRIGGER_TYPE::POSITION_TRIGGER ||
-            trig->mode == TRIGGER_TYPE::POSITION_SPEED_TRIGGER ||
-            trig->mode == TRIGGER_TYPE::POSITION_TIME_TRIGGER ){
-
-            int nCondPass = 0;
-            for(int j=0;j<trig->objectTigger.size();++j){
-                int targetObjectID = trig->objectTigger[j]->targetObjectID;
-                //qDebug() << "targetObjectID = " << targetObjectID;
-                if( targetObjectID < 0 || targetObjectID >= maxAgentNumber ){
-                    continue;
-                }
-                if( pAgent[targetObjectID]->agentStatus != 1 ){
-                    continue;
-                }
-
-                float dx = pAgent[targetObjectID]->state.x - trig->objectTigger[j]->x;
-                float dy = pAgent[targetObjectID]->state.y - trig->objectTigger[j]->y;
-                float ip = dx * trig->objectTigger[j]->cosDirect + dy * trig->objectTigger[j]->sinDirect;
-//                qDebug() << "target (x,y) = (" << pAgent[targetObjectID]->state.x << "," << pAgent[targetObjectID]->state.y << ")";
-//                qDebug() << "trigger (x,y) = (" << trig->objectTigger[j]->x << "," << trig->objectTigger[j]->y << ")";
-//                qDebug() << "ip = " << ip;
-
-                if( ip < 0.0 ){
-                    continue;
-                }
-                float cp = dy * trig->objectTigger[j]->cosDirect - dx * trig->objectTigger[j]->sinDirect;
-                //qDebug() << "cp = " << cp;
-                if( fabs(cp) > 2.5 ){
-                    continue;
-                }
-                float ip2 = pAgent[targetObjectID]->state.cosYaw * trig->objectTigger[j]->cosDirect
-                        + pAgent[targetObjectID]->state.sinYaw * trig->objectTigger[j]->sinDirect;
-                //qDebug() << "ip2 = " << ip2;
-                if( ip2 < 0.0 ){
-                    continue;
-                }
-
-                if( trig->mode == TRIGGER_TYPE::POSITION_SPEED_TRIGGER ){
-                    if( pAgent[targetObjectID]->state.V < trig->objectTigger[j]->speed ){
-                        continue;
-                    }
-                }
-
-                nCondPass++;
-            }
-            if( trig->ANDCondition == 0 && nCondPass == 0 ){
-                continue;
-            }
-            else if( trig->ANDCondition == 1 && nCondPass < trig->objectTigger.size() ){
-                continue;
-            }
-        }
-
-
-        if( nAppear < maxNAppearAtATime ){
-            nAppear++;
-        }
-        else{
-
-//            if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
-//                QTextStream sysLogOut(&sysLogOutFile);
-//                sysLogOut << "nAppear = " << nAppear << " >= maxNAppearAtATime = " << maxNAppearAtATime << "\n";
-//                sysLogOut.flush();
-//                sysLogOutFile.close();
-//            }
-
-            continue;
-        }
-
-//        qDebug() << " objectID = " << objectID
-//                 << " byExternalTriggerFlag = " << trig->byExternalTriggerFlag
-//                 << " extTriggerFlagState = " << trig->extTriggerFlagState;
-
-        if( trig->byExternalTriggerFlag == true || trig->mode == TRIGGER_TYPE::BY_FUNCTION_EXTENDER ){
-            if( trig->extTriggerFlagState == false ){
-                nAppear--;
-                continue;
-            }
-        }
-
-        if( trig->byKeyTriggerFlag == true ){
-            int keyHit = 0;
-            switch( trig->func_keys ){
-            case  1: keyHit = GetAsyncKeyState(VK_F1); break;
-            case  2: keyHit = GetAsyncKeyState(VK_F2); break;
-            case  3: keyHit = GetAsyncKeyState(VK_F3); break;
-            case  4: keyHit = GetAsyncKeyState(VK_F4); break;
-            case  5: keyHit = GetAsyncKeyState(VK_F5); break;
-            case  6: keyHit = GetAsyncKeyState(VK_F6); break;
-            case  7: keyHit = GetAsyncKeyState(VK_F7); break;
-            case  8: keyHit = GetAsyncKeyState(VK_F8); break;
-            case  9: keyHit = GetAsyncKeyState(VK_F9); break;
-            case 10: keyHit = GetAsyncKeyState(VK_F10); break;
-            case 11: keyHit = GetAsyncKeyState(VK_F11); break;
-            case 12: keyHit = GetAsyncKeyState(VK_F12); break;
-            case 13: keyHit = GetAsyncKeyState(VK_NUMPAD0); break;
-            case 14: keyHit = GetAsyncKeyState(VK_NUMPAD1); break;
-            case 15: keyHit = GetAsyncKeyState(VK_NUMPAD2); break;
-            case 16: keyHit = GetAsyncKeyState(VK_NUMPAD3); break;
-            case 17: keyHit = GetAsyncKeyState(VK_NUMPAD4); break;
-            case 18: keyHit = GetAsyncKeyState(VK_NUMPAD5); break;
-            case 19: keyHit = GetAsyncKeyState(VK_NUMPAD6); break;
-            case 20: keyHit = GetAsyncKeyState(VK_NUMPAD7); break;
-            case 21: keyHit = GetAsyncKeyState(VK_NUMPAD8); break;
-            case 22: keyHit = GetAsyncKeyState(VK_NUMPAD9); break;
-            }
-            if( keyHit == 0 ){
-                continue;
-            }
-        }
-
-        // Initialize agent data
-        pAgent[objectID]->InitializeMemory();
-        pAgent[objectID]->calInterval = simTime.dt;
-
-
-        float simHz = 1.0 / simTime.dt;
-
-        // Perception and Recognition; 10[Hz]
-        pAgent[objectID]->cognitionCountMax = (int)(simHz / 10.0);
-        pAgent[objectID]->cognitionCount = 0;
-
-        // Hazard Identification and Risk Evaluation; 3[Hz]
-        pAgent[objectID]->decisionMakingCountMax = (int)(simHz / 3.0);
-        pAgent[objectID]->decisionMakingCount = 0;
-
-        // Control; 10[Hz]
-        pAgent[objectID]->controlCountMax = (int)(simHz / 10.0);
-        pAgent[objectID]->controlCount = 0;
-
-
-
-        if( scenario[currentScenarioID]->scenarioItems[i]->type == 'v' ){
-            pAgent[objectID]->agentKind = 0;
-        }
-        else if( scenario[currentScenarioID]->scenarioItems[i]->type == 'p' ){
-            pAgent[objectID]->agentKind = 100;
-        }
-
-
-        if( pAgent[objectID]->agentKind < 100 ){
-
-            // Set initial state
-            pAgent[objectID]->vehicle.SetVehicleID( pAgent[objectID]->ID );
-
-            float xi  = scenario[currentScenarioID]->scenarioItems[i]->initialState[0];
-            float yi  = scenario[currentScenarioID]->scenarioItems[i]->initialState[1];
-            float zi  = scenario[currentScenarioID]->scenarioItems[i]->initialState[2];
-            float YAi = scenario[currentScenarioID]->scenarioItems[i]->initialState[3];
-            float Vi  = scenario[currentScenarioID]->scenarioItems[i]->initialState[4];
-            pAgent[objectID]->vehicle.SetInitialState( Vi, xi, yi, zi, YAi );
-
-            pAgent[objectID]->state.V = Vi;
-            pAgent[objectID]->state.x = xi;
-            pAgent[objectID]->state.y = yi;
-            pAgent[objectID]->state.z = zi;
-            pAgent[objectID]->state.yaw = YAi;
-            pAgent[objectID]->state.cosYaw = cos( YAi );
-            pAgent[objectID]->state.sinYaw = sin( YAi );
-
-
-            int vmID = scenario[currentScenarioID]->scenarioItems[i]->objectModelID;
-
-            if( vmID < 0 || vmID >= pRoad->vehicleKind.size() ){
-                vmID = 0;
-            }
-
-            pAgent[objectID]->vehicle.SetVehicleModelID( vmID );  // This ID is used to draw the object in canvas
-
-            {
-                pAgent[objectID]->objTypeForUE4 = -1;  // For Scenario Vehicle
-                pAgent[objectID]->objNoForUE4   = vmID;
-
-                float L = pRoad->vehicleKind[vmID]->length;
-                float W = pRoad->vehicleKind[vmID]->width;
-                float H = pRoad->vehicleKind[vmID]->height;
-
-                pAgent[objectID]->vehicle.SetVehicleParam( L, W, H, L * 0.8, L * 0.1, 1.0 );
-
-                pAgent[objectID]->vHalfLength = L * 0.5;
-                pAgent[objectID]->vHalfWidth  = W  * 0.5;
-            }
-
-
-            // Set route information
-            ScenarioObjectControlInfo* controlInfo = scenario[currentScenarioID]->scenarioItems[i]->controlInfo;
-
-            if( controlInfo->routeType == ROUTE_TYPE::NODE_LIST_TYPE ){
-
-                pAgent[objectID]->memory.routeType = ROUTE_TYPE::NODE_LIST_TYPE;
-
-
-
-
-
-
-
-
-
-
-                // Not yet implemented
-                continue;
-            }
-            else if( controlInfo->routeType == ROUTE_TYPE::PATH_LIST_TYPE ){
-
-                pAgent[objectID]->memory.routeType = ROUTE_TYPE::PATH_LIST_TYPE;
-
-                int pathSelectID = objectID;
-                if( pAgent[objectID]->memory.scenarioPathSelectID > 0 ){
-                    pathSelectID = pAgent[objectID]->memory.scenarioPathSelectID;
-                }
-
-
-                for(int j=0;j<pRoad->paths.size();++j){
-                    if( pRoad->paths[j]->scenarioObjectID != pathSelectID ){
-                        continue;
-                    }
-                    pAgent[objectID]->memory.targetPathList.prepend( pRoad->paths[j]->id );
-
-                    pAgent[objectID]->memory.targetPathLength.prepend( pRoad->paths[j]->pathLength );
-                }
-
-                float tdev,txt,tyt,txd,tyd,ts;
-                int currentPath = pRoad->GetNearestPathFromList( pAgent[objectID]->memory.targetPathList,
-                                                                 xi, yi, zi, YAi,
-                                                                 tdev,txt,tyt,txd,tyd,ts );
-                if( currentPath < 0 ){
-                    qDebug() << "[Warning]----------------------------------";
-                    qDebug() << " Scenario Vehicle ID = " << objectID << " cannot determin nearest path from assigned list.";
-                    qDebug() << "   Assigned Path List : ";
-                    for(int j=0;j<pAgent[objectID]->memory.targetPathList.size();++j){
-                        qDebug() << "           Path " << pAgent[objectID]->memory.targetPathList[j];
-                    }
-                    continue;
-                }
-
-                pAgent[objectID]->memory.currentTargetPath = currentPath;
-
-                pAgent[objectID]->memory.scenarioPathSelectID = -1;
-            }
-
-
-            qDebug() << "objectID=" << objectID << " currentTargetPath=" << pAgent[objectID]->memory.currentTargetPath;
-
-
-            // Set control information
-            if( pAgent[objectID]->skipSetControlInfo == false ){
-
-		            pAgent[objectID]->memory.controlMode = controlInfo->mode;
-		
-		            if( pAgent[objectID]->memory.controlMode == AGENT_CONTROL_MODE::CONSTANT_SPEED_HEADWAY ){
-		
-		                pAgent[objectID]->memory.precedingVehicleIDByScenario = controlInfo->targetObjectID;
-		
-		                pAgent[objectID]->memory.targetSpeedByScenario = controlInfo->targetSpeed;
-		
-		                pAgent[objectID]->memory.targetHeadwayDistanceByScenario = controlInfo->targetHeadwayDistance;
-		                pAgent[objectID]->memory.targetHeadwayTimeByScenario     = controlInfo->targetHeadwayTime;
-		
-		                pAgent[objectID]->memory.doHeadwayDistanceControl = false;  // This flag is set when detected preceding vehicle
-		                pAgent[objectID]->memory.doStopControl = false;
-		
-		            }
-		            else if( pAgent[objectID]->memory.controlMode == AGENT_CONTROL_MODE::SPEED_PROFILE ){
-		
-		                pAgent[objectID]->memory.speedProfileCount = 0;
-		                pAgent[objectID]->memory.profileTime  = controlInfo->profileAxis;
-		                pAgent[objectID]->memory.profileSpeed = controlInfo->speedProfile;
-		
-		                pAgent[objectID]->vehicle.SetInitialSpeed( pAgent[objectID]->memory.profileSpeed[0] );
-		                pAgent[objectID]->memory.profileTime[0] = 0.0f;
-		
-		                pAgent[objectID]->state.V = pAgent[objectID]->memory.profileSpeed[0];
-		            }
-		            else if( pAgent[objectID]->memory.controlMode == AGENT_CONTROL_MODE::STOP_AT ){
-		
-		                pAgent[objectID]->memory.targetSpeedByScenario = controlInfo->targetSpeed;
-		
-		                pAgent[objectID]->memory.targetStopAtXByScenario = controlInfo->stopAtX;
-		                pAgent[objectID]->memory.targetStopAtYByScenario = controlInfo->stopAtY;
-		
-		                pAgent[objectID]->memory.actualStopOnPathID = -1;
-		
-		                pAgent[objectID]->memory.doStopControl = true;
-		            }
-		
-		            pAgent[objectID]->memory.targetLateralShiftByScenario = controlInfo->targetLateralOffset;
-            }
-
-            scenario[currentScenarioID]->scenarioItems[i]->status = 1;
-
-            pAgent[objectID]->agentStatus = 1;
-            qDebug() << "Generate Agent[Scenario Vehicle(Old Format)] : objectID = " << objectID;
-
-            pAgent[objectID]->isScenarioObject = true;
-            pAgent[objectID]->isOldScenarioType = true;
-            pAgent[objectID]->isSInterfaceObject = false;
-            pAgent[objectID]->isBehaviorEmbeded  = false;
-            pAgent[objectID]->justWarped = false;
-
-
-            if( DSMode == true ){
-
-                if( pAgent[objectID]->vehicle.steerFiltered4CG == NULL ){
-                    pAgent[objectID]->vehicle.steerFiltered4CG = new LowPassFilter(1, simTime.dt, 6.0 , 0.0);
-                }
-                else{
-                    pAgent[objectID]->vehicle.steerFiltered4CG->Reset();
-                }
-
-                if( pAgent[objectID]->vehicle.axFiltered4CG == NULL ){
-                    pAgent[objectID]->vehicle.axFiltered4CG = new LowPassFilter(1, simTime.dt, 6.0 , 0.0);
-                }
-                else{
-                    pAgent[objectID]->vehicle.axFiltered4CG->Reset();
-                }
-
-                if( pAgent[objectID]->vehicle.ayFiltered4CG == NULL ){
-                    pAgent[objectID]->vehicle.ayFiltered4CG = new LowPassFilter(1, simTime.dt, 6.0 , 0.0);
-                }
-                else{
-                    pAgent[objectID]->vehicle.axFiltered4CG->Reset();
-                }
-
-
-                if( pAgent[objectID]->vehicle.suspentionFL4CG == NULL ){
-                    pAgent[objectID]->vehicle.suspentionFL4CG = new LowPassFilter(2, simTime.dt, 10.0 , 0.6);
-                }
-                else{
-                    pAgent[objectID]->vehicle.suspentionFL4CG->Reset();
-                }
-
-                if( pAgent[objectID]->vehicle.suspentionFR4CG == NULL ){
-                    pAgent[objectID]->vehicle.suspentionFR4CG = new LowPassFilter(2, simTime.dt, 10.0 , 0.6);
-                }
-                else{
-                    pAgent[objectID]->vehicle.suspentionFR4CG->Reset();
-                }
-
-                if( pAgent[objectID]->vehicle.suspentionRL4CG == NULL ){
-                    pAgent[objectID]->vehicle.suspentionRL4CG = new LowPassFilter(2, simTime.dt, 10.0 , 0.6);
-                }
-                else{
-                    pAgent[objectID]->vehicle.suspentionRL4CG->Reset();
-                }
-
-                if( pAgent[objectID]->vehicle.suspentionRR4CG == NULL ){
-                    pAgent[objectID]->vehicle.suspentionRR4CG = new LowPassFilter(2, simTime.dt, 10.0 , 0.6);
-                }
-                else{
-                    pAgent[objectID]->vehicle.suspentionRR4CG->Reset();
-                }
-
-
-                if( pAgent[objectID]->vehicle.tireFL4CG == NULL ){
-//                    pAgent[objectID]->vehicle.tireFL4CG = new LowPassFilter(2, simTime.dt, 20.0 , 1.0);
-                    pAgent[objectID]->vehicle.tireFL4CG = new LowPassFilter(1, simTime.dt, 5.0 , 0.0);
-                }
-                else{
-                    pAgent[objectID]->vehicle.tireFL4CG->Reset();
-                }
-
-                if( pAgent[objectID]->vehicle.tireFR4CG == NULL ){
-//                    pAgent[objectID]->vehicle.tireFR4CG = new LowPassFilter(2, simTime.dt, 20.0 , 1.0);
-                    pAgent[objectID]->vehicle.tireFR4CG = new LowPassFilter(1, simTime.dt, 5.0 , 0.0);
-                }
-                else{
-                    pAgent[objectID]->vehicle.tireFR4CG->Reset();
-                }
-
-                if( pAgent[objectID]->vehicle.tireRL4CG == NULL ){
-//                    pAgent[objectID]->vehicle.tireRL4CG = new LowPassFilter(2, simTime.dt, 20.0 , 1.0);
-                    pAgent[objectID]->vehicle.tireRL4CG = new LowPassFilter(1, simTime.dt, 5.0 , 0.0);
-                }
-                else{
-                    pAgent[objectID]->vehicle.tireRL4CG->Reset();
-                }
-
-                if( pAgent[objectID]->vehicle.tireRR4CG == NULL ){
-//                    pAgent[objectID]->vehicle.tireRR4CG = new LowPassFilter(2, simTime.dt, 20.0 , 1.0);
-                    pAgent[objectID]->vehicle.tireRR4CG = new LowPassFilter(1, simTime.dt, 5.0 , 0.0);
-                }
-                else{
-                    pAgent[objectID]->vehicle.tireRR4CG->Reset();
-                }
-            }
-        }
-        else if( pAgent[objectID]->agentKind >= 100 ){
-
-            ScenarioObjectControlInfo* controlInfo = scenario[currentScenarioID]->scenarioItems[i]->controlInfo;
-
-            // Set initial state
-            float xi  = scenario[currentScenarioID]->scenarioItems[i]->initialState[0];
-            float yi  = scenario[currentScenarioID]->scenarioItems[i]->initialState[1];
-            float zi  = scenario[currentScenarioID]->scenarioItems[i]->initialState[2];
-            float YAi = scenario[currentScenarioID]->scenarioItems[i]->initialState[3];
-            float Vi  = scenario[currentScenarioID]->scenarioItems[i]->initialState[4];
-
-            pAgent[objectID]->state.V = Vi;
-            pAgent[objectID]->state.x = xi;
-            pAgent[objectID]->state.y = yi;
-            pAgent[objectID]->state.z = zi;
-            pAgent[objectID]->state.yaw = YAi;
-            pAgent[objectID]->state.cosYaw = cos( YAi );
-            pAgent[objectID]->state.sinYaw = sin( YAi );
-
-            int pmID = scenario[currentScenarioID]->scenarioItems[i]->objectModelID;
-            if( pmID < 0 || pmID >= pRoad->pedestrianKind.size() ){
-                pmID = 0;
-            }
-            pAgent[objectID]->vehicle.SetVehicleModelID( pmID );   // This ID is used to draw the object in canvas
-
-            {
-                pAgent[objectID]->objTypeForUE4 = pRoad->pedestrianKind[pmID]->type;
-                pAgent[objectID]->objNoForUE4   = pRoad->pedestrianKind[pmID]->No;
-
-                pAgent[objectID]->vHalfWidth  = pRoad->pedestrianKind[pmID]->width * 0.5;
-                pAgent[objectID]->vHalfLength = pRoad->pedestrianKind[pmID]->length * 0.5;
-
-                // Assume minimum size of pedestrian as a circle of 1[m]
-                if( pAgent[objectID]->vHalfWidth < 0.5 ){
-                    pAgent[objectID]->vHalfWidth = 0.5;
-                }
-                if( pAgent[objectID]->vHalfLength < 0.5 ){
-                    pAgent[objectID]->vHalfLength = 0.5;
-                }
-            }
-
-
-            // Set route information
-            for(int j=0;j<scenario[currentScenarioID]->scenarioItems[i]->controlInfo->pedestPathRoute.size();++j){
-                int ppath = scenario[currentScenarioID]->scenarioItems[i]->controlInfo->pedestPathRoute[j];
-                pAgent[objectID]->memory.targetPathList.prepend( ppath );
-            }
-
-            pAgent[objectID]->memory.currentTargetPath = pAgent[objectID]->memory.targetPathList.first();
-
-            int overEdge = 0;
-            float dist = 0.0;
-            int nearPPSectIndex = pRoad->GetNearestPedestPathSectionIndex(xi,yi,dist,overEdge,objectID);
-            if( nearPPSectIndex >= 0 ){
-                pAgent[objectID]->memory.currentTargetPathIndexInList = nearPPSectIndex;
-            }
-            else{
-                pAgent[objectID]->memory.currentTargetPathIndexInList = 0;
-            }
-
-            // Set control information
-            pAgent[objectID]->memory.controlMode = controlInfo->mode;
-
-            pAgent[objectID]->memory.targetSpeedByScenario = controlInfo->targetSpeed;
-            pAgent[objectID]->memory.targetSpeed           = controlInfo->targetSpeed;
-
-            if( pAgent[objectID]->memory.controlMode == AGENT_CONTROL_MODE::SPEED_PROFILE ){
-
-                pAgent[objectID]->memory.speedProfileCount = 0;
-                pAgent[objectID]->memory.profileTime  = controlInfo->profileAxis;
-                pAgent[objectID]->memory.profileSpeed = controlInfo->speedProfile;
-                pAgent[objectID]->memory.profileTime[0] = 0.0f;
-                pAgent[objectID]->state.V = pAgent[objectID]->memory.profileSpeed[0];
-            }
-
-
-            if( DSMode == true ){
-
-                // filter for yaw motion
-                if( pAgent[objectID]->vehicle.axFiltered4CG == NULL ){
-                    pAgent[objectID]->vehicle.axFiltered4CG = new LowPassFilter(1, simTime.dt, 6.0 , 0.0);
-                }
-                else{
-                    pAgent[objectID]->vehicle.axFiltered4CG->Reset();
-                }
-
-                if( pAgent[objectID]->vehicle.ayFiltered4CG == NULL ){
-                    pAgent[objectID]->vehicle.ayFiltered4CG = new LowPassFilter(1, simTime.dt, 6.0 , 0.0);
-                }
-                else{
-                    pAgent[objectID]->vehicle.axFiltered4CG->Reset();
-                }
-
-            }
-
-            // Set status
-            scenario[currentScenarioID]->scenarioItems[i]->status = 1;
-
-            pAgent[objectID]->agentStatus = 1;
-            //qDebug() << "Generate Agent[Scenario Pedestrian(Old Format)] : objectID = " << objectID;
-
-            pAgent[objectID]->isScenarioObject = true;
-            pAgent[objectID]->isOldScenarioType = true;
-        }
-
-
-        qDebug() << "Agent ID = " << objectID << " generated by Scenario.";
-
-//        if( sysLogOutFile.open( QIODevice::Append | QIODevice::Text ) ){
-//            QTextStream sysLogOut(&sysLogOutFile);
-//            sysLogOut << "Agent ID = " << objectID << " generated by Scenario." << "\n";
-//            sysLogOut.flush();
-//            sysLogOutFile.close();
-//        }
-
-
-    }
-
 }
 
 
@@ -2496,10 +2093,14 @@ void SimulationManager::DisappearAgents(Agent **pAgent, int maxAgent)
             // Implement some logic for counting somthing if necessary
             //
 
+            //qDebug() << "[DisappearAgents] ID = " << i;
 
             pAgent[i]->agentStatus = 0;
+            pAgent[i]->TimeOfAppear = -1.0;
 
             if( pAgent[i]->isScenarioObject == true  ){
+
+                //qDebug() << "Scenario Object: canAppearRepeatedly = " << pAgent[i]->canAppearRepeatedly;
 
                 int nItem = scenario[currentScenarioID]->scenarioItems.size();
                 for(int j=0;j<nItem;++j){
@@ -2531,6 +2132,8 @@ void SimulationManager::DisappearAgents(Agent **pAgent, int maxAgent)
                             continue;
                         }
 
+                        qDebug() << "CanAppearRepeatedly ID = " << pAgent[i]->ID << ": Reset Appear Event: event[" << j << "]";
+
                         se->eventState = 0;
                         ScenarioTriggers *trig = se->eventTrigger;
 
@@ -2538,6 +2141,7 @@ void SimulationManager::DisappearAgents(Agent **pAgent, int maxAgent)
 
                         for(int k=0;k<trig->objectTigger.size();++k){
                             trig->objectTigger[k]->isTriggered = false;
+                            trig->objectTigger[k]->passCheckFlag = 0;
                         }
                         break;
                     }

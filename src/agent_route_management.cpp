@@ -415,6 +415,7 @@ void Agent::SetTargetNodeListByTargetPaths(Road* pRoad)
     memory.nextTurnNode = -1;
     memory.nextTurnDirection = -1;
     memory.nextTurnNodeIndexInNodeList = -1;
+    memory.isMergeNode = -1;
 
     memory.oncomingWaitPathList.clear();
     memory.oncomingWaitCPList.clear();
@@ -438,6 +439,7 @@ void Agent::SetTargetNodeListByTargetPaths(Road* pRoad)
                 memory.nextTurnNodeIndexInNodeList = i;
                 memory.nextTurnNode = memory.myNodeList.at(i);
                 memory.nextTurnDirection = memory.myTurnDirectionList.at(i);
+                memory.isMergeNode = -1;
 
                 int ndIdx = pRoad->nodeId2Index.indexOf( memory.nextTurnNode );
                 for(int j=0;j<pRoad->nodes[ndIdx]->nCross;++j){
@@ -575,7 +577,78 @@ void Agent::ProcessLaneChangeRequest(Road *road, int LCdir, int LCmode,float mov
     qDebug() << "tdevList = " << tdevList;
 
     if( candidateList.size() == 0 ){
-        return;
+
+        // Try to find LC path from other route data
+        bool addLaneList = false;
+        for(int i=0;i<road->odRoute.size();++i){
+            if( i == kk ){  // reject self
+                continue;
+            }
+            if( road->odRoute[i]->destinationNode != road->odRoute[kk]->destinationNode ){
+                continue;
+            }
+            int hasTargetNodeInRoute = -1;
+            for(int j=0;j<road->odRoute[i]->routeToDestination.size();++j){
+                if( road->odRoute[i]->routeToDestination[j]->node == memory.currentTargetNode &&
+                        road->odRoute[i]->routeToDestination[j]->outDir == memory.currentTargetNodeOutDirect ){
+                    hasTargetNodeInRoute = j;
+                    break;
+                }
+            }
+            if( hasTargetNodeInRoute < 0 ){
+                continue;
+            }
+
+            for(int j=0;j<road->odRoute[i]->LCSupportLaneLists.size();++j){
+                if( road->odRoute[i]->LCSupportLaneLists[j]->sIndexInNodeList <= hasTargetNodeInRoute &&
+                        hasTargetNodeInRoute <= road->odRoute[i]->LCSupportLaneLists[j]->gIndexInNodeList ){
+
+                    // This Lane-list contains target node
+                    for(int k=0;k<road->odRoute[i]->LCSupportLaneLists[j]->laneList.size();++k){
+                        if( road->odRoute[kk]->LCSupportLaneLists[ll]->laneList.contains( road->odRoute[i]->LCSupportLaneLists[j]->laneList[k] ) == false ){
+                            road->odRoute[kk]->LCSupportLaneLists[ll]->laneList.append( road->odRoute[i]->LCSupportLaneLists[j]->laneList[k] );
+                            addLaneList = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if( addLaneList == false ){
+            return;
+        }
+
+        // Evaluate again
+        for(int i=0;i<road->odRoute[kk]->LCSupportLaneLists[ll]->laneList.size();++i){
+
+            float tdev,txt,tyt,txd,tyd,ts;
+            int objPathInLCPath = road->GetNearestPathFromList( road->odRoute[kk]->LCSupportLaneLists[ll]->laneList[i],
+                                                                state.x,
+                                                                state.y,
+                                                                state.z_path,
+                                                                state.yaw,
+                                                                tdev, txt, tyt, txd, tyd, ts);
+
+            qDebug() << "i = " << i << " objPathInLCPath = " << objPathInLCPath << " tdev = " << tdev;
+
+            if( objPathInLCPath >= 0 ){
+                if( LCdir == DIRECTION_LABEL::RIGHT_CROSSING && tdev > 1.0 ){
+                    candidateList.append( i );
+                    tdevList.append( tdev );
+                }
+                else if( LCdir == DIRECTION_LABEL::LEFT_CROSSING && tdev < -1.0 ){
+                    candidateList.append( i );
+                    tdevList.append( tdev );
+                }
+            }
+        }
+
+        qDebug() << "candidateList = " << candidateList;
+        qDebug() << "tdevList = " << tdevList;
+
+        if( candidateList.size() == 0 ){
+            return;
+        }
     }
 
     int LCTargetLane = -1;

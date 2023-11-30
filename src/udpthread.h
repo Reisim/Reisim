@@ -112,7 +112,7 @@ signals:
     void RequestLaneChange(int,int,int);
     void RequestAssignedLaneChange(int,int,int,float);
     void ChangeControlModeStopAt(int,float,float);
-    void ChangeControlModeHeadwayControl(int,float,float,float,float,int);
+    void ChangeControlModeHeadwayControl(int,float,float,float,float,int,bool);
     void FEDataReceived(int, QString);
     void ChangeControlModeAgent(int);
     void ChangeControlModeIntersectionTurn(int,float,float);
@@ -132,6 +132,13 @@ signals:
     void ChangeMoveSpeedPedestrian(QList<float>);
     void OverwriteAgentParameter(int,int,float);
     void ChangeOptionalImageParams(QList<float>);
+    void SetEventTriggerByFuncExtend(int,int,int,int);
+    void SetBrakeLampOverride(int,int);
+    void SetScenarioVehicleInitStates(QList<int>,QList<float>,QList<float>,QList<float>,QList<float>,QList<float>);
+    void SetAgentGenerationNotAllowFlagForNodes(QList<int>, bool);
+    void AppearStoppingVehicle(int,float,float,float);
+    void SetAgentExternalControlParams(int,float,float);
+    void ChangePedestPathForScenarioPedestrian(int,QList<float>,QList<float>);
 
 
 public slots:

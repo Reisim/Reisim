@@ -53,7 +53,7 @@ public:
     void SetControlInfo(int nd,int dir,int lane,int cwalk,float z=0.0);
 
     int GetCurrentDisplayInfo();
-    void CheckDisplayInfoUpdate(float simTimeFval);
+    void CheckDisplayInfoUpdate(float simTimeFval, float dt);
     void SetSignalStartTime(float simTimeFval);
     void ForceChangeDisplayTo(float simTimeFval,int targetIndex);
 
@@ -91,6 +91,15 @@ public:
     float flushTimeCheck;
 
     bool displayOff;
+
+    int isSensorType;
+    int timeChangeBySensor;
+    int sensorState;
+    float changeToCount;
+
+    bool setSensorPos;
+    float sensorX;
+    float sensorY;
 };
 
 #endif // TRAFFICSIGNAL_H

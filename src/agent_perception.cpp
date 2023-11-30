@@ -59,6 +59,9 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
         float D1 = state.V;
         float D2 = memory.actualTargetSpeed;
         float preview_dist = ( D1 < D2 ? D1: D2 );
+
+        preview_dist *= memory.aimPointFactorForExternalControl;
+
         if( preview_dist < vHalfLength ){
             preview_dist = vHalfLength;
         }
@@ -134,6 +137,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
 
         memory.distanceToTurnNodeWPOut = -1.0;
         memory.distanceToNodeWPOut     = -1.0;
+        memory.turnNodeOutWP           = -1;
 
         // only for agent with node list route data
         if( memory.myNodeList.size() > 1 ){
@@ -178,6 +182,8 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
                         }
                         if( destPathsOut.indexOf(memory.targetPathList.at(i)) >= 0 ){
                             memory.distanceToTurnNodeWPOut = dist - memory.distanceFromStartWPInCurrentPath;
+                            int tpid = pRoad->pathId2Index.indexOf(memory.targetPathList.at(i));
+                            memory.turnNodeOutWP = pRoad->paths[tpid]->endWpId;
                             break;
                         }
                     }
@@ -1476,6 +1482,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
                     ts->yaw         = trafficSignal[j]->direction;
                     ts->relatedNode = cNode;
                     ts->SLonPathID  = -1;
+                    ts->SLID        = -1;
 
                 }
                 else{
@@ -1504,6 +1511,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
                         for(int l=0;l<pRoad->paths[tpIdx]->stopPoints.size();++l){
                             if( pRoad->paths[tpIdx]->stopPoints[l]->relatedNode == cNode ){
 
+                                memory.perceptedSignals[psIdx]->SLID      = pRoad->paths[tpIdx]->stopPoints[l]->stopPointID;
                                 memory.perceptedSignals[psIdx]->stopLineX = pRoad->paths[tpIdx]->stopPoints[l]->pos.x();
                                 memory.perceptedSignals[psIdx]->stopLineY = pRoad->paths[tpIdx]->stopPoints[l]->pos.y();
 
@@ -1623,6 +1631,7 @@ void Agent::Perception( Agent** pAgent, int maxAgent, Road* pRoad, QList<Traffic
                             ts->yaw         = trafficSignal[j]->direction;
                             ts->relatedNode = trafficSignal[j]->relatedNode;
                             ts->SLonPathID  = -1;
+                            ts->SLID        = -1;
 
                         }
 

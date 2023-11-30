@@ -1178,7 +1178,7 @@ void UDPThread::ReadUDPData()
                     int spmode = -1;
                     memcpy( &spmode, &(com[index+4]), sizeof(int) );
 
-                    if( spmode == 0 || spmode == 1 ){
+                    if( spmode == 0 || spmode == 1 || spmode == 4 ){
                         int aID = -1;
                         memcpy( &aID, &(com[index+8]), sizeof(int) );
 
@@ -1216,6 +1216,29 @@ void UDPThread::ReadUDPData()
                     }
 
                     index += 12;
+                }
+                else if( com[index+1] == 'm' && com[index+2] == 'C' && com[index+3] == 'R' && com[index+4] == 'S'){   // Change Reference Speed(multi)
+
+                    int nV = -1;
+                    memcpy( &nV, &(com[index+5]), sizeof(int) );
+
+                    float refSpeed = 0.0;
+                    memcpy( &refSpeed, &(com[index+9]), sizeof(float) );
+
+                    int pos = index + 13;
+
+                    for(int k=0;k<nV;++k){
+
+                        int aID = -1;
+                        memcpy( &aID, &(com[pos]), sizeof(int) );
+                        pos += sizeof(int);
+
+                        if( aID >= 0 && aID < maxAgent ){
+                            emit ChangeReferenceSpeed( aID, refSpeed );
+                        }
+                    }
+
+                    index = pos;
                 }
                 else if( com[index+1] == 'C' && com[index+2] == 'P' ){   // Copy Path Data
 
@@ -1324,7 +1347,7 @@ void UDPThread::ReadUDPData()
                     int aID = -1;
                     int addSize = 24;
                     memcpy( &aID, &(com[index+4]), sizeof(int) );
-                    if( aID >= 0 && aID < maxAgent ){
+                    if( aID >= -1 && aID < maxAgent ){
 
                         float Speed = 0.0;
                         memcpy( &Speed, &(com[index+8]), sizeof(float) );
@@ -1340,13 +1363,21 @@ void UDPThread::ReadUDPData()
                         memcpy( &targetID, &(com[index+20]), sizeof(int) );
 
                         float AllowHDDev = 0.0;
-                        if( index+28 <= comSize){
+                        if( index+28 <= comSize ){
                             memcpy( &AllowHDDev, &(com[index+24]), sizeof(float) );
                             addSize = 28;
                         }
 
-                        qDebug() << "targetID=" << targetID;
-                        emit ChangeControlModeHeadwayControl( aID, Speed, HeadwayDist, AllowHDDev, HeadwayTime, targetID );
+                        bool disableSpeedAdjustForCurve = false;
+                        if( index+29 <= comSize ){
+                            if( com[index+28] == 'y' ){
+                                disableSpeedAdjustForCurve = true;
+                            }
+                            addSize = 29;
+                        }
+
+                        //qDebug() << "targetID=" << targetID;
+                        emit ChangeControlModeHeadwayControl( aID, Speed, HeadwayDist, AllowHDDev, HeadwayTime, targetID, disableSpeedAdjustForCurve);
 
                     }
 
@@ -1616,9 +1647,9 @@ void UDPThread::ReadUDPData()
                 }
                 else if( com[index+1] == 'F' && com[index+2] == 'C' && com[index+3] == 'S'){   // Force Change Speed
 
-                    int aID = -1;
+                    int aID = -2;
                     memcpy( &aID, &(com[index+4]), sizeof(int) );
-                    if( aID >= 0 && aID < maxAgent ){
+                    if( aID >= -1 && aID < maxAgent ){
 
                         float Speed = 0.0;
                         memcpy( &Speed, &(com[index+8]), sizeof(float) );
@@ -1768,6 +1799,213 @@ void UDPThread::ReadUDPData()
                     emit ChangeOptionalImageParams( p );
 
                     index = pos;
+                }
+                else if( com[index+1] == 'S' && com[index+2] == 'E' && com[index+3] == 'T' ){   // Set Event Trigger by FuncExtend
+
+                    int eventType = 0;
+                    memcpy( &eventType, &(com[index+4]), sizeof(int) );
+
+                    int id = 0;
+                    memcpy( &id, &(com[index+8]), sizeof(int) );
+
+                    int idx = 0;
+                    memcpy( &idx, &(com[index+12]), sizeof(int) );
+
+                    int option = 0;
+                    memcpy( &option, &(com[index+16]), sizeof(int) );
+
+                    qDebug() << "Receive Event Trigger Command from FE: Type = " << eventType
+                             << " ID = " << id
+                             << " Index = " << idx
+                             << " Option = " << option;
+
+                    emit SetEventTriggerByFuncExtend( eventType, id, idx, option );
+
+                    index += 20;
+                }
+                else if( com[index+1] == 'V' && com[index+2] == 'B' && com[index+3] == 'S' ){   // Set Brake Lamp Override by FuncExtend
+
+                    int aID = 0;
+                    memcpy( &aID, &(com[index+4]), sizeof(int) );
+
+                    int state = 0;
+                    memcpy( &state, &(com[index+8]), sizeof(int) );
+
+                    emit SetBrakeLampOverride( aID, state );
+
+                    index += 12;
+                }
+                else if( com[index+1] == 'I' && com[index+2] == 'S' && com[index+3] == 'S' ){  // Set Scenario Vehicle Init States
+
+
+
+                    int pos = index + 4;
+
+                    int nSV = 0;
+                    memcpy( &nSV, &(com[pos]), sizeof(int) );
+                    pos += sizeof(int);
+
+                    qDebug() << "Received FISS command: nSV = " << nSV;
+
+                    if( nSV > 0 ){
+
+                        QList<int> aIDs;
+                        QList<float> Xs;
+                        QList<float> Ys;
+                        QList<float> Zs;
+                        QList<float> Psis;
+                        QList<float> Vs;
+
+                        for(int k=0;k<nSV;++k){
+
+                            int aID = 0;
+                            memcpy( &aID, &(com[pos]), sizeof(int) );
+                            pos += sizeof(int);
+
+                            float X = 0.0;
+                            memcpy( &X, &(com[pos]), sizeof(float) );
+                            pos += sizeof(float);
+
+                            float Y = 0.0;
+                            memcpy( &Y, &(com[pos]), sizeof(float) );
+                            pos += sizeof(float);
+
+                            float Z = 0.0;
+                            memcpy( &Z, &(com[pos]), sizeof(float) );
+                            pos += sizeof(float);
+
+                            float Psi = 0.0;
+                            memcpy( &Psi, &(com[pos]), sizeof(float) );
+                            pos += sizeof(float);
+
+                            float V = 0.0;
+                            memcpy( &V, &(com[pos]), sizeof(float) );
+                            pos += sizeof(float);
+
+                            aIDs.append( aID );
+                            Xs.append( X );
+                            Ys.append( Y );
+                            Zs.append( Z );
+                            Psis.append( Psi );
+                            Vs.append( V );
+                        }
+
+                        emit SetScenarioVehicleInitStates(aIDs,Xs,Ys,Zs,Psis,Vs);
+                    }
+
+                    index = pos;
+                }
+                else if( com[index+1] == 'N' && com[index+2] == 'p' && com[index+3] == 'a' ){  // Stop Agent Generation Temporally for Node
+
+                    int nData = -1;
+                    memcpy( &nData, &(com[index+4]), sizeof(int) );
+
+                    QList<int> nodeList;
+
+                    int pos = index + 8;
+                    for(int i=0;i<nData;++i){
+                        int nID = -1;
+                        memcpy( &nID, &(com[pos]), sizeof(int) );
+                        pos += sizeof(int);
+
+                        nodeList.append( nID );
+                    }
+
+                    emit SetAgentGenerationNotAllowFlagForNodes( nodeList, false );
+                    index = pos;
+                }
+                else if( com[index+1] == 'N' && com[index+2] == 'r' && com[index+3] == 'a' ){  // Resume Agent Generation for Node
+
+                    int nData = -1;
+                    memcpy( &nData, &(com[index+4]), sizeof(int) );
+
+                    QList<int> nodeList;
+
+                    int pos = index + 8;
+                    for(int i=0;i<nData;++i){
+                        int nID = -1;
+                        memcpy( &nID, &(com[pos]), sizeof(int) );
+                        pos += sizeof(int);
+
+                        nodeList.append( nID );
+                    }
+
+                    emit SetAgentGenerationNotAllowFlagForNodes( nodeList, true );
+                    index = pos;
+                }
+                else if( com[index+1] == 'A' && com[index+2] == 'S' && com[index+3] == 'V' ){  // Appear Stopping Vehicle
+
+                    int aID = -1;
+                    memcpy( &aID, &(com[index+4]), sizeof(int) );
+
+                    float x = 0.0;
+                    memcpy( &x, &(com[index+8]), sizeof(float) );
+
+                    float y = 0.0;
+                    memcpy( &y, &(com[index+12]), sizeof(float) );
+
+                    float psi = 0.0;
+                    memcpy( &psi, &(com[index+16]), sizeof(float) );
+
+                    qDebug() << "Receive Appear Stopping Vehicle Command: aID = " << aID
+                             << " x = " << x
+                             << " y = " << y
+                             << " psi = " << psi;
+
+                    emit AppearStoppingVehicle( aID, x, y, psi );
+
+                    index += 20;
+                }
+                else if( com[index+1] == 'E' && com[index+2] == 'C' && com[index+3] == 'F' ){  // Set External Control Factor
+
+                    int aID = 0;
+                    memcpy( &aID, &(com[index+4]), sizeof(int) );
+
+                    float aimPointFactor = 0;
+                    memcpy( &aimPointFactor, &(com[index+8]), sizeof(float) );
+
+                    float steerGain = 0;
+                    memcpy( &steerGain, &(com[index+12]), sizeof(float) );
+
+                    emit SetAgentExternalControlParams( aID, aimPointFactor, steerGain );
+
+                    index += 16;
+                }
+                else if( com[index+1] == 'P' && com[index+2] == 'P' && com[index+3] == 'C' ){  // Change Pedestrian Path for Scenario Pedestrian
+
+                    QList<float> xPos;
+                    QList<float> yPos;
+
+                    index += 4;
+
+                    int aID = -1;
+                    memcpy( &aID, &(com[index]), sizeof(int) );
+                    index += sizeof(int);
+
+                    int nData = -1;
+                    memcpy( &nData, &(com[index]), sizeof(int) );
+                    index += sizeof(int);
+
+                    for(int i=0;i<nData;++i){
+                        float tx = 0.0;
+                        memcpy( &tx, &(com[index]), sizeof(float) );
+                        index += sizeof(float);
+
+                        float ty = 0.0;
+                        memcpy( &ty, &(com[index]), sizeof(float) );
+                        index += sizeof(float);
+
+                        xPos.append( tx );
+                        yPos.append( ty );
+                    }
+
+                    qDebug() << "Receive Change Pedestrian Path Command: aID = " << aID
+                             << " nData = " << nData;
+                    for(int n=0;n<nData;++n){
+                        qDebug() << " [" << n << "] : x = " << xPos[n] << " , y = " << yPos[n];
+                    }
+
+                    emit ChangePedestPathForScenarioPedestrian( aID, xPos, yPos );
                 }
                 else{
                     index++;

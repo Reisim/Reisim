@@ -224,9 +224,8 @@ void SystemThread::OutputRestartData(QString filename)
             << agent[i]->memory.leftCrossCheckCount << ","
             << agent[i]->memory.rightCrossCheckCount << ","
             << agent[i]->memory.safetyConfimed << ","
-            << agent[i]->memory.speedZeroCount << "\n";
-
-
+            << agent[i]->memory.speedZeroCount << ","
+            << agent[i]->memory.precedingVehicleIndex << "\n";
 
         for(int j=0;j<agent[i]->memory.perceptedObjects.size();++j){
 
@@ -451,6 +450,128 @@ void SystemThread::SetRestartData()
             }
             else{
                 agent[cIdx]->calInterval = simManage->GetCalculationInterval();
+
+                float dt = simManage->GetCalculationInterval();
+
+                if( agent[cIdx]->agentKind < 100 ){
+
+                    if( agent[cIdx]->vehicle.steerFiltered4CG == NULL ){
+                        agent[cIdx]->vehicle.steerFiltered4CG = new LowPassFilter(1, dt, 6.0 , 0.0);
+                    }
+                    else{
+                        agent[cIdx]->vehicle.steerFiltered4CG->SetParam(1, dt, 6.0 , 0.0);
+                        agent[cIdx]->vehicle.steerFiltered4CG->Reset();
+                    }
+
+                    if( agent[cIdx]->vehicle.axFiltered4CG == NULL ){
+                        agent[cIdx]->vehicle.axFiltered4CG = new LowPassFilter(1, dt, 6.0 , 0.0);
+                    }
+                    else{
+                        agent[cIdx]->vehicle.axFiltered4CG->SetParam(1, dt, 6.0 , 0.0);
+                        agent[cIdx]->vehicle.axFiltered4CG->Reset();
+                    }
+
+                    if( agent[cIdx]->vehicle.ayFiltered4CG == NULL ){
+                        agent[cIdx]->vehicle.ayFiltered4CG = new LowPassFilter(1, dt, 6.0 , 0.0);
+                    }
+                    else{
+                        agent[cIdx]->vehicle.ayFiltered4CG->SetParam(1, dt, 6.0 , 0.0);
+                        agent[cIdx]->vehicle.ayFiltered4CG->Reset();
+                    }
+
+                    if( agent[cIdx]->vehicle.suspentionFL4CG == NULL ){
+                        agent[cIdx]->vehicle.suspentionFL4CG = new LowPassFilter(2, dt, 10.0 , 0.6);
+                    }
+                    else{
+                        agent[cIdx]->vehicle.suspentionFL4CG->SetParam(2, dt, 10.0 , 0.6);
+                        agent[cIdx]->vehicle.suspentionFL4CG->Reset();
+                    }
+
+                    if( agent[cIdx]->vehicle.suspentionFR4CG == NULL ){
+                        agent[cIdx]->vehicle.suspentionFR4CG = new LowPassFilter(2, dt, 10.0 , 0.6);
+                    }
+                    else{
+                        agent[cIdx]->vehicle.suspentionFR4CG->SetParam(2, dt, 10.0 , 0.6);
+                        agent[cIdx]->vehicle.suspentionFR4CG->Reset();
+                    }
+
+                    if( agent[cIdx]->vehicle.suspentionRL4CG == NULL ){
+                        agent[cIdx]->vehicle.suspentionRL4CG = new LowPassFilter(2, dt, 10.0 , 0.6);
+                    }
+                    else{
+                        agent[cIdx]->vehicle.suspentionRL4CG->SetParam(2, dt, 10.0 , 0.6);
+                        agent[cIdx]->vehicle.suspentionRL4CG->Reset();
+                    }
+
+                    if( agent[cIdx]->vehicle.suspentionRR4CG == NULL ){
+                        agent[cIdx]->vehicle.suspentionRR4CG = new LowPassFilter(2, dt, 10.0 , 0.6);
+                    }
+                    else{
+                        agent[cIdx]->vehicle.suspentionRR4CG->SetParam(2, dt, 10.0 , 0.6);
+                        agent[cIdx]->vehicle.suspentionRR4CG->Reset();
+                    }
+
+                    if( agent[cIdx]->vehicle.tireFL4CG == NULL ){
+                        agent[cIdx]->vehicle.tireFL4CG = new LowPassFilter(1, dt, 5.0 , 0.0);
+                    }
+                    else{
+                        agent[cIdx]->vehicle.tireFL4CG->SetParam(1, dt, 5.0 , 0.0);
+                        agent[cIdx]->vehicle.tireFL4CG->Reset();
+                    }
+
+                    if( agent[cIdx]->vehicle.tireFR4CG == NULL ){
+                        agent[cIdx]->vehicle.tireFR4CG = new LowPassFilter(1, dt, 5.0 , 0.0);
+                    }
+                    else{
+                        agent[cIdx]->vehicle.tireFR4CG->SetParam(1, dt, 5.0 , 0.0);
+                        agent[cIdx]->vehicle.tireFR4CG->Reset();
+                    }
+
+                    if( agent[cIdx]->vehicle.tireRL4CG == NULL ){
+                        agent[cIdx]->vehicle.tireRL4CG = new LowPassFilter(1, dt, 5.0 , 0.0);
+                    }
+                    else{
+                        agent[cIdx]->vehicle.tireRL4CG->SetParam(1, dt, 5.0 , 0.0);
+                        agent[cIdx]->vehicle.tireRL4CG->Reset();
+                    }
+
+                    if( agent[cIdx]->vehicle.tireRR4CG == NULL ){
+                        agent[cIdx]->vehicle.tireRR4CG = new LowPassFilter(1, dt, 5.0 , 0.0);
+                    }
+                    else{
+                        agent[cIdx]->vehicle.tireRR4CG->SetParam(1, dt, 5.0 , 0.0);
+                        agent[cIdx]->vehicle.tireRR4CG->Reset();
+                    }
+
+                    if( agent[cIdx]->vehicle.yawFiltered4CG == NULL ){
+                        agent[cIdx]->vehicle.yawFiltered4CG = new LowPassFilter(1, dt, 3.0 , 0.0);
+                    }
+                    agent[cIdx]->vehicle.yawFiltered4CG->SetParam(1,dt, 3.0 , 0.0);
+                }
+                else if( agent[cIdx]->agentKind >= 100 ){
+
+                    if( agent[cIdx]->vehicle.yawFiltered4CG == NULL ){
+                        agent[cIdx]->vehicle.yawFiltered4CG = new LowPassFilter(1, dt, 10.0 , 0.0);
+                    }
+                    agent[cIdx]->vehicle.yawFiltered4CG->SetParam(1,dt, 10.0 , 0.0);
+                    agent[cIdx]->vehicle.yawFiltered4CG->SetInitialValue( agent[cIdx]->state.yaw );
+
+                    if( agent[cIdx]->vehicle.axFiltered4CG == NULL ){
+                        agent[cIdx]->vehicle.axFiltered4CG = new LowPassFilter(1, dt, 6.0 , 0.0);
+                    }
+
+                    agent[cIdx]->vehicle.axFiltered4CG->SetParam(1, dt, 30.0 , 0.0);
+                    agent[cIdx]->vehicle.axFiltered4CG->SetInitialValue( cos( agent[cIdx]->state.yaw ) );
+
+                    if( agent[cIdx]->vehicle.ayFiltered4CG == NULL ){
+                        agent[cIdx]->vehicle.ayFiltered4CG = new LowPassFilter(1, dt, 6.0 , 0.0);
+                    }
+
+                    agent[cIdx]->vehicle.ayFiltered4CG->SetParam(1, dt, 30.0 , 0.0);
+                    agent[cIdx]->vehicle.ayFiltered4CG->SetInitialValue( sin( agent[cIdx]->state.yaw ) );
+                }
+
+
             }
 
             agent[cIdx]->cognitionCountMax      = cognitionCountMax;
@@ -564,7 +685,6 @@ void SystemThread::SetRestartData()
                 agent[cIdx]->vehicle.winker_count   =  QString(valDiv[13]).trimmed().toInt();
                 agent[cIdx]->vehicle.vehicleModelID =  QString(valDiv[14]).trimmed().toInt();
 
-
                 int j = agent[cIdx]->vehicle.vehicleModelID;
 
                 float L = road->vehicleKind[j]->length;
@@ -591,6 +711,10 @@ void SystemThread::SetRestartData()
                 agent[cIdx]->state.yaw = agent[cIdx]->vehicle.state.yawAngle;
                 agent[cIdx]->state.cosYaw = cos( agent[cIdx]->vehicle.state.yawAngle );
                 agent[cIdx]->state.sinYaw = sin( agent[cIdx]->vehicle.state.yawAngle );
+
+                if( DSMode == true ){
+                    agent[cIdx]->vehicle.yawFiltered4CG->SetInitialValue( agent[cIdx]->state.yaw );
+                }
             }
             else if( agent[cIdx]->agentKind >= 100 ){
 
@@ -636,6 +760,13 @@ void SystemThread::SetRestartData()
                 agent[cIdx]->vehicle.SetVehicleParam( L, W, H, L * 0.8, L * 0.1, 0.5 );
                 agent[cIdx]->vHalfLength = L * 0.5;
                 agent[cIdx]->vHalfWidth  = W  * 0.5;
+
+
+                if( DSMode == true ){
+                    agent[cIdx]->vehicle.yawFiltered4CG->SetInitialValue( agent[cIdx]->state.yaw );
+                    agent[cIdx]->vehicle.axFiltered4CG->SetInitialValue( cos( agent[cIdx]->state.yaw ) );
+                    agent[cIdx]->vehicle.ayFiltered4CG->SetInitialValue( sin( agent[cIdx]->state.yaw ) );
+                }
             }
 
             lineNo++;
@@ -1177,6 +1308,10 @@ void SystemThread::SetRestartData()
             agent[cIdx]->memory.safetyConfimed               = (QString(valDiv[19]).trimmed().toInt() == 1 ? true : false);
             agent[cIdx]->memory.speedZeroCount               =  QString(valDiv[20]).trimmed().toInt();
 
+            if( valDiv.size() >= 22 ){
+                agent[cIdx]->memory.precedingVehicleIndex = QString(valDiv[21]).trimmed().toInt();
+            }
+
             lineNo++;
             cPos = 10;
             continue;
@@ -1366,10 +1501,6 @@ void SystemThread::SetRestartData()
             }
 
             int idx = QString(valDiv[1]).trimmed().toInt();
-
-            int origNode = QString(valDiv[2]).trimmed().toInt();
-            int destNode = QString(valDiv[3]).trimmed().toInt();
-
 //            qDebug() << " PP, idx=" << idx;
 
             if( idx >= 0 && idx < road->pedestPaths.size() ){

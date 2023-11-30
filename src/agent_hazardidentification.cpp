@@ -422,6 +422,8 @@ void Agent::HazardIdentification( Agent** pAgent, int maxAgent, Road* pRoad )
 
             // Distance to nearest CP
             memory.distToNearestCP = -1.0;
+            memory.nearCPInNode = -1;
+
             bool existCPAhead = false;
             bool checkNextTurnNode = false;
             float distEvaled = 0.0;

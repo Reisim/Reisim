@@ -150,6 +150,7 @@ struct TrafficSignalPerception
 
     int signalDisplay;
 
+    int SLID;
     float stopLineX;
     float stopLineY;
     float distToSL;
@@ -189,6 +190,9 @@ struct AgentMemory
     float requiredDistToStopFromTargetSpeed;
     float minimumDistanceToStop;
 
+    float aimPointFactorForExternalControl;
+    float steerControlGainForExternalControl;
+
     float actualTargetSpeed;
     float actualTargetHeadwayDistance;
     float targetSpeed;
@@ -197,11 +201,13 @@ struct AgentMemory
     float targetSpeedByScenario;
     float actualTargetHeadwayDistanceByScenario;
     float targetHeadwayDistanceByScenario;
+    bool disableSpeedAdjustForCurveByScenario;
     float allowableHeadwayDistDeviation;
     float targetHeadwayTimeByScenario;
     float targetSpeedInsideIntersectionTurnByScenario;
     int startDecel;
     bool activeBrakeInVelocityControl;
+    bool headwayControlDecelState;
 
     float actualStopAtX;
     float actualStopAtY;
@@ -217,6 +223,7 @@ struct AgentMemory
     int speedControlState;
     float distanceAdjustLowSpeed;
     float axSpeedControl;
+    float speedControlVariation;
 
     int speedProfileCount;
     QList<float> profileTime;
@@ -317,6 +324,7 @@ struct AgentMemory
     float distanceToCurrentTargetNodeWPIn;
     float distanceToCurrentTargetNodeWPOut;
 
+    int turnNodeOutWP;
 
     QPoint currentWPInPos;
     QPoint currentWPOutPos;
@@ -333,6 +341,7 @@ struct AgentMemory
     int nextTurnDirection;
     int nextTurnNode;
     int nextTurnNodeIndexInNodeList;
+    int isMergeNode;
     QList<int> oncomingWaitPathList;
     QList<int> oncomingWaitCPList;
     int nextTurnNodeOncomingDir;
@@ -388,6 +397,7 @@ struct AgentMemory
 struct AgentParam
 {
     float accelControlGain;
+    float maxSpeedVehicle;
     float deadZoneSpeedControl;
     float maxDeceleration;
     float accelOffDeceleration;
@@ -499,10 +509,13 @@ public:
     bool isOldScenarioType;
     bool canAppearRepeatedly;   // This is only used for scenario vehicle, isScenarioObject = true
     bool isSInterfaceObject;
+    bool isSInterObjDataSet;
     bool isBehaviorEmbeded;
     bool notAllowedAppear;
+    float TimeOfAppear;
 
     int refSpeedMode;
+    int brakeLampOverride;
 
     struct AgentAttiribute attri;
     struct AgentMemory     memory;
@@ -544,6 +557,7 @@ public:
 
 
     int UE4ObjectID[10];
+    int UE4ObjIDDelCount[10];
 
 #ifdef _PERFORMANCE_CHECK_AGENT
     LARGE_INTEGER start, end;

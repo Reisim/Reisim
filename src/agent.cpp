@@ -34,6 +34,9 @@ Agent::Agent()
     memory.startDecel = 0;
     memory.allowableHeadwayDistDeviation = 5.0;
 
+    memory.aimPointFactorForExternalControl = 1.0;
+    memory.steerControlGainForExternalControl = 1.0;
+
     memory.speedControlState = 0;
     memory.distanceAdjustLowSpeed = 0.0;
     memory.speedProfileCount = 0;
@@ -47,6 +50,7 @@ Agent::Agent()
     memory.lateralDeviationFromTargetPathAtPreviewPoint = 0.0;
 		
     memory.doHeadwayDistanceControl = false;
+    memory.disableSpeedAdjustForCurveByScenario = false;
 
     memory.doStopControl = false;
     memory.releaseStopCount = 0;
@@ -104,16 +108,19 @@ Agent::Agent()
     param.accelAtVDev = 0.05 * 9.81;
     param.decelAtVDev = 0.04 * 9.81;
 
+    param.maxSpeedVehicle = 150.0;   // Max Speed when acceleration becomes 0
 
     param.LCInfoGetTime = 2.0;
     param.LCCutInAllowTTC = 2.0;
-    param.maxLateralSpeedForLaneChange = 11.11 * 0.707;  // V=40[km/h] and relativeAttitude 45[deg]
+    param.maxLateralSpeedForLaneChange = 1.0;  // 3.0[s] for 3.0[m] shift
 
     refSpeedMode = 0;
+    brakeLampOverride = -1;
 
     isScenarioObject   = false;
     isOldScenarioType  = false;
     isSInterfaceObject = false;
+    isSInterObjDataSet = false;
     isBehaviorEmbeded  = false;
     justWarped = false;
     notAllowedAppear   = false;
@@ -129,12 +136,14 @@ Agent::Agent()
     vts->yaw         = 0.0;
     vts->relatedNode = -1;
     vts->SLonPathID  = -1;
+    vts->SLID        = -1;
 
     memory.perceptedSignals.append( vts );
 
     objIDForUE4 = -1;
     for(int i=0;i<10;++i){
         UE4ObjectID[i] = -1;
+        UE4ObjIDDelCount[i] = 0;
     }
 
     
@@ -159,6 +168,9 @@ void Agent::InitializeMemory()
     memory.distanceAdjustLowSpeed = 0.0;
     memory.speedProfileCount = 0;
 
+    memory.speedControlVariation = 1.0;
+
+    refSpeedMode = 0;
     memory.setTargetSpeedByScenarioFlag = false;
     memory.targetSpeedByScenario = 0.0;
 
@@ -210,9 +222,11 @@ void Agent::InitializeMemory()
     memory.axHeadwayControl = 0.0;
 
     memory.precedingVehicleID = -1;
+    memory.distanceToPrecedingVehicle = 0.0;
     memory.precedingVehicleIDByScenario = -1;
     memory.scenarioPathSelectID = -1;
     memory.precedingVehicleIndex = -1;
+    memory.headwayControlDecelState = false;
 
     memory.releaseStopCount = 0;
     memory.doStopControl = false;
@@ -283,7 +297,10 @@ void Agent::InitializeMemory()
 
     for(int i=0;i<10;++i){
         UE4ObjectID[i] = -1;
+        UE4ObjIDDelCount[i] = 0;
     }
+
+    brakeLampOverride = -1;
 }
 
 

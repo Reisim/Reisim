@@ -218,6 +218,7 @@ struct Node
     QList<int> relatedVTSIndex;
     QList<int> relatedPTSIndex;
     bool isMergeNode;
+    QList<struct StopPoint*> stopPoints;
 };
 
 
@@ -259,6 +260,8 @@ struct ODRouteData
 
     bool onlyForScenarioVehicle;
     int relatedScenarioObjectID;
+
+    bool allowAgentGeneration;
 };
 
 
@@ -321,8 +324,10 @@ public:
                                      bool negrectYawAngleInfo = false );
 
     int GetNearestPedestPathSectionIndex(float xp,float yp,float &dist,int &overEdge,int objectID=-1);
+    bool GetNearestPedestPath(float xp,float yp,float psip,float &latDev,int &nearPathID,int &sectID,float &distInSect);
+
     int GetDeviationFromPedestPath(int pedestPathID,int sectIndex,float xp,float yp,
-                                   float &dev,float &z,float &xdir,float &ydir,float lateralShift = 0.0);
+                                   float &dev,float &z,float &xdir,float &ydir);
     float GetSpeedAdjustFactorPedestPath(int pedestPathID,int sectIndex,float xp,float yp,float V);
     int GetDeviationFromPedestPathAllSection(int pedestPathID,float xp,float yp, float &dev,float &dist,float &xdir, float& ydir);
 

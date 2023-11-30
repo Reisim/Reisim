@@ -26,6 +26,9 @@ void Agent::UpdateState(Road* pRoad)
         vehicle.SetVehicleInput( memory.accel, memory.brake, memory.steer );
         vehicle.UpdateState( calInterval );
 
+        if( brakeLampOverride >= 0 ){
+            vehicle.SetBrakeLampState( brakeLampOverride );
+        }
 
         state.accel = memory.accel;
         state.brake = memory.brake;
@@ -34,7 +37,7 @@ void Agent::UpdateState(Road* pRoad)
 
         state.accel_log = state.accel;
         state.brake_log = state.brake;
-        state.steer_log = state.steer;
+        state.steer_log = state.steer;    // The unit of state.steer is [deg]
 
         if( state.warpFlag == 0 ){
             float dx = state.x - vehicle.state.X;

@@ -417,6 +417,52 @@ int Road::GetDeviationFromPathExtendEnd(int pathID,
 }
 
 
+bool Road::GetNearestPedestPath(float xp, float yp, float psip, float &latDev, int &nearPathID, int &sectID, float &distInSect)
+{
+    bool ret = false;
+
+    float cPsi = cos(psip);
+    float sPsi = sin(psip);
+
+    nearPathID = -1;
+    sectID = -1;
+
+    latDev = 0.0;
+    for(int i=0;i<pedestPaths.size();++i){
+
+        for(int j=0;j<pedestPaths[i]->shape.size()-1;++j){
+
+            float dx = xp - pedestPaths[i]->shape[j]->pos.x();
+            float dy = yp - pedestPaths[i]->shape[j]->pos.y();
+
+            float ct = pedestPaths[i]->shape[j]->cosA;
+            float st = pedestPaths[i]->shape[j]->sinA;
+
+            // Check direction; path is almost parallel to psip
+            if( ct * cPsi + st * sPsi < 0.707 ){
+                continue;
+            }
+
+            float ip = dx * ct + dy * st;
+            float cp = dy * ct - dx * st;
+            if( fabs(cp) > 5.0 ){
+                continue;
+            }
+
+            if( nearPathID < 0 || fabs(latDev) > fabs(cp) ){
+                nearPathID = pedestPaths[i]->id;
+                sectID = j;
+                latDev = cp;
+                distInSect = ip;
+                ret = true;
+            }
+        }
+    }
+
+    return ret;
+}
+
+
 int Road::GetNearestPedestPathSectionIndex(float xp,float yp,float &dist,int &overEdge,int objectID)
 {
     int ret = -1;
@@ -554,7 +600,7 @@ float Road::GetSpeedAdjustFactorPedestPath(int pedestPathID, int sectIndex, floa
 
 
 int Road::GetDeviationFromPedestPath(int pedestPathID,int sectIndex,float xp,float yp,
-                                     float &dev,float &z,float &xdir,float &ydir,float lateralShift)
+                                     float &dev,float &z,float &xdir,float &ydir)
 {
     int idx = pedestPathID2Index.indexOf( pedestPathID );
     if( idx < 0 ){

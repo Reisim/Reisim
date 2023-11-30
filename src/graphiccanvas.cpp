@@ -703,7 +703,8 @@ void GraphicCanvas::paintGL()
 
 
     // Fonts
-    if( showPathCG == true && showPathID == true && road->paths.size() > 0 ){
+    if( showPathCG == true && showPathID == true && road && road->paths.size() > 0 ){
+        // road is added in the if condition because the condition would be evaluated before road is allocated.
 
         VAOText_Path.bind();
 

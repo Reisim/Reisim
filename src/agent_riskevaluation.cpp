@@ -97,6 +97,29 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad,QList<Traff
             // Check Preceding Vehicle Speed
             memory.speedPrecedingVehicle = pAgent[memory.precedingVehicleID]->state.V;
 
+            for(int i=0;i<memory.perceptedObjects.size();++i){
+                if( memory.perceptedObjects[i]->isValidData == false ){
+                    continue;
+                }
+                if( memory.perceptedObjects[i]->objectID != memory.precedingVehicleID ){
+                    continue;
+                }
+
+                memory.distanceToPrecedingVehicle = memory.perceptedObjects[i]->distanceToObject;
+
+                if( memory.distanceToPrecedingVehicle >= 0.0 ){
+                    memory.distanceToPrecedingVehicle -= memory.perceptedObjects[i]->vHalfLength;
+                    memory.distanceToPrecedingVehicle -= vHalfLength;
+                }
+
+                memory.axPrecedingVehicle    = memory.perceptedObjects[i]->Ax;
+
+                memory.halfLenPrecedingVehicle = memory.perceptedObjects[i]->vHalfLength;
+                memory.precedingVehicleIndex   = i;
+
+                break;
+            }
+
             return;
         }
 
@@ -164,7 +187,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad,QList<Traff
                         continue;
                     }
 
-                    strForDebugRiskEval += QString("Check Signal %1\n").arg( memory.perceptedSignals[i]->objectID );
+                    strForDebugRiskEval += QString("Check Signal %1, dist=%2\n").arg( memory.perceptedSignals[i]->objectID ).arg(memory.perceptedSignals[i]->distToSL);
 
                     if( memory.nextTurnNode == memory.perceptedSignals[i]->relatedNode ){
                         turnIntersectionTSValue = memory.perceptedSignals[i]->signalDisplay;
@@ -962,7 +985,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad,QList<Traff
 
                                         }
 
-                                        strForDebugRiskEval += QString("V%1 regardAsPreceding=%2 : PV=%3\n")
+                                        strForDebugRiskEval += QString("V%1 regardAsPreceding=%2 : PV=%3[A]\n")
                                                 .arg( memory.perceptedObjects[i]->objectID )
                                                 .arg( regardAsPreceding )
                                                 .arg( memory.precedingVehicleID );
@@ -995,7 +1018,8 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad,QList<Traff
                             if( cpNdIdx >= 0 ){
 
                                 if( pRoad->nodes[cpNdIdx]->isMergeNode == true ||
-                                        (memory.perceptedObjects[i]->myDistanceToCP > memory.perceptedObjects[i]->objectDistanceToCP &&
+                                        (memory.perceptedObjects[i]->hasCollisionPoint == true &&
+                                         memory.perceptedObjects[i]->myDistanceToCP > memory.perceptedObjects[i]->objectDistanceToCP &&
                                          fabs(memory.perceptedObjects[i]->deviationFromNearestTargetPath) < 3.0 ) ){
 
                                     // Check if to regard merging from left as preceding
@@ -1052,7 +1076,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad,QList<Traff
 
                                             }
 
-                                            strForDebugRiskEval += QString("V%1 regardAsPreceding=%2 : PV=%3\n")
+                                            strForDebugRiskEval += QString("V%1 regardAsPreceding=%2 : PV=%3[B]\n")
                                                     .arg( memory.perceptedObjects[i]->objectID )
                                                     .arg( regardAsPreceding )
                                                     .arg( memory.precedingVehicleID );
@@ -1128,7 +1152,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad,QList<Traff
 
                                             }
 
-                                            strForDebugRiskEval += QString("V%1 regardAsPreceding=%2 : PV=%3\n")
+                                            strForDebugRiskEval += QString("V%1 regardAsPreceding=%2 : PV=%3[C]\n")
                                                     .arg( memory.perceptedObjects[i]->objectID )
                                                     .arg( regardAsPreceding )
                                                     .arg( memory.precedingVehicleID );
@@ -1157,7 +1181,8 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad,QList<Traff
                             int cpNdIdx = pRoad->nodeId2Index.indexOf( memory.perceptedObjects[i]->CPinNode );
                             if( cpNdIdx >= 0 ){
                                 if( pRoad->nodes[cpNdIdx]->isMergeNode == true ||
-                                        (memory.perceptedObjects[i]->myDistanceToCP > memory.perceptedObjects[i]->objectDistanceToCP &&
+                                        (memory.perceptedObjects[i]->hasCollisionPoint == true &&
+                                         memory.perceptedObjects[i]->myDistanceToCP > memory.perceptedObjects[i]->objectDistanceToCP &&
                                          fabs(memory.perceptedObjects[i]->deviationFromNearestTargetPath) < 3.0) ){
 
                                     // Check if to regard merging from left as preceding
@@ -1205,7 +1230,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad,QList<Traff
                                                 }
                                             }
 
-                                            strForDebugRiskEval += QString("V%1 regardAsPreceding=%2\n")
+                                            strForDebugRiskEval += QString("V%1 regardAsPreceding=%2[A]\n")
                                                     .arg( memory.perceptedObjects[i]->objectID )
                                                     .arg( regardAsPreceding );
 
@@ -1265,7 +1290,7 @@ void Agent::RiskEvaluation(Agent** pAgent, int maxAgent, Road* pRoad,QList<Traff
 
                                             }
 
-                                            strForDebugRiskEval += QString("V%1 regardAsPreceding=%2\n")
+                                            strForDebugRiskEval += QString("V%1 regardAsPreceding=%2[B]\n")
                                                     .arg( memory.perceptedObjects[i]->objectID )
                                                     .arg( regardAsPreceding );
 

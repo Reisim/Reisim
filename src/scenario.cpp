@@ -72,13 +72,59 @@ void SimulationManager::SetScenarioEvent(int sID, ScenarioEvents *event)
 }
 
 
+struct ScenarioEvents* SimulationManager::GetScenarioEvent(int sID,int targetObjectID)
+{
+    struct ScenarioEvents* p = NULL;
+    for(int i=0;i<scenario.size();++i){
+        if( scenario[i]->scenarioID == sID ){
+            for(int j=0;j<scenario[i]->scenarioEvents.size();++j){
+                if( scenario[i]->scenarioEvents[j]->targetObjectID == targetObjectID ){
+                    p = scenario[i]->scenarioEvents[j];
+                    break;
+                }
+            }
+        }
+    }
+    return p;
+}
+
+
+struct ScenarioEvents* SimulationManager::GetScenarioEventAppearVehicle(int sID, int targetObjectID)
+{
+    struct ScenarioEvents* p = NULL;
+    for(int i=0;i<scenario.size();++i){
+        if( scenario[i]->scenarioID == sID ){
+            for(int j=0;j<scenario[i]->scenarioEvents.size();++j){
+
+                if( scenario[i]->scenarioEvents[j]->eventType != SCENARIO_EVENT_TYPE::OBJECT_EVENT ){
+                    continue;
+                }
+                if( scenario[i]->scenarioEvents[j]->eventKind != OBJECT_SCENARIO_ACTION_KIND::APPEAR_VEHICLE ){
+                    continue;
+                }
+
+                if( scenario[i]->scenarioEvents[j]->targetObjectID == targetObjectID ){
+                    p = scenario[i]->scenarioEvents[j];
+                    break;
+                }
+            }
+        }
+    }
+    return p;
+}
+
+
 void SimulationManager::DumpScenarioData()
 {
     qDebug() << "----------- Scenario Data Dump ------------";
     qDebug() << "Number of Scenario Data : " << scenario.size();
     for(int i=0;i<scenario.size();++i){
         qDebug() << "+--- Scenario " << (i+1);
+
         qDebug() << "  Number of Item : " << scenario[i]->scenarioItems.size();
+        qDebug() << "  Number of Event : " << scenario[i]->scenarioEvents.size();
+
+
         for(int j=0;j<scenario[i]->scenarioItems.size();++j){
             qDebug() << "    +----- Item " << (j+1);
             qDebug() << "       Type : " << scenario[i]->scenarioItems[j]->type;

@@ -114,11 +114,12 @@ public slots:
     void RequestLaneChange(int,int,int);
     void RequestAssignedLaneChange(int,int,int,float);
     void ChangeControlModeStopAt(int,float,float);
-    void ChangeControlModeHeadwayControl(int,float,float,float,float,int);
+    void ChangeControlModeHeadwayControl(int,float,float,float,float,int,bool);
     void ChangeControlModeAgent(int);
     void ChangeControlModeIntersectionTurn(int,float,float);
     void CopyScenarioData(int,int);
     void ChangeVehicleWinkers(int,int);
+    void SetBrakeLampOverride(int,int);
     void SetStopGraphicUpdate(bool);
     void SetLateralShift(int,float);
     void SetLateralGainMultiplier(int,float);
@@ -144,6 +145,14 @@ public slots:
 
     void ChangeMoveSpeedPedestrian(QList<float>);
     void ChangeOptionalImageParams(QList<float>);
+
+    void SetEventTriggerByFuncExtend(int,int,int,int);
+    void SetScenarioVehicleInitStates(QList<int>,QList<float>,QList<float>,QList<float>,QList<float>,QList<float>);
+    void SetAgentGenerationNotAllowFlagForNodes(QList<int>, bool);
+    void AppearStoppingVehicle(int,float,float,float);
+
+    void SetAgentExternalControlParams(int,float,float);
+    void ChangePedestPathForScenarioPedestrian(int,QList<float>,QList<float>);
 
 
 private:
@@ -195,6 +204,8 @@ private:
     int DSMoveTarget;
 
     QString expIDText;
+    char *UE4ObjectIDUseFlag;
+    int noClearByWarp;
 };
 
 #endif // SYSTEMTHREAD_H

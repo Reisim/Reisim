@@ -99,10 +99,8 @@ int main(int argc, char *argv[])
 
         if( monitorCount >= 2 ){
 
-            int primMon = 0;
             int secondMon = 1;
             if( monitorInfo[0][0] * monitorInfo[0][1] < monitorInfo[1][0] * monitorInfo[1][1] ){
-                primMon = 1;
                 secondMon = 0;
             }
 

@@ -37,7 +37,8 @@ enum TRIGGER_TYPE
     POSITION_TIME_TRIGGER,
     BY_KEYBOARD_FUNC_KEY,
     VELOCITY_TRIGGER,
-    TTC_TRIGGER
+    TTC_TRIGGER,
+    DELAY_TRIGGER
 };
 
 enum ROUTE_TYPE
@@ -114,6 +115,7 @@ struct ObjectTriggerData
     int targetEventID;    // Not used
 
     float timeTriggerInSec;  // for Time Trigger
+    bool timeFromAppear;
 
     float x;          // for Position Trigger
     float y;
@@ -226,6 +228,8 @@ struct ScenarioEvents
     int eventState;
     int eventTimeCount;
     int eventTimeCount_sub;
+
+    bool repeatByFE;
 };
 
 struct ScenarioItem
@@ -280,8 +284,11 @@ public:
     void SetScenarioRepeatFlag(int sID);
     void SetScenarioItem(int sID, struct ScenarioItem* item);
     void SetScenarioEvent(int sID, struct ScenarioEvents* event);
+    struct ScenarioEvents* GetScenarioEvent(int sID,int targetObjectID);
+    struct ScenarioEvents* GetScenarioEventAppearVehicle(int sID,int targetObjectID);
 
     int GetNumberScenarioData(){ return scenario.size(); }
+    int GetCurrentScenarioID(){ return currentScenarioID; }
     int GetNumberScenarioObject(int sId){ return scenario[sId]->scenarioItems.size(); }
     int GetScenarioObjectID(int sId,int itemId){ return scenario[sId]->scenarioItems[itemId]->objectID; }
     char GetScenarioObjectType(int sId,int itemId){ return scenario[sId]->scenarioItems[itemId]->type; }
@@ -320,6 +327,8 @@ public:
     void SetTargetPathListScenarioVehicle(Agent** pAgent,Road *pRoad,int aID);
     void CopyScenarioData(int fromAID,int toAID);
 
+    void SetScenarioTriggeredByFuncExtend(int eventType,int id,int idx,int option);
+    void SetScenarioVehicleInitState(int sID,int aID,float x,float y,float z,float psi,float v);
 
     RandomGenerator rndGen;
 
@@ -328,6 +337,7 @@ public:
     QList<QPoint> changeTSDisplayInfo;
 
     float meanSpeedPedestrian[3];
+
 
 private:
     struct SimulationTime simTime;

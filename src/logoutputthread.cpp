@@ -143,7 +143,7 @@ void LogOutputThread::run()
                        << "," << agent[i]->agentKind
                        << "," << agent[i]->state.accel_log
                        << "," << agent[i]->state.brake_log
-                       << "," << (agent[i]->state.steer_log * 57.3)
+                       << "," << agent[i]->state.steer_log
                        << "," << agent[i]->state.x
                        << "," << agent[i]->state.y
                        << "," << (agent[i]->state.yaw * 57.3)
