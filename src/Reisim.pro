@@ -65,6 +65,7 @@ SOURCES += \
     road.cpp \
     system_snapshot.cpp \
     systemthread.cpp \
+    systemthread_FEcommand.cpp \
     udpthread.cpp \
     simulationmanager.cpp \
     agent.cpp \
