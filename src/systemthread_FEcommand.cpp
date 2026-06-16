@@ -20,7 +20,9 @@
 
 #include "networkdrivecheck.h"
 
+#ifdef Q_OS_WIN
 #include <windows.h>
+#endif
 
 
 void SystemThread::DSMove(float x, float y)

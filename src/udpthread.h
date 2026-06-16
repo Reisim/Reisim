@@ -25,7 +25,9 @@
 
 #include "agent.h"
 
+#ifdef Q_OS_WIN
 #include <windows.h>
+#endif
 
 
 struct SendUDPSocks

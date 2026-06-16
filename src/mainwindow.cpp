@@ -290,19 +290,31 @@ MainWindow::MainWindow(QWidget *parent)
 
     //--------
     openSimSetting = new QAction();
-    openSimSetting->setStatusTip( tr("Open") );
+    openSimSetting->setText( tr("Open") );
+    openSimSetting->setStatusTip( tr("Open Re:sim configuration file (*.rc.txt)") );
+    openSimSetting->setShortcut( QKeySequence::Open );
+    openSimSetting->setToolTip( tr("Open *.rc.txt config file (%1)").arg( openSimSetting->shortcut().toString(QKeySequence::NativeText) ) );
     openSimSetting->setIcon(QIcon(":/images/load_document.png"));
     connect( openSimSetting, SIGNAL(triggered()), this, SLOT(OpenSettingFile()));
 
     editConfig = new QAction();
-    editConfig->setStatusTip( tr("Edit Config") );
+    editConfig->setText( tr("Config") );
+    editConfig->setStatusTip( tr("Create / edit Re:sim configuration") );
+    editConfig->setToolTip( tr("Edit simulation configuration") );
     editConfig->setIcon(QIcon(":/images/setting.png"));
     connect( editConfig, SIGNAL(triggered()), this, SLOT(ShowConfigWindow()));
 
 
     actionToolBar = addToolBar("Action");
+    actionToolBar->setObjectName("MainToolBar");
+    actionToolBar->setIconSize( QSize(24,24) );
+    actionToolBar->setToolButtonStyle( Qt::ToolButtonTextUnderIcon );
+    actionToolBar->setMovable( false );
     actionToolBar->addAction(openSimSetting);
     actionToolBar->addAction(editConfig);
+
+    statusBar()->showMessage( tr("Ready  ·  ⌘O / Ctrl+O: open .rc.txt config  ·  Press Play after loading to start simulation") );
+    statusBar()->setStyleSheet( "QStatusBar { padding-left: 8px; }" );
 
     DSMode = false;
     simState = 0;
@@ -519,7 +531,7 @@ void MainWindow::OpenSettingFile()
 
     QString fileName = QFileDialog::getOpenFileName(this,
                                                     tr("Choose File"),
-                                                    ".",
+                                                    QDir::homePath(),
                                                     tr("re:sim config file(*.rc.txt)"));
 
     if( fileName.isNull() == true ){
@@ -771,7 +783,7 @@ void MainWindow::OutputRestartData()
 
     QString fileName = QFileDialog::getSaveFileName(this,
                                                     tr("Output Restart Data"),
-                                                    ".",
+                                                    QDir::homePath(),
                                                     tr("re:sim snapshot file(*.ss.txt)"));
 
     if( fileName.isNull() == false ){
