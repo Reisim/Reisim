@@ -12,8 +12,10 @@
 
 
 #include <QString>
+#ifdef Q_OS_WIN
 #include <windows.h>
 #include <winnetwk.h>
+#endif
 #include <QList>
 #include <QString>
 #include <QDebug>
@@ -31,6 +33,8 @@ struct NetworkDriveInfo
     QString path;
 };
 
+
+#ifdef Q_OS_WIN
 
 QList<struct NetworkDriveInfo *> netDrive;
 
@@ -61,8 +65,6 @@ void GetNetworkDrive()
 
                     netDrive.append( ndi );
             }
-
-    //        qDebug() << "Network Drive;  " << ndi->driveName << " " << ndi->path;
         }
     }
 }
@@ -113,4 +115,13 @@ void ReleaseNetworkDriveInfo()
     }
     netDrive.clear();
 }
+
+#else // non-Windows stubs
+
+void GetNetworkDrive() {}
+QString CheckNetworkDrive(QString filename) { return filename; }
+QString GetNetworkDrivePair(QString /*fullpath*/) { return QString(); }
+void ReleaseNetworkDriveInfo() {}
+
+#endif
 

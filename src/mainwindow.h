@@ -30,6 +30,7 @@
 #include <QSpinBox>
 #include <QMap>
 #include <QThread>
+#include <QStatusBar>
 
 #include "graphiccanvas.h"
 #include "configwindow.h"

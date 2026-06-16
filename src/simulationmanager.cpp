@@ -12,7 +12,9 @@
 
 
 #include "simulationmanager.h"
+#ifdef Q_OS_WIN
 #include <windows.h>
+#endif
 #include <QDebug>
 #include <QFile>
 
@@ -1461,6 +1463,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
 
             if( trigger->byKeyTriggerFlag == true ){
                 int keyHit = 0;
+#ifdef Q_OS_WIN
                 switch( trigger->func_keys ){
                 case 1: keyHit = GetAsyncKeyState(VK_F1); break;
                 case 2: keyHit = GetAsyncKeyState(VK_F2); break;
@@ -1485,6 +1488,7 @@ void SimulationManager::AppearAgents(Agent** pAgent,int maxAgentNumber,Road *pRo
                 case 21: keyHit = GetAsyncKeyState(VK_NUMPAD8); break;
                 case 22: keyHit = GetAsyncKeyState(VK_NUMPAD9); break;
                 }
+#endif
                 if( keyHit != 0 ){
                     exTrig = true;
                 }

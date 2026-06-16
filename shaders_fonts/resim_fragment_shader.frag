@@ -1,6 +1,6 @@
 #version 330
 
-uniform sampler2D texture;
+uniform sampler2D tex0;
 uniform int useTex;
 uniform vec3 offsetPos;
 uniform vec4 vColor;
@@ -13,7 +13,7 @@ out highp vec4 fColor;
 
 void main(){
 	if( useTex == 1 ){
-		fColor = texture2D(texture, texc);
+		fColor = texture(tex0, texc);
 	}
 	else if( useTex == 2 ){
 		if( position.x < offsetPos.x ){
@@ -66,7 +66,7 @@ void main(){
 			fColor = vec4(1.0,0.0,0.0,1.0);
 		}
 		else{
-			fColor = texture2D(texture, texc);
+			fColor = texture(tex0, texc);
 		}
 	}
 	else if( useTex == 13 ){
@@ -74,7 +74,7 @@ void main(){
 			fColor = vec4(1.0,1.0,0.0,1.0);
 		}
 		else{
-			fColor = texture2D(texture, texc);
+			fColor = texture(tex0, texc);
 		}
 	}
 	else if( useTex == 14 ){
@@ -82,7 +82,7 @@ void main(){
 			fColor = vec4(1.0,1.0,0.0,1.0);
 		}
 		else{
-			fColor = texture2D(texture, texc);
+			fColor = texture(tex0, texc);
 		}
 	}
 	else if( useTex == 15 ){
@@ -93,7 +93,7 @@ void main(){
 			fColor = vec4(1.0,1.0,0.0,1.0);
 		}
 		else{
-			fColor = texture2D(texture, texc);
+			fColor = texture(tex0, texc);
 		}
 	}
 	else if( useTex == 16 ){
@@ -104,14 +104,14 @@ void main(){
 			fColor = vec4(1.0,1.0,0.0,1.0);
 		}
 		else{
-			fColor = texture2D(texture, texc);
+			fColor = texture(tex0, texc);
 		}
 	}
 	else if( useTex == 10 ){
 		fColor = vColor;
 	}
 	else if( useTex == 100 ){
-		fColor = vec4( 1, 1, 1, texture2D(texture, texc).r ) * vColor;
+		fColor = vec4( 1, 1, 1, texture(tex0, texc).r ) * vColor;
 	}
 	else if( useTex == 101 ){
 		if( 0.05 < texc.x && texc.x < 0.15 ){

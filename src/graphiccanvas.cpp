@@ -112,6 +112,16 @@ GraphicCanvas::~GraphicCanvas()
 }
 
 
+// macOS Core Profile 3.3+ does not support GL_QUADS.
+// Render N consecutive quads (4 verts each) as triangle fans.
+static inline void drawQuadsCompat(QOpenGLFunctions *f, GLint first, GLsizei vertCount)
+{
+    int nQuads = vertCount / 4;
+    for(int q = 0; q < nQuads; ++q){
+        f->glDrawArrays(GL_TRIANGLE_FAN, first + q*4, 4);
+    }
+}
+
 void GraphicCanvas::initializeGL()
 {
     qDebug() << "[initializeGL]";
@@ -409,7 +419,7 @@ void GraphicCanvas::paintGL()
 
             glBindTexture(GL_TEXTURE_2D, baseMapImages[i]->textureID);
 
-            glDrawArrays(GL_QUADS, 0, 4 * sizeof(GLfloat) );
+            drawQuadsCompat(this, 0, 4 * sizeof(GLfloat) );
 
             rectPoly.array.release();
         }
@@ -438,7 +448,7 @@ void GraphicCanvas::paintGL()
         int offsetPos = program->uniformLocation("offsetPos");
         program->setUniformValue( offsetPos, QVector3D(0.0,0.0,0.0) );
 
-        glDrawArrays(GL_QUADS, 0, pathPolygons->pathPolygonData.size() / 8 );
+        drawQuadsCompat(this, 0, pathPolygons->pathPolygonData.size() / 8 );
 
         pathPolygons->pathPolygonsArray.release();
     }
@@ -547,7 +557,7 @@ void GraphicCanvas::paintGL()
                                                                vehicleModels[vehicleShapeID]->distCG2FE * (0.9),   // winker
                                                                0.4) );                                             // winker
 
-                glDrawArrays(GL_QUADS, 0, vehicleModels[vehicleShapeID]->simplePoly.vehiclePolygon.size() / 8 );
+                drawQuadsCompat(this, 0, vehicleModels[vehicleShapeID]->simplePoly.vehiclePolygon.size() / 8 );
 
                 program->setUniformValue( useTex, 10 );
                 program->setUniformValue( colorPos, QVector4D(1.0, 1.0, 1.0, 1.0) );
@@ -608,7 +618,7 @@ void GraphicCanvas::paintGL()
             int offsetPos = program->uniformLocation("offsetPos");
             program->setUniformValue( offsetPos, QVector3D(0.0,0.0,0.0) );
 
-            glDrawArrays(GL_QUADS, 0, personModels[personShapeID]->personPolygon.size() / 8 );
+            drawQuadsCompat(this, 0, personModels[personShapeID]->personPolygon.size() / 8 );
 
             program->setUniformValue( useTex, 10 );
             program->setUniformValue( colorPos, QVector4D(1.0, 1.0, 1.0, 1.0) );
@@ -694,7 +704,7 @@ void GraphicCanvas::paintGL()
             int colorPos  = program->uniformLocation("vColor");
             program->setUniformValue( colorPos, QVector4D(0.2, 0.2, 0.7, 1.0) );
 
-            glDrawArrays(GL_QUADS, 0, TSPolygons[i]->TSPolygons.size() / 8 );
+            drawQuadsCompat(this, 0, TSPolygons[i]->TSPolygons.size() / 8 );
 
             TSPolygons[i]->TSPolygonsArray.release();
         }
@@ -749,7 +759,7 @@ void GraphicCanvas::paintGL()
 
                 glBindTexture( GL_TEXTURE_2D, ch->TextureID );
 
-                glDrawArrays(GL_QUADS, 0, 4 );
+                drawQuadsCompat(this, 0, 4 );
 
                 x += ( ch->Advance >> 6 ) * scale;
             }
@@ -802,7 +812,7 @@ void GraphicCanvas::paintGL()
 
                 glBindTexture( GL_TEXTURE_2D, ch->TextureID );
 
-                glDrawArrays(GL_QUADS, 0, 4 );
+                drawQuadsCompat(this, 0, 4 );
 
                 x += ( ch->Advance >> 6 ) * scale;
             }
@@ -889,7 +899,7 @@ void GraphicCanvas::paintGL()
 
                 glBindTexture( GL_TEXTURE_2D, ch->TextureID );
 
-                glDrawArrays(GL_QUADS, 0, 4 );
+                drawQuadsCompat(this, 0, 4 );
 
                 x += ( ch->Advance >> 6 ) * scale;
             }
@@ -940,7 +950,7 @@ void GraphicCanvas::paintGL()
 
             glBindTexture(GL_TEXTURE_2D, optionalImages[i]->textureID);
 
-            glDrawArrays(GL_QUADS, 0, 4 * sizeof(GLfloat) );
+            drawQuadsCompat(this, 0, 4 * sizeof(GLfloat) );
 
             rectPoly.array.release();
         }

@@ -33,8 +33,10 @@ extern int allowDataGetForDS;
 extern bool invalidXPivotData;
 
 
+#ifdef Q_OS_WIN
 LARGE_INTEGER start_time, end_time;
 LARGE_INTEGER freq;
+#endif
 
 QVector<double> time_record;
 
@@ -62,8 +64,10 @@ UDPThread::UDPThread(QObject *parent) :
 
     simState = 0;
 
+#ifdef Q_OS_WIN
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&start_time);
+#endif
 
     memset( &asv, 0, sizeof(asv) );
     memset( &sov, 0, sizeof(sov) );

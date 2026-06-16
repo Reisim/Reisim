@@ -9,7 +9,7 @@ QT += core gui
 QT += opengl
 QT += network
 
-CONFIG += console
+!macx: CONFIG += console
 CONFIG += c++11
 
 DEFINES += SFMT_MEXP="19937"
@@ -23,19 +23,31 @@ DEFINES += SFMT_MEXP="19937"
 #DEFINES += _SHOW_AGENT_NUM_APPEAR
 
 
-LIBS += C:\Qt\Tools\mingw730_64\x86_64-w64-mingw32\lib\libws2_32.a
-LIBS += C:\Qt\Tools\mingw730_64\x86_64-w64-mingw32\lib\libmpr.a
-
+win32 {
+    LIBS += C:\Qt\Tools\mingw730_64\x86_64-w64-mingw32\lib\libws2_32.a
+    LIBS += C:\Qt\Tools\mingw730_64\x86_64-w64-mingw32\lib\libmpr.a
+}
 
 #
 #  Freetype2
 #
-INCLUDEPATH += "..\Reisim\libs\freetype\include\freetype2"
-
-LIBS += "..\Reisim\libs\freetype\lib\libfreetype.a"
-LIBS += "..\Reisim\libs\libpng\lib\libpng.a"
-LIBS += "..\Reisim\libs\zlib\lib\libzlibstatic.a"
-LIBS += "..\Reisim\libs\bzip2\lib\libbz2.a"
+win32 {
+    INCLUDEPATH += "..\Reisim\libs\freetype\include\freetype2"
+    LIBS += "..\Reisim\libs\freetype\lib\libfreetype.a"
+    LIBS += "..\Reisim\libs\libpng\lib\libpng.a"
+    LIBS += "..\Reisim\libs\zlib\lib\libzlibstatic.a"
+    LIBS += "..\Reisim\libs\bzip2\lib\libbz2.a"
+}
+macx {
+    INCLUDEPATH += /usr/local/opt/freetype/include/freetype2
+    LIBS += /usr/local/opt/freetype/lib/libfreetype.a
+    LIBS += /usr/local/opt/libpng/lib/libpng.a
+    LIBS += /usr/local/opt/zlib/lib/libz.a
+    LIBS += /usr/local/opt/bzip2/lib/libbz2.a
+    QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.15
+    DEFINES += GL_SILENCE_DEPRECATION
+    QMAKE_LIBS_OPENGL = -framework OpenGL
+}
 
 
 
@@ -106,4 +118,4 @@ HEADERS += \
 RESOURCES += \
     resim_resource.qrc
 
-RC_FILE = resim.rc
+win32:RC_FILE = resim.rc

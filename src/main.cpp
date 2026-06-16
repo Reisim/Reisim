@@ -12,14 +12,20 @@
 
 
 #include <QApplication>
+#include <QScreen>
+#include <QSurfaceFormat>
 #include <QtGui>
 #include <QStyleFactory>
 #include <QTextCodec>
 #include <QString>
 #include <QDir>
 #include <QDebug>
+#include <QPalette>
+#include <QProcess>
 
+#ifdef Q_OS_WIN
 #include <windows.h>
+#endif
 
 #include "mainwindow.h"
 #include "systemthread.h"
@@ -27,9 +33,51 @@
 #include "caldistributethread.h"
 
 
+static bool isMacDarkMode()
+{
+#ifdef Q_OS_MAC
+    QProcess p;
+    p.start("defaults", {"read", "-g", "AppleInterfaceStyle"});
+    p.waitForFinished(500);
+    return p.readAllStandardOutput().trimmed().toLower().contains("dark");
+#else
+    return false;
+#endif
+}
+
+
+static QPalette darkFusionPalette()
+{
+    QPalette pal;
+    QColor base(35, 35, 38);
+    QColor alt(45, 45, 48);
+    QColor text(220, 220, 220);
+    QColor highlight(42, 130, 218);
+    pal.setColor(QPalette::Window, QColor(53,53,53));
+    pal.setColor(QPalette::WindowText, text);
+    pal.setColor(QPalette::Base, base);
+    pal.setColor(QPalette::AlternateBase, alt);
+    pal.setColor(QPalette::ToolTipBase, text);
+    pal.setColor(QPalette::ToolTipText, text);
+    pal.setColor(QPalette::Text, text);
+    pal.setColor(QPalette::Button, QColor(53,53,53));
+    pal.setColor(QPalette::ButtonText, text);
+    pal.setColor(QPalette::BrightText, Qt::red);
+    pal.setColor(QPalette::Link, highlight);
+    pal.setColor(QPalette::Highlight, highlight);
+    pal.setColor(QPalette::HighlightedText, Qt::black);
+    pal.setColor(QPalette::Disabled, QPalette::Text, QColor(120,120,120));
+    pal.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(120,120,120));
+    return pal;
+}
+
+
 #include <QMutex>
 #include <QWaitCondition>
 
+#ifndef Q_OS_WIN
+#include <thread>
+#endif
 
 
 int get_logical_processor_info (int type);
@@ -65,55 +113,54 @@ int yConsolePos = 0;
 int monitorCount = 0;
 QList<QList<int>> monitorInfo;
 
-BOOL CALLBACK MonitorEnumProc(HMONITOR hM, HDC hdcM, LPRECT lprcM,LPARAM dwData)
-{
-    monitorCount++;
-
-    qDebug() << "Monitor " << monitorCount << ": Left = " << lprcM->left << " top = " << lprcM->top
-             << " width =" << (lprcM->right - lprcM->left)
-             << " height = " << (lprcM->bottom - lprcM->top);
-
-    QList<int> mInfo;
-    mInfo << (lprcM->right - lprcM->left) << (lprcM->bottom - lprcM->top) << lprcM->left << lprcM->top;
-    monitorInfo.append( mInfo );
-
-    return TRUE;
-}
 
 
 int main(int argc, char *argv[])
 {
+    // Required on macOS so #version 330 GLSL shaders work
+    QSurfaceFormat fmt;
+    fmt.setVersion(3, 3);
+    fmt.setProfile(QSurfaceFormat::CoreProfile);
+    fmt.setDepthBufferSize(24);
+    QSurfaceFormat::setDefaultFormat(fmt);
+
     QApplication a(argc, argv);
 
+#ifdef Q_OS_WIN
     AllocConsole();
+#endif
 
     QString SysFilePath      = QString();
     QString ConfFilePath     = QString();
 
 
     {
+        // Cross-platform monitor detection via Qt
         qDebug() << "Monitor Information";
         qDebug() << "------------------------------------";
-        EnumDisplayMonitors(NULL,NULL,MonitorEnumProc,0);
+        QList<QScreen *> screens = QGuiApplication::screens();
+        monitorCount = screens.size();
+        for(int i=0; i<screens.size(); ++i){
+            QRect g = screens[i]->geometry();
+            qDebug() << "Monitor " << (i+1) << ": Left=" << g.left() << " top=" << g.top()
+                     << " width=" << g.width() << " height=" << g.height();
+            QList<int> mInfo;
+            mInfo << g.width() << g.height() << g.left() << g.top();
+            monitorInfo.append( mInfo );
+        }
         qDebug() << "------------------------------------";
 
         if( monitorCount >= 2 ){
-
             int secondMon = 1;
             if( monitorInfo[0][0] * monitorInfo[0][1] < monitorInfo[1][0] * monitorInfo[1][1] ){
                 secondMon = 0;
             }
-
             WindowPosAssign = true;
-
             xConsolePos = monitorInfo[secondMon][2];
             yConsolePos = monitorInfo[secondMon][3];
-
             xGUIPos = monitorInfo[secondMon][0] / 2 + monitorInfo[secondMon][2];
             yGUIPos = monitorInfo[secondMon][1] / 2 + monitorInfo[secondMon][3];
-
             qDebug() << "xGUIPos = " << xGUIPos << " yGUIPos = " << yGUIPos;
-
         }
         else if( monitorCount == 1 ){
             QFile wpFile( QApplication::applicationDirPath() + QString("/windowPosAssign.txt") );
@@ -150,6 +197,7 @@ int main(int argc, char *argv[])
     }
 
 
+#ifdef Q_OS_WIN
     if( WindowPosAssign == true ){
 
         RECT consoleRec;
@@ -159,6 +207,7 @@ int main(int argc, char *argv[])
         MoveWindow( GetConsoleWindow(), xConsolePos, yConsolePos, consoleWidth, consoleHeight, TRUE );
 
     }
+#endif
 
     qDebug() << "Application Directory = " << QApplication::applicationDirPath();
 
@@ -261,6 +310,11 @@ int main(int argc, char *argv[])
 
     qDebug() << "+--- setStyle -> Fusion";
     QApplication::setStyle(QStyleFactory::create("Fusion"));
+
+    if( isMacDarkMode() ){
+        qDebug() << "+--- macOS Dark mode detected, apply dark palette";
+        QApplication::setPalette( darkFusionPalette() );
+    }
 
     w.setWindowTitle("MDS02-Canopus | Re:sim");
     w.setMinimumSize( QSize(800,800) );
@@ -564,6 +618,14 @@ int main(int argc, char *argv[])
 //
 //  Following : for getting Processor infomation
 //
+#ifndef Q_OS_WIN
+int get_logical_processor_info(int /*type*/)
+{
+    return static_cast<int>(std::thread::hardware_concurrency());
+}
+#endif
+
+#ifdef Q_OS_WIN
 typedef BOOL (WINAPI *LPFN_GLPI)(
     PSYSTEM_LOGICAL_PROCESSOR_INFORMATION,
     PDWORD);
@@ -711,3 +773,4 @@ int get_logical_processor_info (int type)
 
     return ret;
 }
+#endif // Q_OS_WIN
